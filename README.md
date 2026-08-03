@@ -15,11 +15,13 @@ tárhelyre, működik fájlból megnyitva is.
 
 | | |
 |---|---|
-| **6 oldal** | Főoldal, Szolgáltatások, Galéria, Rólunk, Kapcsolat, Foglalás |
+| **7 oldal** | Főoldal, Szolgáltatások, Galéria, Rólunk, Kapcsolat, Foglalás + saját 404-es hibaoldal |
+| **Élő szabad időpont** | A főoldal magától kiírja, mikor van a legközelebbi szabad időpont — a valós nyitvatartásból és a foglalásokból számolva |
 | **Élő nyitva/zárva jelző** | Villogó pötty, ami magától tudja, nyitva van-e a szalon — zöld (nyitva), sárga (1 órán belül nyit vagy zár), piros (zárva). Fél percenként frissül. |
 | **Időpontfoglaló** | 5 lépéses varázsló: szolgáltatás → kolléga → nap + időpont → adatok → visszaigazolás |
 | **Galéria** | Kategória-szűrő + teljes képernyős nagyító (nyilakkal és billentyűzettel lapozható) |
 | **Animációk** | Betöltő, szavankénti címsor-bemozgás, görgetésre megjelenő elemek, futó szalag, egérkövető fény a kártyákon, számláló, parallax, előtte/utána csúszka |
+| **Grafikák fotó nélkül is** | Minden képhelyen egyedi, animált SVG vonalmotívum — az oldal fotók nélkül is késznek hat, egy `<img>` cserével valódi képre váltható |
 | **Mobilbarát** | Teljes reszponzív, mobilmenü, lebegő foglalás-gomb |
 | **Google-adatok** | Cím, telefon, nyitvatartás, 4,9 csillag / 50 vélemény, akadálymentesség — a nyilvános Google-találatok alapján |
 | **SEO** | Oldalankénti címek és leírások, `HairSalon` strukturált adat a Google-nek |
@@ -209,9 +211,13 @@ elküldje az adatokat a szervernek. Minden más maradhat.
   helyes, ha a látogató külföldről nézi.
 - `prefers-reduced-motion` támogatva: aki kikapcsolta az animációkat a
   rendszerében, statikus oldalt kap.
-- Billentyűzettel bejárható, `aria` feliratokkal, látható fókuszkerettel.
-- Tesztelve: Chromium (asztali 1440 px, mobil 390 px) — nincs JS-hiba és
-  nincs vízszintes túlcsordulás egyik oldalon sem.
+- Billentyűzettel bejárható: „Ugrás a tartalomhoz" link, `aria` feliratok,
+  látható fókuszkeret, a galéria képei Enterrel nagyíthatók, a nagyítóból
+  Escape-pel kilépve a fókusz visszatér oda, ahonnan indult.
+- Tesztelve Chromiumban, mind a 8 oldal három nézetben (1440 / 768 / 390 px):
+  nincs JS-hiba, nincs vízszintes túlcsordulás, nincs 10 képpont alatti
+  szöveg. A foglalás és az admin folyamatai végigkattintva is ellenőrizve
+  (asztali és mobil nézetben egyaránt).
 
 ---
 

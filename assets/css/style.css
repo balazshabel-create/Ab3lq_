@@ -1571,6 +1571,9 @@ p { margin: 0 0 1.1em; color: var(--txt-dim); }
   .burger { display: block; }
   /* Mobilon a hero tartalma magasabb a képernyőnél — középre igazítás
      helyett felülről indítjuk, különben a teteje a menü alá csúszna. */
+  /* Mobilon a backdrop-filter támogatása vegyes — sűrűbb háttérrel
+     biztosítjuk, hogy a tartalom ne üssön át a menüsávon. */
+  .nav.stuck { background: rgba(13, 15, 20, 0.95); }
   .hero { min-height: auto; align-items: start; padding-bottom: 30px; }
   .hero__grid { grid-template-columns: 1fr; padding: 24px 0 40px; }
   /* width: 100% kötelező — a gyerekek abszolút pozíciójúak, így auto

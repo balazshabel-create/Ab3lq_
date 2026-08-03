@@ -360,16 +360,20 @@
   border-bottom: 1px solid var(--line);
 }
 
-.top__title { flex: 1; min-width: 0; }
-.top__title h1 {
-  font-size: 1.35rem;
+.top__title { flex: 1 1 auto; min-width: 0; }
+.top__title h1,
+.top__title p {
   margin: 0;
-  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.top__title p { margin: 0; font-size: 0.78rem; color: var(--txt-dimmer); }
+.top__title h1 { font-size: 1.35rem; line-height: 1.2; }
+.top__title p { font-size: 0.78rem; color: var(--txt-dimmer); }
+
+/* A felső sáv állapotjelzője — saját osztály, hogy a publikus oldal
+   .status--nav mobil-elrejtése ne vonatkozzon rá, és fordítva. */
+.status--top { flex: 0 0 auto; }
 
 .icon-btn {
   width: 42px; height: 42px;
@@ -656,7 +660,19 @@
    4. TÁBLÁZAT
    ========================================================================== */
 
-.tbl-wrap { overflow-x: auto; border-radius: var(--r-m); border: 1px solid var(--line); }
+.tbl-wrap {
+  overflow-x: auto;
+  border-radius: var(--r-m);
+  border: 1px solid var(--line);
+  /* Jobb szélen halványodás, amíg van még mit görgetni — így látszik,
+     hogy a táblázat oldalra folytatódik. */
+  background:
+    linear-gradient(90deg, var(--ink-2) 30%, transparent) left / 36px 100% no-repeat local,
+    linear-gradient(270deg, var(--ink-2) 30%, transparent) right / 36px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.5), transparent) left / 16px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.5), transparent) right / 16px 100% no-repeat scroll;
+  scrollbar-width: thin;
+}
 .tbl { width: 100%; border-collapse: collapse; min-width: 940px; }
 /* Ár, időpont, kolléga és állapot egy sorban maradjon */
 .tbl td:not(:nth-child(2)) { white-space: nowrap; }
@@ -974,11 +990,21 @@
   .side-veil.on { opacity: 1; visibility: visible; transition: opacity 0.4s, visibility 0s; }
 }
 
+@media (max-width: 900px) {
+  /* Szűk fejlécben az állapotjelző elfér a vezérlőpult tartalmában is */
+  .status--top { display: none; }
+}
+
 @media (max-width: 720px) {
   .agrid--4, .agrid--3, .agrid--2 { grid-template-columns: 1fr; }
   .profile__who { display: none; }
   .profile__chip { padding: 6px; }
+  .profile__caret { display: none; }
+  .profile__menu { width: min(290px, calc(100vw - 24px)); }
+  .top { gap: 10px; padding-inline: 14px; background: rgba(13, 15, 20, 0.95); }
   .top__title h1 { font-size: 1.1rem; }
+  .top__title p { display: none; }
+  .icon-btn { width: 38px; height: 38px; flex-basis: 38px; }
   .edit-row { grid-template-columns: 1fr 1fr; }
   .hour-row { grid-template-columns: 1fr; gap: 9px; }
   .toasts { left: 16px; right: 16px; justify-items: stretch; }
