@@ -94,7 +94,7 @@
   line-height: 1;
 }
 .login__facts span {
-  font-size: 0.64rem;
+  font-size: 0.66rem;
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--txt-dimmer);
@@ -291,7 +291,7 @@
 .side__brand .brand__mark { width: 36px; height: 36px; flex-basis: 36px; }
 
 .side__group {
-  font-size: 0.6rem;
+  font-size: 0.66rem;
   letter-spacing: 0.26em;
   text-transform: uppercase;
   color: var(--txt-dimmer);
@@ -442,7 +442,7 @@
 
 .profile__who { line-height: 1.2; text-align: left; }
 .profile__who b { display: block; font-weight: 400; font-size: 0.9rem; }
-.profile__who span { font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--txt-dimmer); }
+.profile__who span { font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--txt-dimmer); }
 .profile__caret { transition: transform 0.4s var(--ease); color: var(--txt-dimmer); font-size: 0.7rem; }
 .profile.open .profile__caret { transform: rotate(180deg); }
 
@@ -462,10 +462,13 @@
   visibility: hidden;
   transform: translateY(-10px) scale(0.97);
   transform-origin: top right;
-  transition: all 0.35s var(--ease);
+  transition: opacity 0.35s var(--ease), transform 0.35s var(--ease), visibility 0s linear 0.35s;
   z-index: 70;
 }
-.profile.open .profile__menu { opacity: 1; visibility: visible; transform: none; }
+.profile.open .profile__menu {
+  opacity: 1; visibility: visible; transform: none;
+  transition: opacity 0.35s var(--ease), transform 0.35s var(--ease), visibility 0s;
+}
 
 .profile__head {
   display: flex;
@@ -493,7 +496,7 @@
   background: var(--panel);
 }
 .profile__stat b { display: block; font-family: var(--serif); font-size: 1.15rem; color: var(--gold-soft); }
-.profile__stat span { font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--txt-dimmer); }
+.profile__stat span { font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--txt-dimmer); }
 
 .profile__item {
   display: flex;
@@ -787,7 +790,7 @@
 .edit-row input[type="number"] { text-align: right; }
 
 .edit-head {
-  font-size: 0.62rem;
+  font-size: 0.66rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--txt-dimmer);
@@ -914,9 +917,9 @@
   padding: 5vh 20px;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.35s var(--ease), visibility 0.35s;
+  transition: opacity 0.35s var(--ease), visibility 0s linear 0.35s;
 }
-.modal.open { opacity: 1; visibility: visible; }
+.modal.open { opacity: 1; visibility: visible; transition: opacity 0.35s var(--ease), visibility 0s; }
 .modal__box {
   width: min(100%, 520px);
   max-height: 88vh;
@@ -966,9 +969,9 @@
     background: rgba(8, 9, 13, 0.7);
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.4s, visibility 0.4s;
+    transition: opacity 0.4s, visibility 0s linear 0.4s;
   }
-  .side-veil.on { opacity: 1; visibility: visible; }
+  .side-veil.on { opacity: 1; visibility: visible; transition: opacity 0.4s, visibility 0s; }
 }
 
 @media (max-width: 720px) {

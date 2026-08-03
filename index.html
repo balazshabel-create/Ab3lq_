@@ -39,6 +39,8 @@
 </head>
 <body>
 
+<a class="skip" href="#fo">Ugrás a tartalomhoz</a>
+
 <div id="loader">
   <div class="loader-mark">
     Zamárdi
@@ -87,7 +89,7 @@
 </div>
 
 <!-- ================= HERO ================= -->
-<section class="hero">
+<section class="hero" id="fo">
   <div class="orb orb--gold orb--a" style="width:520px;height:520px;top:-140px;left:-120px"></div>
   <div class="orb orb--rose orb--b" style="width:440px;height:440px;bottom:-160px;right:-100px"></div>
   <div class="orb orb--sea orb--a" style="width:300px;height:300px;top:40%;right:28%;opacity:.28"></div>
@@ -111,8 +113,13 @@
           <a href="szolgaltatasok.html" class="btn btn--ghost">Árak és szolgáltatások</a>
         </div>
 
-        <div class="rv" data-delay=".45" style="margin-top:26px">
+        <div class="rv" data-delay=".45" style="margin-top:26px;display:flex;flex-wrap:wrap;gap:12px;align-items:center">
           <span class="status status--lg"><span class="status__dot"></span><span class="status__txt"></span></span>
+          <a href="foglalas.html" class="next-slot" data-next-slot hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+            <span data-next-slot-txt></span>
+            <span class="next-slot__go">Foglalom →</span>
+          </a>
         </div>
 
         <div class="hero__facts rv" data-delay=".55">
@@ -126,10 +133,10 @@
       <div class="hero__art rv rv--s" data-delay=".2">
         <div class="card-photo card-photo--main">
           <!-- Cserélje ki saját fotóra: <img src="assets/img/szalon.jpg" alt="A szalon belső tere"> -->
-          <div class="ph" style="--c1:#2f2a33;--c2:#171a22" data-label="Szalonbelső"></div>
+          <div class="ph" style="--c1:#2f2a33;--c2:#171a22" data-label="Szalonbelső" data-art="5"></div>
         </div>
         <div class="card-photo card-photo--small">
-          <div class="ph ph--tall" style="--c1:#3a2f2c;--c2:#1d1a1f" data-label="Hajformázás"></div>
+          <div class="ph ph--tall" style="--c1:#3a2f2c;--c2:#1d1a1f" data-label="Hajformázás" data-art="1"></div>
         </div>
         <div class="hero__badge">
           <b>4,9</b>
@@ -256,10 +263,10 @@
       <div class="rv rv--r">
         <div class="ba" aria-label="Előtte / utána csúszka">
           <div class="ba__layer">
-            <div class="ph ph--wide" style="--c1:#33302c;--c2:#1b1a18" data-label="Előtte"></div>
+            <div class="ph ph--wide" style="--c1:#33302c;--c2:#1b1a18" data-label="Előtte" data-art="5"></div>
           </div>
           <div class="ba__layer ba__layer--after">
-            <div class="ph ph--wide" style="--c1:#4a3b2c;--c2:#241d19" data-label="Utána"></div>
+            <div class="ph ph--wide" style="--c1:#4a3b2c;--c2:#241d19" data-label="Utána" data-art="1"></div>
           </div>
           <div class="ba__handle"></div>
           <span class="ba__tag ba__tag--l">Előtte</span>

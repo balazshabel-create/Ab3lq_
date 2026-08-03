@@ -137,7 +137,8 @@ function szabadSavok(datum) {
   const most = new Date();
   const maE = napISO(most) === napISO(datum);
   const mostPerc = most.getHours() * 60 + most.getMinutes();
-  const mar = foglaltak().filter((f) => f.nap === napISO(datum));
+  /* A lemondott foglalás felszabadítja a sávot */
+  const mar = foglaltak().filter((f) => f.nap === napISO(datum) && f.allapot !== 'nem');
 
   const lista = [];
   for (let t = nap.tol; t + hossz <= nap.ig; t += 30) {

@@ -1,0 +1,9 @@
+# Zamárdi Szépségszalon
+User-agent: *
+Allow: /
+
+# Az adminisztrációs felület nem való a keresőbe
+Disallow: /admin.html
+Disallow: /admin-belepes.html
+
+Sitemap: https://zamardiszepsegszalon.hu/sitemap.xml

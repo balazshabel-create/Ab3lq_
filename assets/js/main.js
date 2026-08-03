@@ -136,6 +136,49 @@ function orakKirajzol() {
   }).join('');
 }
 
+/* ---------- Legközelebbi szabad időpont ----------
+   A nyitvatartásból és a már rögzített foglalásokból számol, egy átlagos
+   60 perces szolgáltatással. A [data-next-slot] elembe írja az eredményt. */
+function kovetkezoSzabad(hossz = 60) {
+  let mar = [];
+  try { mar = JSON.parse(localStorage.getItem('zsz_foglalasok') || '[]'); } catch { /* üres */ }
+
+  const most = new Date();
+  const mostPerc = most.getHours() * 60 + most.getMinutes();
+
+  for (let i = 0; i < 21; i++) {
+    const d = new Date(most.getFullYear(), most.getMonth(), most.getDate() + i);
+    const nyitva = SALON.nyitva[d.getDay()];
+    if (!nyitva) continue;
+
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const napiak = mar.filter((f) => f.nap === iso && f.allapot !== 'nem');
+
+    for (let t = nyitva.tol; t + hossz <= nyitva.ig; t += 30) {
+      if (i === 0 && t < mostPerc + 60) continue;                     // ma: 1 óra felkészülés
+      if (napiak.some((f) => t < f.vege && t + hossz > f.kezd)) continue;
+      return { nap: d, ido: t, napokMulva: i };
+    }
+  }
+  return null;
+}
+
+function kovetkezoKiir() {
+  const doboz = document.querySelector('[data-next-slot]');
+  if (!doboz) return;
+
+  const sz = kovetkezoSzabad();
+  if (!sz) { doboz.hidden = true; return; }
+
+  const mikor = sz.napokMulva === 0 ? 'ma'
+    : sz.napokMulva === 1 ? 'holnap'
+    : sz.nap.toLocaleDateString('hu-HU', { month: 'long', day: 'numeric' });
+
+  doboz.hidden = false;
+  doboz.querySelector('[data-next-slot-txt]').innerHTML =
+    `Legközelebbi szabad időpont: <b>${mikor} ${perc2ora(sz.ido)}</b>`;
+}
+
 /* ---------- Betöltő ---------- */
 window.addEventListener('load', () => {
   const l = document.getElementById('loader');
@@ -331,7 +374,10 @@ function velemenyek() {
 
 /* ---------- GYIK ---------- */
 function gyik() {
-  document.querySelectorAll('.faq-item').forEach((item) => {
+  const elemek = document.querySelectorAll('.faq-item');
+  if (!elemek.length) return;
+
+  elemek.forEach((item) => {
     const q = item.querySelector('.faq-q');
     const a = item.querySelector('.faq-a');
     if (!q || !a) return;
@@ -341,6 +387,18 @@ function gyik() {
       q.setAttribute('aria-expanded', String(nyitva));
       a.style.maxHeight = nyitva ? a.scrollHeight + 'px' : '0px';
     });
+  });
+
+  /* Átméretezéskor a nyitott válasz magassága elavulna (px-ben van beállítva),
+     és keskenyebb ablakban levágná a szöveget — ezért újraszámoljuk. */
+  let ido;
+  window.addEventListener('resize', () => {
+    clearTimeout(ido);
+    ido = setTimeout(() => {
+      document.querySelectorAll('.faq-item.open .faq-a').forEach((a) => {
+        a.style.maxHeight = a.scrollHeight + 'px';
+      });
+    }, 150);
   });
 }
 
@@ -377,12 +435,19 @@ function galeria() {
 
   const lathatoak = () => elemek.filter((e) => !e.classList.contains('hide'));
 
+  /* Ahonnan a nagyítót nyitották — bezáráskor ide tér vissza a fókusz */
+  let honnan = null;
+
   const nyit = (el) => {
     const lista = lathatoak();
     aktiv = lista.indexOf(el);
     rajzol();
     lb.classList.add('open');
     document.body.classList.add('no-scroll');
+    honnan = document.activeElement;
+    /* A rejtettből előbukkanó elem csak az első kirajzolás után fókuszálható,
+       ezért egy rövid késleltetéssel adjuk rá a fókuszt. */
+    setTimeout(() => lb.querySelector('.lightbox__close')?.focus(), 60);
   };
   const rajzol = () => {
     const lista = lathatoak();
@@ -402,9 +467,21 @@ function galeria() {
   const zar = () => {
     lb.classList.remove('open');
     document.body.classList.remove('no-scroll');
+    honnan?.focus?.();
+    honnan = null;
   };
 
-  elemek.forEach((el) => el.addEventListener('click', () => nyit(el)));
+  /* Billentyűzettel is megnyitható legyen minden kép */
+  elemek.forEach((el) => {
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('role', 'button');
+    const cimke = el.querySelector('.gallery__cap b');
+    el.setAttribute('aria-label', (cimke ? cimke.textContent.trim() + ' — ' : '') + 'kép nagyítása');
+    el.addEventListener('click', () => nyit(el));
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nyit(el); }
+    });
+  });
   lb.querySelector('.lightbox__close')?.addEventListener('click', zar);
   lb.querySelector('.lightbox__nav--prev')?.addEventListener('click', (e) => { e.stopPropagation(); lep(-1); });
   lb.querySelector('.lightbox__nav--next')?.addEventListener('click', (e) => { e.stopPropagation(); lep(1); });
@@ -437,7 +514,20 @@ function elotteUtana() {
 function adatokBeir() {
   document.querySelectorAll('[data-salon]').forEach((el) => {
     const k = el.dataset.salon;
-    if (SALON[k] !== undefined) el.textContent = SALON[k];
+    if (SALON[k] === undefined) return;
+    el.textContent = SALON[k];
+
+    /* A hivatkozás célja is kövesse az adatot — különben az adminban
+       átírt telefonszám mellett a régi tel: link maradna. */
+    if (el.tagName === 'A') {
+      if (k === 'tel') el.href = 'tel:' + String(SALON.tel).replace(/[^+\d]/g, '');
+      if (k === 'email') el.href = 'mailto:' + SALON.email;
+    }
+  });
+
+  /* A nem feliratozott tel:/mailto: gombok (pl. „Inkább telefonálok”) is */
+  document.querySelectorAll('a[href^="tel:"]:not([data-salon])').forEach((a) => {
+    a.href = 'tel:' + String(SALON.tel).replace(/[^+\d]/g, '');
   });
 }
 
@@ -456,5 +546,6 @@ document.addEventListener('DOMContentLoaded', () => {
   adatokBeir();
   statuszFrissit();
   orakKirajzol();
-  setInterval(statuszFrissit, 30000);
+  kovetkezoKiir();
+  setInterval(() => { statuszFrissit(); kovetkezoKiir(); }, 30000);
 });

@@ -140,6 +140,25 @@ p { margin: 0 0 1.1em; color: var(--txt-dim); }
   background: linear-gradient(90deg, var(--gold), transparent);
 }
 
+/* Billentyűzetes ugrás a tartalomra — csak fókuszban látszik */
+.skip {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 10001;
+  padding: 12px 22px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: var(--ink);
+  font-size: 0.84rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 500;
+  transform: translateY(-160%);
+  transition: transform 0.35s var(--ease);
+}
+.skip:focus { transform: none; }
+
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
@@ -195,7 +214,8 @@ p { margin: 0 0 1.1em; color: var(--txt-dim); }
   background: var(--ink);
   display: grid;
   place-items: center;
-  transition: opacity 0.7s var(--ease), visibility 0.7s;
+  /* A visibility csak a halványodás VÉGÉN vált — nyitáskor azonnal. */
+  transition: opacity 0.7s var(--ease), visibility 0s linear 0.7s;
 }
 #loader.done { opacity: 0; visibility: hidden; }
 
@@ -209,7 +229,7 @@ p { margin: 0 0 1.1em; color: var(--txt-dim); }
 .loader-mark small {
   display: block;
   font-family: var(--sans);
-  font-size: 0.64rem;
+  font-size: 0.66rem;
   letter-spacing: 0.5em;
   color: var(--gold);
   margin-top: 12px;
@@ -298,7 +318,7 @@ p { margin: 0 0 1.1em; color: var(--txt-dim); }
   white-space: nowrap;
 }
 .brand__txt span {
-  font-size: 0.6rem;
+  font-size: 0.66rem;
   letter-spacing: 0.32em;
   text-transform: uppercase;
   color: var(--txt-dimmer);
@@ -367,9 +387,10 @@ p { margin: 0 0 1.1em; color: var(--txt-dim); }
   place-items: center;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.45s var(--ease), visibility 0.45s;
+  transition: opacity 0.45s var(--ease), visibility 0s linear 0.45s;
 }
-.drawer.open { opacity: 1; visibility: visible; }
+/* Nyitáskor a visibility azonnal vált, hogy a linkek rögtön fókuszálhatók legyenek */
+.drawer.open { opacity: 1; visibility: visible; transition: opacity 0.45s var(--ease), visibility 0s; }
 .drawer nav { display: grid; gap: 6px; text-align: center; max-width: 100%; }
 .drawer nav a {
   font-family: var(--serif);
@@ -447,6 +468,49 @@ p { margin: 0 0 1.1em; color: var(--txt-dim); }
 
 .status--lg { padding: 12px 22px 12px 17px; font-size: 0.9rem; }
 .status--lg .status__dot { width: 11px; height: 11px; flex-basis: 11px; }
+
+/* ---------- 7b. Legközelebbi szabad időpont ---------- */
+.next-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 18px;
+  border-radius: 999px;
+  border: 1px dashed rgba(201, 162, 39, 0.45);
+  background: rgba(201, 162, 39, 0.07);
+  font-size: 0.86rem;
+  color: var(--txt-dim);
+  transition: all 0.4s var(--ease);
+}
+.next-slot:hover {
+  border-style: solid;
+  border-color: var(--gold);
+  background: rgba(201, 162, 39, 0.14);
+  color: var(--txt);
+  transform: translateY(-2px);
+}
+.next-slot svg {
+  width: 17px; height: 17px;
+  flex: 0 0 17px;
+  stroke: var(--gold-soft);
+  fill: none;
+  stroke-width: 1.5;
+}
+.next-slot b { font-weight: 400; color: var(--gold-soft); }
+.next-slot__go {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+  padding-left: 12px;
+  margin-left: 2px;
+  border-left: 1px solid rgba(201, 162, 39, 0.28);
+  white-space: nowrap;
+}
+@media (max-width: 460px) {
+  .next-slot { width: 100%; justify-content: center; flex-wrap: wrap; gap: 8px; }
+  .next-slot__go { border-left: none; padding-left: 0; }
+}
 
 /* ---------- 8. Gombok ---------- */
 .btn {
@@ -642,7 +706,7 @@ p { margin: 0 0 1.1em; color: var(--txt-dim); }
   display: grid;
   justify-items: center;
   gap: 10px;
-  font-size: 0.62rem;
+  font-size: 0.66rem;
   letter-spacing: 0.3em;
   text-transform: uppercase;
   color: var(--txt-dimmer);
@@ -866,9 +930,9 @@ p { margin: 0 0 1.1em; color: var(--txt-dim); }
   padding: 5vh 5vw;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.4s var(--ease), visibility 0.4s;
+  transition: opacity 0.4s var(--ease), visibility 0s linear 0.4s;
 }
-.lightbox.open { opacity: 1; visibility: visible; }
+.lightbox.open { opacity: 1; visibility: visible; transition: opacity 0.4s var(--ease), visibility 0s; }
 .lightbox__stage {
   max-width: 100%;
   max-height: 100%;
@@ -1144,9 +1208,9 @@ p { margin: 0 0 1.1em; color: var(--txt-dim); }
 .day.on { background: var(--gold); border-color: var(--gold); color: var(--ink); }
 .day.on small, .day.on b { color: var(--ink); }
 .day:disabled { opacity: 0.24; cursor: not-allowed; }
-.day small { display: block; font-size: 0.64rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--txt-dimmer); }
+.day small { display: block; font-size: 0.66rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--txt-dimmer); }
 .day b { display: block; font-family: var(--serif); font-size: 1.5rem; font-weight: 400; line-height: 1.2; }
-.day i { font-style: normal; font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--txt-dimmer); }
+.day i { font-style: normal; font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--txt-dimmer); }
 
 .field { margin-bottom: 16px; }
 .field label {
@@ -1462,6 +1526,39 @@ p { margin: 0 0 1.1em; color: var(--txt-dim); }
 .ph--wide { aspect-ratio: 3/2; }
 .ph--sq { aspect-ratio: 1; }
 
+/* ---------- 27b. Helyőrző-grafikák (data-art="1"…"6") ----------
+   Elegáns vonalrajzok, hogy fotó nélkül is késznek hasson az oldal.
+   Saját fotó behelyezésekor az egész .ph elem lecserélődik <img>-re. */
+.ph[data-art="1"]::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20400%20500%27%20preserveAspectRatio%3D%27xMidYMid%20slice%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23c9a227%27%20stroke-width%3D%271.1%27%20opacity%3D%27.42%27%20stroke-linecap%3D%27round%27%3E%3Cpath%20d%3D%27M-40%20-30%20C40%20130%2C-20%20250%2C70%20400%20S20%20560%2C110%20700%27%2F%3E%3Cpath%20d%3D%27M6%20-30%20C86%20130%2C26%20250%2C116%20400%20S66%20560%2C156%20700%27%2F%3E%3Cpath%20d%3D%27M52%20-30%20C132%20130%2C72%20250%2C162%20400%20S112%20560%2C202%20700%27%2F%3E%3Cpath%20d%3D%27M98%20-30%20C178%20130%2C118%20250%2C208%20400%20S158%20560%2C248%20700%27%2F%3E%3Cpath%20d%3D%27M144%20-30%20C224%20130%2C164%20250%2C254%20400%20S204%20560%2C294%20700%27%2F%3E%3Cpath%20d%3D%27M190%20-30%20C270%20130%2C210%20250%2C300%20400%20S250%20560%2C340%20700%27%2F%3E%3Cpath%20d%3D%27M236%20-30%20C316%20130%2C256%20250%2C346%20400%20S296%20560%2C386%20700%27%2F%3E%3Cpath%20d%3D%27M282%20-30%20C362%20130%2C302%20250%2C392%20400%20S342%20560%2C432%20700%27%2F%3E%3Cpath%20d%3D%27M328%20-30%20C408%20130%2C348%20250%2C438%20400%20S388%20560%2C478%20700%27%2F%3E%3Cpath%20d%3D%27M374%20-30%20C454%20130%2C394%20250%2C484%20400%20S434%20560%2C524%20700%27%2F%3E%3Cpath%20d%3D%27M420%20-30%20C500%20130%2C440%20250%2C530%20400%20S480%20560%2C570%20700%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"); background-size: cover; background-position: center; border-radius: 0; width: 100%; aspect-ratio: auto; height: 100%; animation: artFloat 17s var(--ease-io) infinite; }
+.ph[data-art="2"]::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20400%20500%27%20preserveAspectRatio%3D%27xMidYMid%20slice%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23d8a0a0%27%20stroke-width%3D%271%27%20opacity%3D%27.34%27%3E%3Ccircle%20cx%3D%27200%27%20cy%3D%27250%27%20r%3D%2730%27%2F%3E%3Ccircle%20cx%3D%27200%27%20cy%3D%27250%27%20r%3D%2764%27%2F%3E%3Ccircle%20cx%3D%27200%27%20cy%3D%27250%27%20r%3D%2798%27%2F%3E%3Ccircle%20cx%3D%27200%27%20cy%3D%27250%27%20r%3D%27132%27%2F%3E%3Ccircle%20cx%3D%27200%27%20cy%3D%27250%27%20r%3D%27166%27%2F%3E%3Ccircle%20cx%3D%27200%27%20cy%3D%27250%27%20r%3D%27200%27%2F%3E%3Ccircle%20cx%3D%27200%27%20cy%3D%27250%27%20r%3D%27234%27%2F%3E%3Ccircle%20cx%3D%27200%27%20cy%3D%27250%27%20r%3D%27268%27%2F%3E%3Ccircle%20cx%3D%27200%27%20cy%3D%27250%27%20r%3D%27302%27%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%27200%27%20cy%3D%27250%27%20r%3D%2716%27%20fill%3D%27%23c9a227%27%20opacity%3D%27.28%27%2F%3E%3C%2Fsvg%3E"); background-size: cover; background-position: center; border-radius: 0; width: 100%; aspect-ratio: auto; height: 100%; animation: artFloat 20s var(--ease-io) infinite; }
+.ph[data-art="3"]::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20400%20500%27%20preserveAspectRatio%3D%27xMidYMid%20slice%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%236fa8a0%27%20stroke-width%3D%271.2%27%20opacity%3D%27.40%27%20stroke-linecap%3D%27round%27%3E%3Cpath%20d%3D%27M-20%2070%20q%2055%20-26%20110%200%20t%20110%200%20t%20110%200%20t%20110%200%27%2F%3E%3Cpath%20d%3D%27M-20%20112%20q%2055%20-26%20110%200%20t%20110%200%20t%20110%200%20t%20110%200%27%2F%3E%3Cpath%20d%3D%27M-20%20154%20q%2055%20-26%20110%200%20t%20110%200%20t%20110%200%20t%20110%200%27%2F%3E%3Cpath%20d%3D%27M-20%20196%20q%2055%20-26%20110%200%20t%20110%200%20t%20110%200%20t%20110%200%27%2F%3E%3Cpath%20d%3D%27M-20%20238%20q%2055%20-26%20110%200%20t%20110%200%20t%20110%200%20t%20110%200%27%2F%3E%3Cpath%20d%3D%27M-20%20280%20q%2055%20-26%20110%200%20t%20110%200%20t%20110%200%20t%20110%200%27%2F%3E%3Cpath%20d%3D%27M-20%20322%20q%2055%20-26%20110%200%20t%20110%200%20t%20110%200%20t%20110%200%27%2F%3E%3Cpath%20d%3D%27M-20%20364%20q%2055%20-26%20110%200%20t%20110%200%20t%20110%200%20t%20110%200%27%2F%3E%3Cpath%20d%3D%27M-20%20406%20q%2055%20-26%20110%200%20t%20110%200%20t%20110%200%20t%20110%200%27%2F%3E%3Cpath%20d%3D%27M-20%20448%20q%2055%20-26%20110%200%20t%20110%200%20t%20110%200%20t%20110%200%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"); background-size: cover; background-position: center; border-radius: 0; width: 100%; aspect-ratio: auto; height: 100%; animation: artFloat 23s var(--ease-io) infinite; }
+.ph[data-art="4"]::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20400%20500%27%20preserveAspectRatio%3D%27xMidYMid%20slice%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23c9a227%27%20stroke-width%3D%271.1%27%20opacity%3D%27.40%27%3E%3Cpath%20d%3D%27M200%2040%20L200%20470%27%2F%3E%3Cpath%20d%3D%27M200%2090%20q%20-48%2014%20-62%2052%20q%2040%206%2062%20-52%20z%27%2F%3E%3Cpath%20d%3D%27M200%20152%20q%2048%2014%2062%2052%20q%20-40%206%20-62%20-52%20z%27%2F%3E%3Cpath%20d%3D%27M200%20214%20q%20-48%2014%20-62%2052%20q%2040%206%2062%20-52%20z%27%2F%3E%3Cpath%20d%3D%27M200%20276%20q%2048%2014%2062%2052%20q%20-40%206%20-62%20-52%20z%27%2F%3E%3Cpath%20d%3D%27M200%20338%20q%20-48%2014%20-62%2052%20q%2040%206%2062%20-52%20z%27%2F%3E%3Cpath%20d%3D%27M200%20400%20q%2048%2014%2062%2052%20q%20-40%206%20-62%20-52%20z%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"); background-size: cover; background-position: center; border-radius: 0; width: 100%; aspect-ratio: auto; height: 100%; animation: artFloat 26s var(--ease-io) infinite; }
+.ph[data-art="5"]::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20400%20500%27%20preserveAspectRatio%3D%27xMidYMid%20slice%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%23c9a227%27%20stroke-width%3D%27.9%27%20opacity%3D%27.26%27%3E%3Cpath%20d%3D%27M-60%20540%20L140%20-40%27%2F%3E%3Cpath%20d%3D%27M440%20540%20L240%20-40%27%2F%3E%3Cpath%20d%3D%27M-6%20540%20L194%20-40%27%2F%3E%3Cpath%20d%3D%27M386%20540%20L186%20-40%27%2F%3E%3Cpath%20d%3D%27M48%20540%20L248%20-40%27%2F%3E%3Cpath%20d%3D%27M332%20540%20L132%20-40%27%2F%3E%3Cpath%20d%3D%27M102%20540%20L302%20-40%27%2F%3E%3Cpath%20d%3D%27M278%20540%20L78%20-40%27%2F%3E%3Cpath%20d%3D%27M156%20540%20L356%20-40%27%2F%3E%3Cpath%20d%3D%27M224%20540%20L24%20-40%27%2F%3E%3Cpath%20d%3D%27M210%20540%20L410%20-40%27%2F%3E%3Cpath%20d%3D%27M170%20540%20L-30%20-40%27%2F%3E%3Cpath%20d%3D%27M264%20540%20L464%20-40%27%2F%3E%3Cpath%20d%3D%27M116%20540%20L-84%20-40%27%2F%3E%3Cpath%20d%3D%27M318%20540%20L518%20-40%27%2F%3E%3Cpath%20d%3D%27M62%20540%20L-138%20-40%27%2F%3E%3Cpath%20d%3D%27M372%20540%20L572%20-40%27%2F%3E%3Cpath%20d%3D%27M8%20540%20L-192%20-40%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E"); background-size: cover; background-position: center; border-radius: 0; width: 100%; aspect-ratio: auto; height: 100%; animation: artFloat 29s var(--ease-io) infinite; }
+.ph[data-art="6"]::before { background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20400%20500%27%20preserveAspectRatio%3D%27xMidYMid%20slice%27%3E%3Cg%20fill%3D%27%23d8a0a0%27%20opacity%3D%27.32%27%3E%3Ccircle%20cx%3D%2728%27%20cy%3D%2730%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2768%27%20cy%3D%2730%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27108%27%20cy%3D%2730%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27148%27%20cy%3D%2730%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27188%27%20cy%3D%2730%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27228%27%20cy%3D%2730%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27268%27%20cy%3D%2730%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27308%27%20cy%3D%2730%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27348%27%20cy%3D%2730%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27388%27%20cy%3D%2730%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2728%27%20cy%3D%2770%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2768%27%20cy%3D%2770%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27108%27%20cy%3D%2770%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27148%27%20cy%3D%2770%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27188%27%20cy%3D%2770%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27228%27%20cy%3D%2770%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27268%27%20cy%3D%2770%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27308%27%20cy%3D%2770%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27348%27%20cy%3D%2770%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27388%27%20cy%3D%2770%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2728%27%20cy%3D%27110%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2768%27%20cy%3D%27110%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27108%27%20cy%3D%27110%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27148%27%20cy%3D%27110%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27188%27%20cy%3D%27110%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27228%27%20cy%3D%27110%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27268%27%20cy%3D%27110%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27308%27%20cy%3D%27110%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27348%27%20cy%3D%27110%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27388%27%20cy%3D%27110%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2728%27%20cy%3D%27150%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2768%27%20cy%3D%27150%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27108%27%20cy%3D%27150%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27148%27%20cy%3D%27150%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27188%27%20cy%3D%27150%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27228%27%20cy%3D%27150%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27268%27%20cy%3D%27150%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27308%27%20cy%3D%27150%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27348%27%20cy%3D%27150%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27388%27%20cy%3D%27150%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2728%27%20cy%3D%27190%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2768%27%20cy%3D%27190%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27108%27%20cy%3D%27190%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27148%27%20cy%3D%27190%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27188%27%20cy%3D%27190%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27228%27%20cy%3D%27190%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27268%27%20cy%3D%27190%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27308%27%20cy%3D%27190%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27348%27%20cy%3D%27190%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27388%27%20cy%3D%27190%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2728%27%20cy%3D%27230%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2768%27%20cy%3D%27230%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27108%27%20cy%3D%27230%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27148%27%20cy%3D%27230%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27188%27%20cy%3D%27230%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27228%27%20cy%3D%27230%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27268%27%20cy%3D%27230%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27308%27%20cy%3D%27230%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27348%27%20cy%3D%27230%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27388%27%20cy%3D%27230%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2728%27%20cy%3D%27270%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2768%27%20cy%3D%27270%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27108%27%20cy%3D%27270%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27148%27%20cy%3D%27270%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27188%27%20cy%3D%27270%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27228%27%20cy%3D%27270%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27268%27%20cy%3D%27270%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27308%27%20cy%3D%27270%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27348%27%20cy%3D%27270%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27388%27%20cy%3D%27270%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2728%27%20cy%3D%27310%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2768%27%20cy%3D%27310%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27108%27%20cy%3D%27310%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27148%27%20cy%3D%27310%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27188%27%20cy%3D%27310%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27228%27%20cy%3D%27310%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27268%27%20cy%3D%27310%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27308%27%20cy%3D%27310%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27348%27%20cy%3D%27310%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27388%27%20cy%3D%27310%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2728%27%20cy%3D%27350%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2768%27%20cy%3D%27350%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27108%27%20cy%3D%27350%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27148%27%20cy%3D%27350%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27188%27%20cy%3D%27350%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27228%27%20cy%3D%27350%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27268%27%20cy%3D%27350%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27308%27%20cy%3D%27350%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27348%27%20cy%3D%27350%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27388%27%20cy%3D%27350%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2728%27%20cy%3D%27390%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2768%27%20cy%3D%27390%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27108%27%20cy%3D%27390%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27148%27%20cy%3D%27390%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27188%27%20cy%3D%27390%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27228%27%20cy%3D%27390%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27268%27%20cy%3D%27390%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27308%27%20cy%3D%27390%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27348%27%20cy%3D%27390%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27388%27%20cy%3D%27390%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2728%27%20cy%3D%27430%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2768%27%20cy%3D%27430%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27108%27%20cy%3D%27430%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27148%27%20cy%3D%27430%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27188%27%20cy%3D%27430%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27228%27%20cy%3D%27430%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27268%27%20cy%3D%27430%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27308%27%20cy%3D%27430%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27348%27%20cy%3D%27430%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27388%27%20cy%3D%27430%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2728%27%20cy%3D%27470%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2768%27%20cy%3D%27470%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27108%27%20cy%3D%27470%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27148%27%20cy%3D%27470%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27188%27%20cy%3D%27470%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27228%27%20cy%3D%27470%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27268%27%20cy%3D%27470%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27308%27%20cy%3D%27470%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27348%27%20cy%3D%27470%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27388%27%20cy%3D%27470%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2728%27%20cy%3D%27510%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%2768%27%20cy%3D%27510%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27108%27%20cy%3D%27510%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27148%27%20cy%3D%27510%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27188%27%20cy%3D%27510%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27228%27%20cy%3D%27510%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27268%27%20cy%3D%27510%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27308%27%20cy%3D%27510%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27348%27%20cy%3D%27510%27%20r%3D%272%27%2F%3E%3Ccircle%20cx%3D%27388%27%20cy%3D%27510%27%20r%3D%272%27%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%27200%27%20cy%3D%27250%27%20r%3D%27104%27%20fill%3D%27none%27%20stroke%3D%27%23c9a227%27%20stroke-width%3D%271.4%27%20opacity%3D%27.5%27%2F%3E%3C%2Fsvg%3E"); background-size: cover; background-position: center; border-radius: 0; width: 100%; aspect-ratio: auto; height: 100%; animation: artFloat 32s var(--ease-io) infinite; }
+
+/* A felirat a grafika fölött marad, olvashatóan */
+/* A címke fix helyen ül, függetlenül attól, hogy a .ph grid vagy block
+   (a galériában block-ra vált) — így minden felületen egyformán néz ki. */
+.ph[data-art]::after {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  max-width: calc(100% - 28px);
+  background: rgba(13, 15, 20, 0.58);
+  padding: 7px 14px;
+  border-radius: 999px;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.84rem;
+  text-align: left;
+}
+
+@keyframes artFloat {
+  0%, 100% { transform: scale(1) translate(0, 0); }
+  50% { transform: scale(1.08) translate(-1.5%, 1.5%); }
+}
+
 /* ---------- 28. Reszponzív ---------- */
 @media (max-width: 1080px) {
   .grid--4 { grid-template-columns: repeat(2, 1fr); }
@@ -1555,7 +1652,7 @@ body.cur-on * { cursor: none !important; }
 
 .cur__label {
   font-family: var(--sans);
-  font-size: 0.62rem;
+  font-size: 0.66rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink);

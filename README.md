@@ -85,8 +85,13 @@ rolunk.html            Történet, értékek, csapat
 kapcsolat.html         Elérhetőség, térkép, üzenetküldés
 foglalas.html          Időpontfoglaló
 
+404.html               Hibaoldal (nem létező cím esetén)
+
 admin-belepes.html     Admin belépő
 admin.html             Admin vezérlőpult
+
+robots.txt             Keresőrobotoknak (az admin kizárva)
+sitemap.xml            Oldaltérkép a Google-nek
 
 assets/css/style.css   Publikus oldal stílusai + kurzor
 assets/css/admin.css   Admin felület stílusai
@@ -167,6 +172,13 @@ Bármelyik működik, feltöltés után azonnal él:
 - **GitHub Pages** — Settings → Pages → forrás: `main` branch
 
 Helyi kipróbálás: `python3 -m http.server 8000`, majd `localhost:8000`.
+
+### Publikálás után két apróság
+
+1. A `robots.txt` és a `sitemap.xml` a `zamardiszepsegszalon.hu` címet
+   tartalmazza — írja át a valódi domainre.
+2. A `404.html` legtöbb tárhelyen automatikusan működik. Apache alatt egy
+   `.htaccess` fájlba ennyi kell: `ErrorDocument 404 /404.html`
 
 ---
 
