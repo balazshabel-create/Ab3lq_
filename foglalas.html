@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Időpontfoglalás — Zamárdi Szépségszalon</title>
+<meta name="description" content="Foglaljon időpontot online a Zamárdi Szépségszalonba: válasszon szolgáltatást, kollégát és szabad időpontot néhány kattintással.">
+<meta name="theme-color" content="#0d0f14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d0f14'/%3E%3Ctext x='16' y='23' font-size='19' font-family='Georgia,serif' fill='%23c9a227' text-anchor='middle'%3EZ%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@200;300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<div class="grain" aria-hidden="true"></div>
+<div class="progress"></div>
+
+<header class="nav">
+  <div class="nav__inner">
+    <a href="index.html" class="brand"><span class="brand__mark">Z</span><span class="brand__txt"><b>Zamárdi</b><span>Szépségszalon</span></span></a>
+    <nav class="nav__links">
+      <a href="index.html">Főoldal</a>
+      <a href="szolgaltatasok.html">Szolgáltatások</a>
+      <a href="galeria.html">Galéria</a>
+      <a href="rolunk.html">Rólunk</a>
+      <a href="kapcsolat.html">Kapcsolat</a>
+    </nav>
+    <div class="nav__right">
+      <span class="status status--nav"><span class="status__dot"></span><span class="status__txt"></span></span>
+      <a href="tel:+36203678150" class="btn btn--ghost btn--sm">Telefon</a>
+      <button class="burger" aria-label="Menü megnyitása" aria-expanded="false"><i></i><i></i><i></i></button>
+    </div>
+  </div>
+</header>
+
+<div class="drawer">
+  <nav>
+    <a href="index.html">Főoldal</a>
+    <a href="szolgaltatasok.html">Szolgáltatások</a>
+    <a href="galeria.html">Galéria</a>
+    <a href="rolunk.html">Rólunk</a>
+    <a href="kapcsolat.html">Kapcsolat</a>
+    <a href="foglalas.html" class="gold italic">Időpontfoglalás</a>
+  </nav>
+  <div class="drawer__meta"><span data-salon="tel"></span> · <span data-salon="cim"></span></div>
+</div>
+
+<section class="pagehead">
+  <div class="orb orb--gold orb--a" style="width:440px;height:440px;top:-170px;left:-70px"></div>
+  <div class="wrap" style="position:relative;z-index:1">
+    <div class="crumbs rv"><a href="index.html">Főoldal</a> / Időpontfoglalás</div>
+    <h1 class="split" style="font-size:clamp(2.2rem,5.5vw,4.2rem)">Foglaljon időpontot<br><span class="fine gold italic">két perc alatt</span></h1>
+    <p class="lead rv" data-delay=".2">
+      Csak a valóban szabad sávokat mutatjuk. A foglalás után kollégánk
+      telefonon vagy e-mailben visszaigazolja.
+    </p>
+    <div class="rv" data-delay=".3" style="margin-top:20px">
+      <span class="status status--lg"><span class="status__dot"></span><span class="status__txt"></span></span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FOGLALÓ ================= -->
+<section class="section" id="booking">
+  <div class="wrap" style="max-width:920px">
+    <div class="booking rv">
+
+      <div class="steps">
+        <button type="button" class="step-pill on" data-step-pill="1"><i>1</i> Szolgáltatás</button>
+        <button type="button" class="step-pill" data-step-pill="2"><i>2</i> Kolléga</button>
+        <button type="button" class="step-pill" data-step-pill="3"><i>3</i> Időpont</button>
+        <button type="button" class="step-pill" data-step-pill="4"><i>4</i> Adatok</button>
+      </div>
+
+      <!-- 1 -->
+      <div class="panel on" data-step="1">
+        <h3 style="margin-bottom:6px">Mit szeretne?</h3>
+        <p style="font-size:.94rem">Válasszon egy szolgáltatást — az árat és az időtartamot is látja.</p>
+        <div id="svc-list"></div>
+      </div>
+
+      <!-- 2 -->
+      <div class="panel" data-step="2">
+        <h3 style="margin-bottom:6px">Kihez szeretne jönni?</h3>
+        <p style="font-size:.94rem">Ha mindegy, válassza a „bármelyik kolléga” lehetőséget — így több szabad időpont közül választhat.</p>
+        <div class="opt-grid" id="staff-list"></div>
+        <div class="nav-btns">
+          <button type="button" class="btn btn--ghost btn--sm" data-prev="1">← Vissza</button>
+          <button type="button" class="btn btn--gold btn--sm" data-next="2">Tovább <span class="btn__arrow">→</span></button>
+        </div>
+      </div>
+
+      <!-- 3 -->
+      <div class="panel" data-step="3">
+        <h3 style="margin-bottom:6px">Mikor jó Önnek?</h3>
+        <p style="font-size:.94rem">A zárva tartó napok és a már foglalt sávok automatikusan kiesnek.</p>
+
+        <div style="margin:22px 0 8px">
+          <label style="font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--txt-dimmer)">Nap</label>
+        </div>
+        <div class="days" id="day-list"></div>
+
+        <div style="margin:26px 0 10px">
+          <label style="font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--txt-dimmer)">Időpont</label>
+          <div id="slot-title" style="font-size:.86rem;color:var(--gold-soft);margin-top:4px"></div>
+        </div>
+        <div class="slots" id="slot-list"></div>
+
+        <div class="nav-btns">
+          <button type="button" class="btn btn--ghost btn--sm" data-prev="2">← Vissza</button>
+          <button type="button" class="btn btn--gold btn--sm" data-next="3">Tovább <span class="btn__arrow">→</span></button>
+        </div>
+      </div>
+
+      <!-- 4 -->
+      <div class="panel" data-step="4">
+        <h3 style="margin-bottom:18px">Már csak az adatai hiányoznak</h3>
+
+        <div class="summary" id="summary"></div>
+
+        <div class="field">
+          <label for="f-nev">Név *</label>
+          <input id="f-nev" type="text" autocomplete="name" placeholder="Kovács Anna">
+          <div class="msg"></div>
+        </div>
+        <div class="grid grid--2" style="gap:0 16px">
+          <div class="field">
+            <label for="f-tel">Telefonszám *</label>
+            <input id="f-tel" type="tel" autocomplete="tel" placeholder="+36 30 123 4567">
+            <div class="msg"></div>
+          </div>
+          <div class="field">
+            <label for="f-email">E-mail (nem kötelező)</label>
+            <input id="f-email" type="email" autocomplete="email" placeholder="anna@example.hu">
+            <div class="msg"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-uzenet">Megjegyzés</label>
+          <textarea id="f-uzenet" placeholder="Pl. először járok Önöknél, vagy: érzékeny a fejbőröm."></textarea>
+        </div>
+
+        <label style="display:flex;gap:11px;align-items:flex-start;font-size:.88rem;color:var(--txt-dim);cursor:pointer">
+          <input type="checkbox" id="f-gdpr" style="width:auto;margin-top:5px">
+          <span>Hozzájárulok, hogy a szalon a megadott adataimat a foglalás
+          visszaigazolása céljából kezelje.</span>
+        </label>
+
+        <div id="booking-msg" style="min-height:22px;font-size:.86rem;margin-top:12px;opacity:0;transition:opacity .3s"></div>
+
+        <div class="nav-btns">
+          <button type="button" class="btn btn--ghost btn--sm" data-prev="3">← Vissza</button>
+          <button type="button" class="btn btn--gold" id="submit-booking">Foglalás elküldése <span class="btn__arrow">→</span></button>
+        </div>
+      </div>
+
+      <!-- 5 -->
+      <div class="panel" data-step="5">
+        <div class="done-box">
+          <div class="done-check">✓</div>
+          <h2 style="margin-bottom:14px">Megvan!</h2>
+          <div id="done-body"></div>
+          <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:8px">
+            <a id="send-mail" class="btn btn--gold" href="#">E-mail elküldése a szalonnak</a>
+            <a id="add-cal" class="btn btn--ghost" href="#">Naptárba mentés (.ics)</a>
+          </div>
+          <p style="font-size:.86rem;margin-top:24px">
+            Ha módosítani szeretne, hívjon minket:
+            <a href="tel:+36203678150" class="gold" data-salon="tel"></a>
+          </p>
+        </div>
+      </div>
+
+    </div>
+
+    <p class="center" style="font-size:.84rem;margin-top:24px;color:var(--txt-dimmer)">
+      A foglalás <b>kérésnek</b> számít — akkor válik véglegessé, amikor kollégánk visszaigazolja.
+    </p>
+  </div>
+</section>
+
+<!-- ================= INFÓK ================= -->
+<section class="section section--tight" style="background:linear-gradient(180deg,transparent,rgba(255,255,255,.022),transparent)">
+  <div class="wrap">
+    <div class="grid grid--3">
+      <div class="card rv" data-delay=".05">
+        <div class="card__ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></div>
+        <h3>Nyitvatartás</h3>
+        <div class="hours" data-hours style="margin-top:10px"></div>
+      </div>
+      <div class="card rv" data-delay=".12">
+        <div class="card__ico"><svg viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z"/></svg></div>
+        <h3>Inkább telefonálna?</h3>
+        <p>Semmi gond — hívjon minket nyitvatartási időben, és élőben egyeztetünk időpontot.</p>
+        <a href="tel:+36203678150" class="btn btn--ghost btn--sm btn--wide" data-salon="tel"></a>
+      </div>
+      <div class="card rv" data-delay=".19">
+        <div class="card__ico"><svg viewBox="0 0 24 24"><path d="M4 6h16v12H4z"/><path d="M4 8l8 5 8-5"/></svg></div>
+        <h3>Lemondás</h3>
+        <p>Ha közbejön valami, kérjük, <b>24 órával előbb</b> szóljon telefonon — így más vendégnek fel tudjuk ajánlani az időpontot.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer__grid">
+      <div>
+        <a href="index.html" class="brand" style="margin-bottom:16px"><span class="brand__mark">Z</span><span class="brand__txt"><b>Zamárdi</b><span>Szépségszalon</span></span></a>
+        <p style="font-size:.92rem;max-width:34ch">Fodrászat, kozmetika és körömszalon a Balaton déli partján. Helyieknek és nyaralóknak, 2005 óta.</p>
+      </div>
+      <div>
+        <h4>Oldalak</h4>
+        <ul>
+          <li><a href="index.html">Főoldal</a></li>
+          <li><a href="szolgaltatasok.html">Szolgáltatások</a></li>
+          <li><a href="galeria.html">Galéria</a></li>
+          <li><a href="rolunk.html">Rólunk</a></li>
+          <li><a href="kapcsolat.html">Kapcsolat</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Népszerű</h4>
+        <ul>
+          <li><a href="foglalas.html?szolgaltatas=noi-vagas">Női hajvágás</a></li>
+          <li><a href="foglalas.html?szolgaltatas=melir">Balayage</a></li>
+          <li><a href="foglalas.html?szolgaltatas=arckezeles">Arckezelés</a></li>
+          <li><a href="foglalas.html?szolgaltatas=mukorom">Műköröm</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Elérhetőség</h4>
+        <ul>
+          <li><a href="tel:+36203678150" data-salon="tel"></a></li>
+          <li><a href="kapcsolat.html" data-salon="cim"></a></li>
+        </ul>
+        <div style="margin-top:16px"><span class="status"><span class="status__dot"></span><span class="status__txt"></span></span></div>
+      </div>
+    </div>
+    <div class="footer__bottom">
+      <span>© <span id="ev"></span> Zamárdi Szépségszalon — Minden jog fenntartva.</span>
+      <span>Készpénzes fizetés · Akadálymentes · Női tulajdonú vállalkozás</span>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/js/main.js"></script>
+<script src="assets/js/booking.js"></script>
+<script>document.getElementById('ev').textContent = new Date().getFullYear();</script>
+</body>
+</html>

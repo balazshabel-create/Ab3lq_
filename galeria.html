@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Galéria — Zamárdi Szépségszalon</title>
+<meta name="description" content="Munkáink képekben: hajszínezés, balayage, alkalmi frizurák, arckezelések, műköröm és a szalon belső tere Zamárdiban.">
+<meta name="theme-color" content="#0d0f14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d0f14'/%3E%3Ctext x='16' y='23' font-size='19' font-family='Georgia,serif' fill='%23c9a227' text-anchor='middle'%3EZ%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@200;300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<div class="grain" aria-hidden="true"></div>
+<div class="progress"></div>
+
+<header class="nav">
+  <div class="nav__inner">
+    <a href="index.html" class="brand"><span class="brand__mark">Z</span><span class="brand__txt"><b>Zamárdi</b><span>Szépségszalon</span></span></a>
+    <nav class="nav__links">
+      <a href="index.html">Főoldal</a>
+      <a href="szolgaltatasok.html">Szolgáltatások</a>
+      <a href="galeria.html" aria-current="page">Galéria</a>
+      <a href="rolunk.html">Rólunk</a>
+      <a href="kapcsolat.html">Kapcsolat</a>
+    </nav>
+    <div class="nav__right">
+      <span class="status status--nav"><span class="status__dot"></span><span class="status__txt"></span></span>
+      <a href="foglalas.html" class="btn btn--gold btn--sm">Foglalás</a>
+      <button class="burger" aria-label="Menü megnyitása" aria-expanded="false"><i></i><i></i><i></i></button>
+    </div>
+  </div>
+</header>
+
+<div class="drawer">
+  <nav>
+    <a href="index.html">Főoldal</a>
+    <a href="szolgaltatasok.html">Szolgáltatások</a>
+    <a href="galeria.html">Galéria</a>
+    <a href="rolunk.html">Rólunk</a>
+    <a href="kapcsolat.html">Kapcsolat</a>
+    <a href="foglalas.html" class="gold italic">Időpontfoglalás</a>
+  </nav>
+  <div class="drawer__meta"><span data-salon="tel"></span> · <span data-salon="cim"></span></div>
+</div>
+
+<section class="pagehead">
+  <div class="orb orb--rose orb--b" style="width:440px;height:440px;top:-160px;left:-80px"></div>
+  <div class="wrap" style="position:relative;z-index:1">
+    <div class="crumbs rv"><a href="index.html">Főoldal</a> / Galéria</div>
+    <h1 class="split" style="font-size:clamp(2.4rem,6vw,4.6rem)">Munkáink<br><span class="fine gold italic">képekben</span></h1>
+    <p class="lead rv" data-delay=".2">
+      Kattintson bármelyik képre a nagyításhoz. Nyilakkal vagy a
+      billentyűzettel lapozhat.
+    </p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+
+    <div class="filters rv">
+      <button class="chip on" data-filter="mind">Mind</button>
+      <button class="chip" data-filter="haj">Hajmunkák</button>
+      <button class="chip" data-filter="alkalmi">Alkalmi</button>
+      <button class="chip" data-filter="kozmetika">Kozmetika</button>
+      <button class="chip" data-filter="korom">Körmök</button>
+      <button class="chip" data-filter="szalon">A szalon</button>
+    </div>
+
+    <!-- Saját fotó behelyezése: a <div class="ph"> helyére írjon
+         <img src="assets/img/sajat-kep.jpg" alt="Leírás"> — minden más marad. -->
+    <div class="gallery rv">
+
+      <figure class="gallery__item" data-cat="haj">
+        <div class="ph ph--tall" style="--c1:#3d2f27;--c2:#1c1815" data-label="Meleg karamell balayage"></div>
+        <figcaption class="gallery__cap"><span>Hajszínezés</span><b>Meleg karamell balayage</b></figcaption>
+      </figure>
+
+      <figure class="gallery__item" data-cat="szalon">
+        <div class="ph ph--wide" style="--c1:#2c303c;--c2:#171a21" data-label="A szalon reggel"></div>
+        <figcaption class="gallery__cap"><span>Szalon</span><b>Reggeli fény a székeknél</b></figcaption>
+      </figure>
+
+      <figure class="gallery__item" data-cat="korom">
+        <div class="ph ph--sq" style="--c1:#3c2a30;--c2:#1d1519" data-label="Francia géllakk"></div>
+        <figcaption class="gallery__cap"><span>Körmök</span><b>Klasszikus francia géllakk</b></figcaption>
+      </figure>
+
+      <figure class="gallery__item" data-cat="alkalmi">
+        <div class="ph ph--tall" style="--c1:#453529;--c2:#221a14" data-label="Menyasszonyi konty"></div>
+        <figcaption class="gallery__cap"><span>Alkalmi</span><b>Laza menyasszonyi konty</b></figcaption>
+      </figure>
+
+      <figure class="gallery__item" data-cat="kozmetika">
+        <div class="ph ph--wide" style="--c1:#2b3a38;--c2:#141d1c" data-label="Arckezelés"></div>
+        <figcaption class="gallery__cap"><span>Kozmetika</span><b>Hidratáló luxus kezelés</b></figcaption>
+      </figure>
+
+      <figure class="gallery__item" data-cat="haj">
+        <div class="ph ph--sq" style="--c1:#2f2b3a;--c2:#17151f" data-label="Hűvös hamvas szőke"></div>
+        <figcaption class="gallery__cap"><span>Hajszínezés</span><b>Hűvös hamvas szőke</b></figcaption>
+      </figure>
+
+      <figure class="gallery__item" data-cat="korom">
+        <div class="ph ph--tall" style="--c1:#443040;--c2:#20161f" data-label="Kőberakásos díszítés"></div>
+        <figcaption class="gallery__cap"><span>Körmök</span><b>Kőberakásos díszítés</b></figcaption>
+      </figure>
+
+      <figure class="gallery__item" data-cat="haj">
+        <div class="ph ph--wide" style="--c1:#39302a;--c2:#1b1715" data-label="Réteges bob"></div>
+        <figcaption class="gallery__cap"><span>Hajvágás</span><b>Réteges bob, tompa véggel</b></figcaption>
+      </figure>
+
+      <figure class="gallery__item" data-cat="szalon">
+        <div class="ph ph--tall" style="--c1:#333a3e;--c2:#181c1f" data-label="Mosdótér"></div>
+        <figcaption class="gallery__cap"><span>Szalon</span><b>Hajmosó rész</b></figcaption>
+      </figure>
+
+      <figure class="gallery__item" data-cat="kozmetika">
+        <div class="ph ph--sq" style="--c1:#3a2f33;--c2:#1c1719" data-label="Szemöldök formázás"></div>
+        <figcaption class="gallery__cap"><span>Kozmetika</span><b>Szemöldök formázás után</b></figcaption>
+      </figure>
+
+      <figure class="gallery__item" data-cat="alkalmi">
+        <div class="ph ph--wide" style="--c1:#42383f;--c2:#1f1a1e" data-label="Ballagási frizura"></div>
+        <figcaption class="gallery__cap"><span>Alkalmi</span><b>Ballagási félkontyos fonás</b></figcaption>
+      </figure>
+
+      <figure class="gallery__item" data-cat="korom">
+        <div class="ph ph--sq" style="--c1:#2e3540;--c2:#161a20" data-label="Nude műköröm"></div>
+        <figcaption class="gallery__cap"><span>Körmök</span><b>Nude műkörömépítés</b></figcaption>
+      </figure>
+
+      <figure class="gallery__item" data-cat="haj">
+        <div class="ph ph--tall" style="--c1:#4a3a2c;--c2:#241c16" data-label="Rézvörös festés"></div>
+        <figcaption class="gallery__cap"><span>Hajszínezés</span><b>Rézvörös teljes festés</b></figcaption>
+      </figure>
+
+      <figure class="gallery__item" data-cat="szalon">
+        <div class="ph ph--sq" style="--c1:#2a2e33;--c2:#15181b" data-label="Termékpolc"></div>
+        <figcaption class="gallery__cap"><span>Szalon</span><b>Professzionális termékeink</b></figcaption>
+      </figure>
+
+      <figure class="gallery__item" data-cat="kozmetika">
+        <div class="ph ph--tall" style="--c1:#3f3038;--c2:#1e171c" data-label="Sminktetoválás"></div>
+        <figcaption class="gallery__cap"><span>Sminktetoválás</span><b>Púderszemöldök, gyógyulás után</b></figcaption>
+      </figure>
+
+      <figure class="gallery__item" data-cat="alkalmi">
+        <div class="ph ph--sq" style="--c1:#37322b;--c2:#1a1815" data-label="Estélyi smink"></div>
+        <figcaption class="gallery__cap"><span>Alkalmi</span><b>Estélyi smink, meleg tónusokkal</b></figcaption>
+      </figure>
+
+    </div>
+
+    <p class="center rv" style="font-size:.88rem;margin-top:34px;color:var(--txt-dimmer)">
+      A képeket vendégeink hozzájárulásával közöljük.
+    </p>
+  </div>
+</section>
+
+<!-- Lightbox -->
+<div class="lightbox" role="dialog" aria-modal="true" aria-label="Kép nagyítva">
+  <button class="lightbox__close" aria-label="Bezárás">✕</button>
+  <button class="lightbox__nav lightbox__nav--prev" aria-label="Előző">‹</button>
+  <button class="lightbox__nav lightbox__nav--next" aria-label="Következő">›</button>
+  <div>
+    <div class="lightbox__stage"></div>
+    <div class="lightbox__cap"></div>
+  </div>
+</div>
+
+<section class="section section--tight">
+  <div class="wrap">
+    <div class="cta-band rv rv--s">
+      <h2 class="split" style="margin-bottom:.3em">Tetszik, amit lát?</h2>
+      <p class="lead" style="margin-inline:auto">Hozza el a kedvenc képét — vagy csak a bizalmát. A többit megoldjuk.</p>
+      <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:26px">
+        <a href="foglalas.html" class="btn btn--gold">Időpontfoglalás <span class="btn__arrow">→</span></a>
+        <a href="szolgaltatasok.html" class="btn btn--ghost">Árak megtekintése</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer__grid">
+      <div>
+        <a href="index.html" class="brand" style="margin-bottom:16px"><span class="brand__mark">Z</span><span class="brand__txt"><b>Zamárdi</b><span>Szépségszalon</span></span></a>
+        <p style="font-size:.92rem;max-width:34ch">Fodrászat, kozmetika és körömszalon a Balaton déli partján. Helyieknek és nyaralóknak, 2005 óta.</p>
+      </div>
+      <div>
+        <h4>Oldalak</h4>
+        <ul>
+          <li><a href="index.html">Főoldal</a></li>
+          <li><a href="szolgaltatasok.html">Szolgáltatások</a></li>
+          <li><a href="galeria.html">Galéria</a></li>
+          <li><a href="rolunk.html">Rólunk</a></li>
+          <li><a href="kapcsolat.html">Kapcsolat</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Népszerű</h4>
+        <ul>
+          <li><a href="foglalas.html?szolgaltatas=noi-vagas">Női hajvágás</a></li>
+          <li><a href="foglalas.html?szolgaltatas=melir">Balayage</a></li>
+          <li><a href="foglalas.html?szolgaltatas=arckezeles">Arckezelés</a></li>
+          <li><a href="foglalas.html?szolgaltatas=mukorom">Műköröm</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Elérhetőség</h4>
+        <ul>
+          <li><a href="tel:+36203678150" data-salon="tel"></a></li>
+          <li><a href="kapcsolat.html" data-salon="cim"></a></li>
+        </ul>
+        <div style="margin-top:16px"><span class="status"><span class="status__dot"></span><span class="status__txt"></span></span></div>
+      </div>
+    </div>
+    <div class="footer__bottom">
+      <span>© <span id="ev"></span> Zamárdi Szépségszalon — Minden jog fenntartva.</span>
+      <span>Készpénzes fizetés · Akadálymentes · Női tulajdonú vállalkozás</span>
+    </div>
+  </div>
+</footer>
+
+<a href="foglalas.html" class="fab">Foglalás</a>
+
+<script src="assets/js/main.js"></script>
+<script>document.getElementById('ev').textContent = new Date().getFullYear();</script>
+</body>
+</html>
