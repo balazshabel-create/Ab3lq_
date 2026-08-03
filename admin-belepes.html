@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Belépés — Zamárdi Szépségszalon admin</title>
+<meta name="description" content="A Zamárdi Szépségszalon adminisztrációs felületének belépő oldala.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0d0f14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d0f14'/%3E%3Ctext x='16' y='23' font-size='19' font-family='Georgia,serif' fill='%23c9a227' text-anchor='middle'%3EZ%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@200;300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/admin.css">
+</head>
+<body>
+
+<div class="grain" aria-hidden="true"></div>
+
+<main class="login">
+
+  <!-- ===== Bal oldal: márkapanel ===== -->
+  <section class="login__brandside">
+    <div class="login__mesh" aria-hidden="true"></div>
+    <div class="login__grid" aria-hidden="true"></div>
+
+    <a href="index.html" class="brand" style="align-self:flex-start">
+      <span class="brand__mark">Z</span>
+      <span class="brand__txt"><b>Zamárdi</b><span>Szépségszalon</span></span>
+    </a>
+
+    <div>
+      <span class="eyebrow">Adminisztráció</span>
+      <h1 class="login__tag">
+        A szalon<br><em>vezérlőpultja</em>
+      </h1>
+      <p class="lead" style="max-width:38ch">
+        Foglalások, nyitvatartás, árak és a csapat — mind egy helyen,
+        néhány kattintással módosítva.
+      </p>
+
+      <div class="login__facts">
+        <div>
+          <b id="lf-mai">0</b>
+          <span>Mai foglalás</span>
+        </div>
+        <div>
+          <b id="lf-uj">0</b>
+          <span>Új kérés</span>
+        </div>
+        <div>
+          <b>4,9</b>
+          <span>Google értékelés</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="font-size:.78rem;color:var(--txt-dimmer);letter-spacing:.08em">
+      <span class="status"><span class="status__dot"></span><span class="status__txt"></span></span>
+    </div>
+  </section>
+
+  <!-- ===== Jobb oldal: űrlap ===== -->
+  <section class="login__formside">
+    <div class="login__card">
+
+      <div class="login__lock">
+        <svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.2"/></svg>
+      </div>
+
+      <h2 style="margin-bottom:6px">Üdvözöljük újra</h2>
+      <p style="font-size:.92rem;margin-bottom:26px">
+        Lépjen be a szalon adminisztrációs felületére.
+      </p>
+
+      <form id="login-form" novalidate>
+        <div class="ffield" id="ff-email">
+          <input type="email" id="l-email" placeholder=" " autocomplete="username" required>
+          <label for="l-email">E-mail cím</label>
+        </div>
+
+        <div class="ffield" id="ff-jelszo">
+          <input type="password" id="l-jelszo" placeholder=" " autocomplete="current-password" required>
+          <label for="l-jelszo">Jelszó</label>
+          <button type="button" class="ffield__eye" id="eye" aria-label="Jelszó megjelenítése">
+            <svg viewBox="0 0 24 24" id="eye-ico"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>
+          </button>
+        </div>
+
+        <div class="caps-warn" id="caps">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 4l7 7h-4v4H9v-4H5l7-7zM9 19h6"/></svg>
+          A Caps Lock be van kapcsolva
+        </div>
+
+        <div class="login__row">
+          <label>
+            <input type="checkbox" id="l-emlek" style="width:auto">
+            Maradjak bejelentkezve
+          </label>
+          <a href="#" id="elfelejtett">Elfelejtett jelszó?</a>
+        </div>
+
+        <div class="login__msg" id="l-msg" role="status" aria-live="polite"></div>
+
+        <button type="submit" class="btn btn--gold btn--wide" id="l-kuld">
+          <span id="l-kuld-txt">Belépés</span> <span class="btn__arrow">→</span>
+        </button>
+      </form>
+
+      <div class="login__demo">
+        <b>Bemutató hozzáférés.</b> Ez a felület kipróbálásra készült, valódi
+        jelszóellenőrzés nincs mögötte — semmilyen adat nem hagyja el a
+        böngészőt.<br>
+        E-mail: <code>admin@zamardiszepsegszalon.hu</code> ·
+        jelszó: <code>zamardi2026</code>
+      </div>
+
+      <p style="text-align:center;margin:22px 0 0;font-size:.85rem">
+        <a href="index.html" style="color:var(--txt-dimmer)">← Vissza a weboldalra</a>
+      </p>
+
+    </div>
+  </section>
+
+</main>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="assets/js/main.js"></script>
+<script src="assets/js/cursor.js"></script>
+<script>
+/* ==========================================================================
+   Belépő logika
+
+   FONTOS: ez egy bemutató felület. A hitelesítés kizárólag a böngészőben
+   fut, ezért NEM véd valódi adatot. Éles használat előtt szerveroldali
+   bejelentkezésre kell cserélni (lásd README).
+   ========================================================================== */
+
+const DEMO = { email: 'admin@zamardiszepsegszalon.hu', jelszo: 'zamardi2026' };
+
+/* --- Pillanatüzenet --- */
+function toast(szoveg, tipus = 'info') {
+  const jelek = { ok: '✓', info: 'i', bad: '!' };
+  const el = document.createElement('div');
+  el.className = 'toast toast--' + tipus;
+  el.innerHTML = `<span class="toast__ico">${jelek[tipus] || 'i'}</span><span>${szoveg}</span>`;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => {
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 400);
+  }, 3600);
+}
+
+/* --- Jelszó mutatása --- */
+const jelszoMezo = document.getElementById('l-jelszo');
+document.getElementById('eye').addEventListener('click', function () {
+  const rejtve = jelszoMezo.type === 'password';
+  jelszoMezo.type = rejtve ? 'text' : 'password';
+  this.setAttribute('aria-label', rejtve ? 'Jelszó elrejtése' : 'Jelszó megjelenítése');
+  document.getElementById('eye-ico').innerHTML = rejtve
+    ? '<path d="M3 3l18 18M10.6 10.7a2.6 2.6 0 0 0 3.7 3.6"/><path d="M6.5 6.6C3.9 8.3 2 12 2 12s3.6 6.5 10 6.5c2 0 3.7-.6 5.1-1.5M19.5 15.2C21.2 13.7 22 12 22 12s-3.6-6.5-10-6.5c-.7 0-1.4.1-2 .2"/>'
+    : '<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/>';
+});
+
+/* --- Caps Lock figyelmeztetés --- */
+const caps = document.getElementById('caps');
+['keyup', 'keydown'].forEach((esemeny) => {
+  jelszoMezo.addEventListener(esemeny, (e) => {
+    if (typeof e.getModifierState === 'function') {
+      caps.classList.toggle('on', e.getModifierState('CapsLock'));
+    }
+  });
+});
+jelszoMezo.addEventListener('blur', () => caps.classList.remove('on'));
+
+/* --- Belépés --- */
+const urlap = document.getElementById('login-form');
+const uzenet = document.getElementById('l-msg');
+const kuldGomb = document.getElementById('l-kuld');
+const kuldTxt = document.getElementById('l-kuld-txt');
+
+function hiba(szoveg) {
+  uzenet.textContent = szoveg;
+  uzenet.style.color = 'var(--bad)';
+  uzenet.classList.add('on');
+  document.querySelector('.login__card').classList.add('shake');
+  setTimeout(() => document.querySelector('.login__card').classList.remove('shake'), 480);
+}
+
+urlap.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const email = document.getElementById('l-email').value.trim().toLowerCase();
+  const jelszo = jelszoMezo.value;
+
+  document.getElementById('ff-email').classList.toggle('err', !email);
+  document.getElementById('ff-jelszo').classList.toggle('err', !jelszo);
+
+  if (!email || !jelszo) { hiba('Kérjük, töltse ki mindkét mezőt.'); return; }
+
+  /* Rövid „töltés”, hogy élethű legyen a visszajelzés */
+  kuldGomb.disabled = true;
+  kuldGomb.style.opacity = '.7';
+  kuldTxt.textContent = 'Ellenőrzés…';
+  uzenet.classList.remove('on');
+
+  setTimeout(() => {
+    if (email === DEMO.email && jelszo === DEMO.jelszo) {
+      uzenet.textContent = 'Sikeres belépés — átirányítjuk…';
+      uzenet.style.color = 'var(--ok)';
+      uzenet.classList.add('on');
+      kuldTxt.textContent = 'Belépve';
+
+      const munkamenet = {
+        nev: 'Kovács Anita',
+        szerep: 'Tulajdonos',
+        email: DEMO.email,
+        belepve: new Date().toISOString()
+      };
+      /* „Maradjak bejelentkezve” esetén tartós tárolás, egyébként munkamenet */
+      const tar = document.getElementById('l-emlek').checked ? localStorage : sessionStorage;
+      try { tar.setItem('zsz_admin', JSON.stringify(munkamenet)); } catch { /* privát mód */ }
+
+      setTimeout(() => { location.href = 'admin.html'; }, 700);
+    } else {
+      kuldGomb.disabled = false;
+      kuldGomb.style.opacity = '';
+      kuldTxt.textContent = 'Belépés';
+      document.getElementById('ff-jelszo').classList.add('err');
+      hiba('Hibás e-mail cím vagy jelszó. A bemutató adatok lent olvashatók.');
+    }
+  }, 850);
+});
+
+document.getElementById('elfelejtett').addEventListener('click', (e) => {
+  e.preventDefault();
+  toast('Bemutató felület — a jelszó-visszaállítás a szerveroldali változatban él.', 'info');
+});
+
+/* --- Bal oldali élő számok a valós foglalásokból --- */
+(function előnezet() {
+  let lista = [];
+  try { lista = JSON.parse(localStorage.getItem('zsz_foglalasok') || '[]'); } catch { /* üres */ }
+  const ma = new Date();
+  const maISO = `${ma.getFullYear()}-${String(ma.getMonth() + 1).padStart(2, '0')}-${String(ma.getDate()).padStart(2, '0')}`;
+  document.getElementById('lf-mai').textContent = lista.filter((f) => f.nap === maISO).length;
+  document.getElementById('lf-uj').textContent = lista.filter((f) => (f.allapot || 'uj') === 'uj').length;
+})();
+
+/* --- Ha már be van lépve, ne kelljen újra --- */
+(function marBelepve() {
+  const van = sessionStorage.getItem('zsz_admin') || localStorage.getItem('zsz_admin');
+  if (van) {
+    uzenet.textContent = 'Már be van jelentkezve.';
+    uzenet.style.color = 'var(--gold-soft)';
+    uzenet.classList.add('on');
+    kuldTxt.textContent = 'Tovább a vezérlőpultra';
+    kuldGomb.addEventListener('click', (e) => { e.preventDefault(); location.href = 'admin.html'; });
+  }
+})();
+</script>
+</body>
+</html>

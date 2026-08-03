@@ -23,23 +23,78 @@ tárhelyre, működik fájlból megnyitva is.
 | **Mobilbarát** | Teljes reszponzív, mobilmenü, lebegő foglalás-gomb |
 | **Google-adatok** | Cím, telefon, nyitvatartás, 4,9 csillag / 50 vélemény, akadálymentesség — a nyilvános Google-találatok alapján |
 | **SEO** | Oldalankénti címek és leírások, `HairSalon` strukturált adat a Google-nek |
+| **Egyedi kurzor** | Követő pötty + lassabban úszó gyűrű, ami gomb fölött mágnesesen beleül, galéria fölött „Nagyítás” feliratú aranykorongra vált. Érintőképernyőn magától kikapcsol. |
+| **Admin felület** | Külön belépő oldal + vezérlőpult: foglaláskezelés, heti naptár, árak, csapat, nyitvatartás, szalonadatok — profilmenüvel |
+
+---
+
+## Admin felület
+
+Két oldal: `admin-belepes.html` (belépő) és `admin.html` (vezérlőpult).
+A publikus oldalak láblécében van egy diszkrét **Admin** link.
+
+**Bemutató belépés:** `admin@zamardiszepsegszalon.hu` / `zamardi2026`
+
+### Mit tud a vezérlőpult?
+
+- **Áttekintés** — mai foglalások, új kérések, várható heti bevétel,
+  kihasználtság, mai menetrend, 7 napos oszlopdiagram, legutóbbi foglalások
+- **Foglalások** — keresés és szűrés állapot szerint, visszaigazolás egy
+  kattintással, részletek ablak, visszaigazoló e-mail a vendégnek, törlés
+- **Heti naptár** — hetekre lapozható, napokra bontott nézet
+- **Szolgáltatások** — név, időtartam és ár szerkesztése, új sor, törlés
+- **Csapat** — kollégák és az, ki melyik szolgáltatáscsoportra választható
+- **Nyitvatartás** — naponként kapcsolható, 24 órás legördülővel, élő
+  előnézettel amellett
+- **Szalon adatai** — név, cím, telefon, e-mail
+- **Mentés** — foglalások letöltése JSON vagy Excel-barát CSV formában
+
+### A lényeg: minden módosítás azonnal él a weboldalon
+
+Ha az adminban átírja a nyitvatartást, a publikus oldalon rögtön változik a
+villogó jelző, a nyitvatartás-táblázat **és** a foglalóban kiajánlott szabad
+időpontok. Ugyanez igaz az árakra, a szolgáltatásokra és a szalon adataira.
+
+### ⚠️ Éles használat előtt olvassa el
+
+A belépés **kizárólag a böngészőben fut**, ezért **nem véd valódi adatot** —
+bárki, aki megnyitja a forrást, látja a bemutató jelszót. Ez a verzió
+bemutatóra és a folyamatok kipróbálására készült.
+
+Éles üzemhez két dolog kell:
+
+1. **Szerveroldali bejelentkezés** — a jelszóellenőrzés a szerverre kerül
+   (munkamenet-süti vagy token), az `admin.html` pedig csak hitelesített
+   kéréssel töltődhet be.
+2. **Adatbázis** — a foglalások ma a böngésző `localStorage`-ában vannak, ami
+   gépenként külön. Több eszközről ugyanazt látni csak közös adatbázissal
+   lehet.
+
+Amíg ez nincs meg, az admin oldalt érdemes jelszóval védeni a tárhely
+szintjén is (pl. `.htpasswd`), vagy ki sem tenni élesbe.
 
 ---
 
 ## Fájlok
 
 ```
-index.html            Főoldal
-szolgaltatasok.html   Árlista + csomagok + GYIK
-galeria.html          Munkák, szűrővel és nagyítóval
-rolunk.html           Történet, értékek, csapat
-kapcsolat.html        Elérhetőség, térkép, üzenetküldés
-foglalas.html         Időpontfoglaló
+index.html             Főoldal
+szolgaltatasok.html    Árlista + csomagok + GYIK
+galeria.html           Munkák, szűrővel és nagyítóval
+rolunk.html            Történet, értékek, csapat
+kapcsolat.html         Elérhetőség, térkép, üzenetküldés
+foglalas.html          Időpontfoglaló
 
-assets/css/style.css  Minden stílus
-assets/js/main.js     Közös scriptek + a szalon adatai
-assets/js/booking.js  Foglaló + szolgáltatáslista
-assets/img/           Ide jönnek a saját fotók
+admin-belepes.html     Admin belépő
+admin.html             Admin vezérlőpult
+
+assets/css/style.css   Publikus oldal stílusai + kurzor
+assets/css/admin.css   Admin felület stílusai
+assets/js/main.js      Közös scriptek + a szalon adatai
+assets/js/booking.js   Foglaló + szolgáltatás- és kollégalista
+assets/js/cursor.js    Egyedi kurzor
+assets/js/admin.js     Admin vezérlőpult logikája
+assets/img/            Ide jönnek a saját fotók
 ```
 
 ---

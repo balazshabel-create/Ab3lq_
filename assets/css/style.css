@@ -1519,6 +1519,115 @@ p { margin: 0 0 1.1em; color: var(--txt-dim); }
   .lightbox__nav { display: none; }
 }
 
+/* ---------- 28b. Egyedi kurzor ---------- */
+.cur {
+  position: fixed;
+  top: 0; left: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+  will-change: transform;
+}
+body.cur-on .cur { opacity: 1; }
+
+/* Csak akkor rejtjük a rendszerkurzort, ha a sajátunk tényleg fut */
+body.cur-on,
+body.cur-on * { cursor: none !important; }
+
+.cur--dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 10px rgba(201, 162, 39, 0.9);
+}
+
+.cur--ring {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(242, 239, 233, 0.45);
+  display: grid;
+  place-items: center;
+  transition: width 0.38s var(--ease), height 0.38s var(--ease),
+              background 0.38s var(--ease), border-color 0.38s var(--ease),
+              opacity 0.3s, backdrop-filter 0.38s;
+}
+
+.cur__label {
+  font-family: var(--sans);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.3s var(--ease), transform 0.38s var(--ease);
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+/* Link fölött */
+.cur--ring.is-link {
+  width: 52px; height: 52px;
+  border-color: rgba(201, 162, 39, 0.75);
+  background: rgba(201, 162, 39, 0.09);
+}
+
+/* Gomb fölött — mágneses, teli arany */
+.cur--ring.is-btn {
+  width: 62px; height: 62px;
+  border-color: transparent;
+  background: rgba(201, 162, 39, 0.22);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+/* Galéria — „Nagyítás” felirattal */
+.cur--ring.is-view {
+  width: 104px; height: 104px;
+  border-color: transparent;
+  background: var(--gold);
+}
+.cur--ring.is-view .cur__label { opacity: 1; transform: none; }
+
+/* Előtte/utána csúszka — „Húzza” */
+.cur--ring.is-drag {
+  width: 92px; height: 92px;
+  border-color: transparent;
+  background: var(--rose);
+}
+.cur--ring.is-drag .cur__label { opacity: 1; transform: none; }
+
+/* Futó szalag fölött */
+.cur--ring.is-wide {
+  width: 76px; height: 76px;
+  border-color: rgba(242, 239, 233, 0.22);
+}
+
+/* Beviteli mező — vékony függőleges vonás */
+.cur--ring.is-text {
+  width: 2px; height: 26px;
+  border-radius: 1px;
+  border: none;
+  background: var(--gold-soft);
+}
+
+/* Kattintáskor összehúzódik */
+.cur--ring.is-press { transform-origin: center; }
+body.cur-on .cur--ring.is-press { filter: brightness(1.25); }
+.cur--ring.is-press { scale: 0.82; }
+
+/* A pötty eltűnik, amikor a gyűrű „teli” állapotba vált */
+body.cur-on .cur--ring.is-view ~ .cur--dot,
+body.cur-on .cur--ring.is-drag ~ .cur--dot,
+body.cur-on .cur--ring.is-text ~ .cur--dot { opacity: 0; }
+
+/* Érintőképernyőn soha */
+@media (hover: none), (pointer: coarse) {
+  .cur { display: none; }
+  body.cur-on, body.cur-on * { cursor: auto !important; }
+}
+
 /* ---------- 29. Mozgáscsökkentés ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -1529,6 +1638,8 @@ p { margin: 0 0 1.1em; color: var(--txt-dim); }
   }
   .rv { opacity: 1; transform: none; }
   .split .word > span { transform: none; }
+  .cur { display: none; }
+  body.cur-on, body.cur-on * { cursor: auto !important; }
 }
 
 /* ---------- 30. Nyomtatás ---------- */

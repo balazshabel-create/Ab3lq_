@@ -28,6 +28,15 @@ const SALON = {
   napRovid: ['Vas', 'Hét', 'Ked', 'Sze', 'Csü', 'Pén', 'Szo']
 };
 
+/* Az admin felületen mentett módosítások felülírják a fenti alapértékeket.
+   Így a szalon a nyitvatartást és az elérhetőséget kód nélkül állíthatja. */
+(function adminBeallitasok() {
+  try {
+    const ment = JSON.parse(localStorage.getItem('zsz_beallitasok') || 'null');
+    if (ment && typeof ment === 'object') Object.assign(SALON, ment);
+  } catch { /* privát mód vagy sérült adat — maradnak az alapértékek */ }
+})();
+
 /* Percből "8:00" alak */
 function perc2ora(p) {
   const h = Math.floor(p / 60);

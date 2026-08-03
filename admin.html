@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vezérlőpult — Zamárdi Szépségszalon admin</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0d0f14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d0f14'/%3E%3Ctext x='16' y='23' font-size='19' font-family='Georgia,serif' fill='%23c9a227' text-anchor='middle'%3EZ%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@200;300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/admin.css">
+</head>
+<body>
+
+<div class="grain" aria-hidden="true"></div>
+<div class="side-veil" id="veil"></div>
+
+<div class="adm">
+
+  <!-- ================= OLDALSÁV ================= -->
+  <aside class="side" id="side">
+    <a href="index.html" class="side__brand">
+      <span class="brand__mark">Z</span>
+      <span class="brand__txt"><b>Zamárdi</b><span>Admin</span></span>
+    </a>
+
+    <div class="side__group">Áttekintés</div>
+    <button class="side__link on" data-view="attekintes">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/></svg>
+      Vezérlőpult
+    </button>
+    <button class="side__link" data-view="foglalasok">
+      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+      Foglalások
+      <span class="side__badge" id="badge-uj">0</span>
+    </button>
+    <button class="side__link" data-view="naptar">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+      Heti naptár
+    </button>
+
+    <div class="side__group">Beállítás</div>
+    <button class="side__link" data-view="szolgaltatasok">
+      <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+      Szolgáltatások
+    </button>
+    <button class="side__link" data-view="csapat">
+      <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.4"/><path d="M3 20v-1.5A4.5 4.5 0 0 1 7.5 14h3A4.5 4.5 0 0 1 15 18.5V20"/><path d="M16 5.2a3.4 3.4 0 0 1 0 5.6M18 14h.5a4.5 4.5 0 0 1 4.5 4.5V20"/></svg>
+      Csapat
+    </button>
+    <button class="side__link" data-view="nyitvatartas">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M12 13v4"/></svg>
+      Nyitvatartás
+    </button>
+    <button class="side__link" data-view="beallitasok">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+      Szalon adatai
+    </button>
+
+    <div class="side__foot">
+      <a href="index.html" class="side__link" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14L21 3"/></svg>
+        Weboldal megnyitása
+      </a>
+    </div>
+  </aside>
+
+  <!-- ================= FŐ TERÜLET ================= -->
+  <div class="main">
+
+    <!-- ===== Felső sáv ===== -->
+    <header class="top">
+      <button class="icon-btn side-toggle" id="side-btn" aria-label="Menü">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+
+      <div class="top__title">
+        <h1 id="view-title">Vezérlőpult</h1>
+        <p id="view-sub">Áttekintés a mai napról</p>
+      </div>
+
+      <span class="status status--nav" style="display:flex"><span class="status__dot"></span><span class="status__txt"></span></span>
+
+      <button class="icon-btn" id="bell" aria-label="Értesítések">
+        <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        <span class="icon-btn__dot" id="bell-dot" hidden></span>
+      </button>
+
+      <!-- ===== Profil ===== -->
+      <div class="profile" id="profile">
+        <button class="profile__chip" id="profile-btn" aria-expanded="false" aria-haspopup="true">
+          <span class="avatar" id="av-chip">A<span class="avatar__live"></span></span>
+          <span class="profile__who">
+            <b id="who-nev">—</b>
+            <span id="who-szerep">—</span>
+          </span>
+          <span class="profile__caret">▾</span>
+        </button>
+
+        <div class="profile__menu" role="menu">
+          <div class="profile__head">
+            <span class="avatar avatar--lg" id="av-big">A</span>
+            <div style="min-width:0">
+              <b id="menu-nev">—</b>
+              <span id="menu-email">—</span>
+            </div>
+          </div>
+
+          <div class="profile__stats">
+            <div class="profile__stat"><b id="ps-ma">0</b><span>Ma</span></div>
+            <div class="profile__stat"><b id="ps-het">0</b><span>Hét</span></div>
+            <div class="profile__stat"><b id="ps-uj">0</b><span>Új</span></div>
+          </div>
+
+          <button class="profile__item" data-view="beallitasok" role="menuitem">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4 20v-1a5 5 0 0 1 5-5h6a5 5 0 0 1 5 5v1"/></svg>
+            Profil és szalonadatok
+          </button>
+          <button class="profile__item" data-view="nyitvatartas" role="menuitem">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+            Nyitvatartás módosítása
+          </button>
+          <button class="profile__item" id="demo-adat" role="menuitem">
+            <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/></svg>
+            Bemutató foglalások betöltése
+          </button>
+
+          <div class="profile__sep"></div>
+
+          <button class="profile__item profile__item--out" id="kilepes" role="menuitem">
+            <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg>
+            Kijelentkezés
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ================= NÉZETEK ================= -->
+
+    <!-- --- Vezérlőpult --- -->
+    <section class="view on" data-view="attekintes">
+      <div class="agrid agrid--4" style="margin-bottom:18px" id="stats"></div>
+
+      <div class="agrid agrid--wide">
+        <div class="acard">
+          <div class="acard__head">
+            <div>
+              <h2>Mai menetrend</h2>
+              <p id="agenda-datum">—</p>
+            </div>
+            <button class="mini mini--gold" data-view="naptar">Heti nézet →</button>
+          </div>
+          <div class="agenda" id="agenda"></div>
+        </div>
+
+        <div class="acard">
+          <div class="acard__head">
+            <div>
+              <h3>Következő 7 nap</h3>
+              <p>Foglalások napi bontásban</p>
+            </div>
+          </div>
+          <div class="bars" id="bars"></div>
+        </div>
+      </div>
+
+      <div class="acard" style="margin-top:18px">
+        <div class="acard__head">
+          <div>
+            <h2>Legutóbbi foglalások</h2>
+            <p>A weboldalról érkezett kérések</p>
+          </div>
+          <button class="mini mini--gold" data-view="foglalasok">Összes →</button>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr><th>Vendég</th><th>Szolgáltatás</th><th>Időpont</th><th>Kolléga</th><th>Állapot</th></tr>
+            </thead>
+            <tbody id="recent"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- --- Foglalások --- -->
+    <section class="view" data-view="foglalasok">
+      <div class="toolbar">
+        <div class="search">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input type="search" id="fog-kereso" placeholder="Keresés név, telefon vagy szolgáltatás szerint…">
+        </div>
+        <button class="chip on" data-fstat="mind">Mind</button>
+        <button class="chip" data-fstat="uj">Új</button>
+        <button class="chip" data-fstat="ok">Visszaigazolt</button>
+        <button class="chip" data-fstat="kesz">Lezárt</button>
+        <button class="chip" data-fstat="nem">Lemondott</button>
+      </div>
+
+      <div class="acard" style="padding:0">
+        <div class="tbl-wrap" style="border:none">
+          <table class="tbl">
+            <thead>
+              <tr><th>Vendég</th><th>Szolgáltatás</th><th>Időpont</th><th>Kolléga</th><th>Ár</th><th>Állapot</th><th></th></tr>
+            </thead>
+            <tbody id="fog-lista"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- --- Heti naptár --- -->
+    <section class="view" data-view="naptar">
+      <div class="acard">
+        <div class="acard__head">
+          <div>
+            <h2 id="het-cim">—</h2>
+            <p>Kattintson egy foglalásra a részletekért</p>
+          </div>
+          <div class="row-acts">
+            <button class="mini" id="het-elozo">← Előző hét</button>
+            <button class="mini" id="het-ma">Ez a hét</button>
+            <button class="mini" id="het-kov">Következő hét →</button>
+          </div>
+        </div>
+        <div id="het-racs"></div>
+      </div>
+    </section>
+
+    <!-- --- Szolgáltatások --- -->
+    <section class="view" data-view="szolgaltatasok">
+      <div class="acard">
+        <div class="acard__head">
+          <div>
+            <h2>Szolgáltatások és árak</h2>
+            <p>A módosítás azonnal látszik a weboldal foglalójában</p>
+          </div>
+          <div class="row-acts">
+            <button class="mini" id="szolg-vissza">Alaphelyzet</button>
+            <button class="mini mini--gold" id="szolg-uj">+ Új szolgáltatás</button>
+          </div>
+        </div>
+        <div id="szolg-lista"></div>
+        <button class="btn btn--gold btn--sm" id="szolg-ment" style="margin-top:16px">Mentés</button>
+      </div>
+    </section>
+
+    <!-- --- Csapat --- -->
+    <section class="view" data-view="csapat">
+      <div class="acard">
+        <div class="acard__head">
+          <div>
+            <h2>Csapat</h2>
+            <p>Ki melyik szolgáltatásra választható a foglalóban</p>
+          </div>
+          <button class="mini mini--gold" id="koll-uj">+ Új kolléga</button>
+        </div>
+        <div id="koll-lista"></div>
+        <button class="btn btn--gold btn--sm" id="koll-ment" style="margin-top:16px">Mentés</button>
+      </div>
+    </section>
+
+    <!-- --- Nyitvatartás --- -->
+    <section class="view" data-view="nyitvatartas">
+      <div class="agrid agrid--2">
+        <div class="acard">
+          <div class="acard__head">
+            <div>
+              <h2>Nyitvatartás</h2>
+              <p>Ebből él a villogó jelző és a foglalható időpontok</p>
+            </div>
+          </div>
+          <div id="ora-lista"></div>
+          <button class="btn btn--gold btn--sm" id="ora-ment" style="margin-top:16px">Mentés</button>
+        </div>
+
+        <div class="acard">
+          <div class="acard__head">
+            <div>
+              <h3>Élő előnézet</h3>
+              <p>Így látja a vendég a weboldalon</p>
+            </div>
+          </div>
+          <div style="margin-bottom:20px">
+            <span class="status status--lg"><span class="status__dot"></span><span class="status__txt"></span></span>
+          </div>
+          <div class="hours" data-hours></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- --- Szalon adatai --- -->
+    <section class="view" data-view="beallitasok">
+      <div class="agrid agrid--2">
+        <div class="acard">
+          <div class="acard__head">
+            <div>
+              <h2>Szalon adatai</h2>
+              <p>Minden oldalon automatikusan frissül</p>
+            </div>
+          </div>
+          <div class="field"><label for="b-nev">Szalon neve</label><input id="b-nev" type="text"></div>
+          <div class="field"><label for="b-cim">Cím</label><input id="b-cim" type="text"></div>
+          <div class="field"><label for="b-tel">Telefonszám</label><input id="b-tel" type="tel"></div>
+          <div class="field"><label for="b-email">E-mail cím</label><input id="b-email" type="email"></div>
+          <button class="btn btn--gold btn--sm" id="b-ment">Mentés</button>
+        </div>
+
+        <div class="acard">
+          <div class="acard__head">
+            <div>
+              <h3>Karbantartás</h3>
+              <p>Adatkezelés és visszaállítás</p>
+            </div>
+          </div>
+
+          <p style="font-size:.9rem">
+            Az adatok a böngésző saját tárolójában vannak — nem hagyják el ezt a
+            gépet. Ez a bemutató verzió működése; éles rendszerben ezt adatbázis
+            váltja ki.
+          </p>
+
+          <div class="row-acts" style="flex-wrap:wrap;margin-top:16px">
+            <button class="mini" id="export">Foglalások mentése (JSON)</button>
+            <button class="mini" id="export-csv">Táblázat mentése (CSV)</button>
+            <button class="mini mini--no" id="torles">Minden adat törlése</button>
+          </div>
+
+          <div class="login__demo" style="margin-top:22px">
+            <b>Éles használat előtt.</b> A belépés csak a böngészőben fut, ezért
+            nem véd valódi adatot. Szerveroldali hitelesítést és adatbázist kell
+            mögé tenni — a README leírja, hogyan.
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<!-- Foglalás részletei -->
+<div class="modal" id="modal">
+  <div class="modal__box">
+    <div class="modal__head">
+      <div>
+        <h3 id="m-cim">Foglalás</h3>
+        <p style="margin:2px 0 0;font-size:.8rem;color:var(--txt-dimmer)" id="m-azon">—</p>
+      </div>
+      <button class="icon-btn" id="m-zar" aria-label="Bezárás">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <dl class="dl-pairs" id="m-adatok"></dl>
+    <div class="row-acts" id="m-gombok" style="flex-wrap:wrap"></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="assets/js/main.js"></script>
+<script src="assets/js/booking.js"></script>
+<script src="assets/js/cursor.js"></script>
+<script src="assets/js/admin.js"></script>
+</body>
+</html>

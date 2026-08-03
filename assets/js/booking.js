@@ -34,6 +34,19 @@ const KOLLEGAK = [
   { id: 'niki',      nev: 'Niki',              szak: 'Műkörmös · pedikűrös',          csoportok: ['Kéz és láb'] }
 ];
 
+/* Az admin felületen szerkesztett szolgáltatás- és kollégalista felülírja
+   a fenti alapértékeket. */
+(function adminLista() {
+  const betolt = (kulcs, tomb) => {
+    try {
+      const ment = JSON.parse(localStorage.getItem(kulcs) || 'null');
+      if (Array.isArray(ment) && ment.length) tomb.splice(0, tomb.length, ...ment);
+    } catch { /* marad az alapérték */ }
+  };
+  betolt('zsz_szolgaltatasok', SZOLGALTATASOK);
+  betolt('zsz_kollegak', KOLLEGAK);
+})();
+
 /* ---------- Állapot ---------- */
 const F = {
   lepes: 1,
@@ -319,13 +332,21 @@ function urlapEllenoriz() {
 function foglalasBekuldes() {
   if (!urlapEllenoriz()) return;
 
+  /* A teljes rekord az admin felület foglaláslistáját táplálja */
   foglaltEltarol({
+    id: 'F' + Date.now().toString(36).toUpperCase(),
     nap: napISO(F.datum),
     kezd: F.ido,
     vege: F.ido + F.szolgaltatas.perc,
     szolgaltatas: F.szolgaltatas.nev,
     kollega: F.kollega.nev,
-    vendeg: F.vendeg.nev
+    ar: F.szolgaltatas.ar,
+    vendeg: F.vendeg.nev,
+    tel: F.vendeg.tel,
+    email: F.vendeg.email,
+    uzenet: F.vendeg.uzenet,
+    allapot: 'uj',
+    letrehozva: new Date().toISOString()
   });
 
   const datumSzoveg = F.datum.toLocaleDateString('hu-HU', { year: 'numeric', month: 'long', day: 'numeric' });
