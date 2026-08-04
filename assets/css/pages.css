@@ -237,6 +237,9 @@
   background: var(--surface-2);
 }
 .dish-art { width: 92px; height: 92px; transition: transform .55s var(--ease-out); }
+/* Fotós módban a kép lekerekítve tölti ki a helyet (a rajzolt pizza kerek,
+   ott nincs mit levágni). */
+.dish-art .ph { border-radius: var(--r-sm); overflow: hidden; }
 .dish:hover .dish-art { transform: rotate(-18deg) scale(1.08); }
 .dish-main { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
 .dish-head { display: flex; align-items: baseline; gap: .6rem; }
@@ -888,7 +891,14 @@
 
 /* Kapcsoló */
 .switch { position: relative; display: inline-block; width: 44px; height: 25px; flex: none; }
-.switch input { opacity: 0; width: 0; height: 0; }
+/* Az input a kapcsoló teljes felületét lefedi (csak átlátszó), így ő a
+   kattintási felület — egérrel, billentyűzettel és automata teszttel is. */
+.switch input {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%; margin: 0;
+  opacity: 0; cursor: pointer; z-index: 1;
+}
+.switch input:focus-visible + .track { box-shadow: 0 0 0 3px rgba(76,154,92,.35); }
 .switch .track {
   position: absolute; inset: 0;
   background: var(--surface-3);

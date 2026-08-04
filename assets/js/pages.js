@@ -386,8 +386,9 @@
        ritmusát pedig az adja, hogy minden harmadik csempe állandó feliratot kap. */
     $('#gallery').innerHTML = items.map((g, i) => {
       const withFoot = i % 3 === 0;
+      const media = Art.photo(Store.galleryPhoto(g), g.title, Art.scene(g.scene));
       return `<button class="shot" data-i="${i}" data-cat="${g.cat}" data-reveal="zoom" style="--reveal-delay:${(i % 6) * 80}ms">
-        <div class="shot-media">${Art.scene(g.scene)}</div>
+        <div class="shot-media">${media}</div>
         ${withFoot
           ? `<div class="shot-foot"><h4>${esc(g.title)}</h4><p>${esc(g.text)}</p></div>`
           : `<div class="shot-cap"><h4>${esc(g.title)}</h4><p>${esc(g.text)}</p></div>`}
@@ -409,7 +410,7 @@
     const showLb = (i) => {
       li = (i + items.length) % items.length;
       const g = items[li];
-      $('#lbFrame').innerHTML = Art.scene(g.scene);
+      $('#lbFrame').innerHTML = Art.photo(Store.galleryPhoto(g), g.title, Art.scene(g.scene));
       $('#lbTitle').textContent = g.title;
       $('#lbText').textContent = g.text + ` · ${li + 1} / ${items.length}`;
       lb.classList.add('on');

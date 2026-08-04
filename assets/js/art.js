@@ -912,15 +912,21 @@ const Art = (() => {
   /* ---------- Fotó vagy illusztráció -------------------------------------- */
 
   /**
-   * Ha az adott elemhez adtál valódi fotót (data.js `photo` mező vagy admin),
-   * azt használjuk; különben a generált illusztráció jelenik meg.
-   * Így a sablon eladható úgy is, ahogy van, és fotókkal is.
+   * Illusztráció + opcionális valódi fotó egy rétegben.
+   *
+   * A rajzolt változat MINDIG kirenderelődik, tehát azonnal látszik valami.
+   * Ha van fotó és sikerül betöltenie, az ráúszik. Ha a fájl hiányzik vagy
+   * hibás, egyszerűen nem jelenik meg — nincs tört kép és nincs üres doboz.
+   * (A korábbi `onerror`-os csere azért nem volt jó, mert a `loading="lazy"`
+   * miatt a képernyőn kívüli képeknél sosem futott le.)
    */
   function photo(src, alt, fallbackSvg, cls = '') {
     if (!src) return fallbackSvg;
-    return `<img src="${src}" alt="${alt || ''}" loading="lazy" decoding="async" class="${cls}"
-      onerror="this.outerHTML=this.dataset.fb" data-fb="${fallbackSvg.replace(/"/g, '&quot;')}">`;
+    return `<span class="ph ${cls}">${fallbackSvg}<img src="${esc(src)}" alt="${esc(alt || '')}"
+      loading="lazy" decoding="async" onload="this.classList.add('on')"></span>`;
   }
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   return { pizza, logo, avatar, scene, sceneKeys, map, floorplan, sparkline, donut,
            icon, iconSolid, photo, rng, cursorPizza, CURSOR_TIP, TOPPINGS };

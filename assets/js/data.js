@@ -55,6 +55,21 @@ const DATA = {
     { date: '2026-12-24', closed: true, note: 'Szenteste – zárva' }
   ],
 
+  /* --- Valódi fotók ------------------------------------------------------
+     Alapból minden illusztráció vektorosan, futásidőben készül (art.js).
+     Ha van valódi fotód, nem kell egyesével beírni: tedd a képeket az
+     `assets/img/` mappába az étel azonosítójával (pl. `p-margherita.jpg`),
+     majd kapcsold be ezt lent vagy az admin → Beállítások oldalon.
+
+     A fájlnév = a tétel `id` mezője. Ami hiányzik, ott automatikusan
+     visszaáll a rajzolt illusztráció — nem lesz tört kép sehol.          */
+  photos: {
+    enabled: false,
+    base:    'assets/img/',
+    ext:     '.jpg',
+    galleryBase: 'assets/img/galeria/'
+  },
+
   /* --- Kategóriák -------------------------------------------------------- */
   categories: [
     { id: 'pizza',   name: 'Pizzák',      note: '32 cm · kőkemencében sütve' },

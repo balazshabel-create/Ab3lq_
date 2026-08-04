@@ -21,6 +21,7 @@ const Store = (() => {
     theme: NS + 'theme',
     admin: NS + 'admin-session',
     cookie: NS + 'cookie-ok',
+    photos: NS + 'photos',
     seeded: NS + 'seeded-v1'
   };
 
@@ -64,11 +65,33 @@ const Store = (() => {
     write(KEY.seeded, true);
   }
 
+  /* ---------- Valódi fotók ------------------------------------------------ */
+  /** Be van-e kapcsolva a fotós mód (data.js alapérték + admin felülírás). */
+  function photosOn() {
+    const o = read(KEY.photos, null);
+    return o === null ? !!DATA.photos.enabled : !!o;
+  }
+  function setPhotos(on) { write(KEY.photos, !!on); emit('photos'); }
+
+  /**
+   * Fotós módban minden tétel megkapja a hozzá tartozó képútvonalat
+   * (`assets/img/<id>.jpg`), kivéve ha kézzel adtál meg neki másikat.
+   * Ha a fájl nem létezik, az art.js automatikusan visszavált a rajzra.
+   */
+  function withPhoto(item) {
+    if (item.photo || !photosOn()) return item;
+    return { ...item, photo: DATA.photos.base + item.id + DATA.photos.ext };
+  }
+  function galleryPhoto(g) {
+    if (g.photo) return g.photo;
+    return photosOn() ? DATA.photos.galleryBase + g.id + DATA.photos.ext : '';
+  }
+
   /* ---------- Étlap ------------------------------------------------------- */
   /** A mag + admin felülírások (ár, elérhetőség, név) összefésülve. */
   function menu() {
     const over = read(KEY.menu, {});
-    return DATA.menu.map(item => ({ available: true, ...item, ...(over[item.id] || {}) }));
+    return DATA.menu.map(item => withPhoto({ available: true, ...item, ...(over[item.id] || {}) }));
   }
   function menuItem(id) { return menu().find(m => m.id === id); }
   function updateMenuItem(id, patch) {
@@ -363,6 +386,7 @@ const Store = (() => {
   return {
     KEY, on, emit,
     menu, menuItem, updateMenuItem, resetMenu,
+    photosOn, setPhotos, galleryPhoto,
     hours, setHours, resetHours, openState, nextOpen, nextOpenNote,
     cart, cartAdd, cartAddCustom, cartQty, cartRemove, cartClear, cartTotal, cartCount,
     bookings, addBooking, setBookingStatus, deleteBooking, busyTables, slotCapacity,

@@ -120,15 +120,35 @@ A világos témát a `[data-theme='light']` blokk kezeli.
 Alapból **nincs egyetlen külső kép sem** — minden illusztráció futásidőben, SVG-ként generálódik
 (`art.js`). Ezért az oldal azonnal betölt, offline is működik, és nincs licencgond.
 
-Valódi fotókra váltás: add meg a `photo` mezőt bármelyik étlaptételnél (`data.js`-ben vagy
-az admin étlapszerkesztőjében). Ha a kép nem töltődik be, automatikusan visszaáll az illusztrációra.
+#### Valódi fotók bekapcsolása (nem kell kódot írni)
+
+1. Másold a képeket az `assets/img/` mappába **a tétel azonosítójával** elnevezve
+   (az azonosítókat a `data.js` `id:` mezői adják):
+
+   ```
+   assets/img/p-margherita.jpg      ← Margherita
+   assets/img/p-diavola.jpg         ← Diavola
+   assets/img/galeria/g1.jpg        ← galéria 1. kép
+   ```
+
+2. Kapcsold be: **Admin → Beállítások → Valódi fotók**, vagy `data.js`-ben
+   `photos: { enabled: true }`.
+
+Ennyi. Részletek és ajánlott méretek: `assets/img/README.md`.
+
+#### Hogyan viselkedik
+
+A rajzolt illusztráció **mindig** kirenderelődik, tehát azonnal látszik valami. Ha van fotó és
+sikerül betöltenie, finoman ráúszik. Ha a fájl hiányzik, egyszerűen nem jelenik meg semmi extra —
+nincs tört kép, nincs üres doboz, nincs elcsúszó elrendezés. Így a tételek egy részéhez is
+tehetsz fotót, a többi marad rajzolt.
+
+Egyedi kép egy tételhez (felülírja a fentit, fotós mód nélkül is működik): add meg a `photo`
+mezőt a `data.js`-ben, vagy írd be az URL-t az **Admin → Étlap → Szerkesztés** ablakban.
 
 ```js
-{ id: 'p-margherita', name: 'Margherita', photo: 'assets/img/margherita.jpg', … }
+{ id: 'p-margherita', name: 'Margherita', photo: 'https://…/margherita.jpg', … }
 ```
-
-A galéria jelenetei az `art.js` `SCENES` objektumában vannak — ezeket is cserélheted `<img>` tagekre
-a `galeria.html`-ben, ha valódi fotókat használsz.
 
 ---
 

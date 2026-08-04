@@ -638,6 +638,27 @@
         </div>
 
         <div class="panel" data-reveal>
+          <div class="panel-head"><h3>Valódi fotók</h3></div>
+          <div class="panel-body">
+            <p class="muted" style="font-size:.9rem">
+              Alapból minden kép vektorosan, futásidőben rajzolódik — nincs külső képfüggőség.
+              Ha vannak valódi fotóid, tedd őket az <code>assets/img/</code> mappába
+              a tétel azonosítójával (pl. <code>p-margherita.jpg</code>), a galériához pedig az
+              <code>assets/img/galeria/</code> mappába (pl. <code>g1.jpg</code>). Utána kapcsold be itt.
+            </p>
+            <label class="row row-between mt-3" style="gap:1rem">
+              <span><b>Fotós mód</b><br><span class="tiny dim">Amihez nincs fájl, ott marad a rajzolt illusztráció.</span></span>
+              <span class="switch"><input type="checkbox" id="sPhotos" ${Store.photosOn() ? 'checked' : ''}><span class="track"></span></span>
+            </label>
+            <div class="divider mt-3">📷</div>
+            <p class="tiny dim mt-2">
+              Egy-egy tételhez egyedi képURL is megadható az Étlap → Szerkesztés ablakban;
+              az mindig erősebb, mint ez a beállítás.
+            </p>
+          </div>
+        </div>
+
+        <div class="panel" data-reveal>
           <div class="panel-head"><h3>Rendszerinformáció</h3></div>
           <div class="panel-body">
             <div class="recap-row"><span>Étlap tételek</span><b>${Store.menu().length}</b></div>
@@ -663,6 +684,13 @@
           </div>
         </div>
       </div>`;
+
+    $('#sPhotos').addEventListener('change', e => {
+      localUpdate(() => Store.setPhotos(e.target.checked));
+      toast(e.target.checked
+        ? 'Fotós mód bekapcsolva. Amihez nincs fájl, ott marad a rajz.'
+        : 'Fotós mód kikapcsolva — mindenhol a rajzolt illusztrációk.', 'ok', 4000);
+    });
 
     $('#sExport').addEventListener('click', () => {
       const blob = new Blob([Store.exportAll()], { type: 'application/json' });

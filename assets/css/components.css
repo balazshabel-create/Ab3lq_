@@ -68,6 +68,22 @@ html.cur-hide  .cursor       { opacity: 0; }
 @media (hover: none), (pointer: coarse) { .cursor { display: none !important; } }
 
 /* --------------------------------------------------------------------------
+   1a. Illusztráció + valódi fotó egy rétegben
+   A rajz azonnal látszik; a fotó csak akkor úszik rá, ha tényleg betöltött.
+   -------------------------------------------------------------------------- */
+.ph { position: relative; display: block; line-height: 0; }
+.ph > svg { display: block; width: 100%; height: auto; }
+.ph > img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity .45s var(--ease);
+}
+.ph > img.on { opacity: 1; }
+
+/* --------------------------------------------------------------------------
    1b. Hoverre pörgő pizza (bejelentkezés, profilkép)
    -------------------------------------------------------------------------- */
 .spin-pizza,
