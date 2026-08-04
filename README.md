@@ -155,7 +155,7 @@ Ez a csomag **statikus, kliensoldali demó**. Mielőtt valódi forgalmat kap:
 Chrome, Edge, Firefox, Safari (utolsó 2 főverzió). Mobil: iOS Safari, Chrome Android.
 Az egyedi kurzor érintőképernyőn automatikusan kikapcsol.
 
-Használt modern CSS: `color-mix()`, `aspect-ratio`, `backdrop-filter`, CSS grid/flexbox,
+Használt modern CSS: `color-mix()`, `aspect-ratio`, `backdrop-filter`, `overflow: clip`, CSS grid/flexbox,
 `grid-template-rows` átmenet a harmonikákhoz. Ezeket minden támogatott böngésző ismeri.
 
 ---

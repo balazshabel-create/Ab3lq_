@@ -121,7 +121,6 @@ body {
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  overflow-x: hidden;
   transition: background var(--t) var(--ease), color var(--t) var(--ease);
 }
 
@@ -244,8 +243,11 @@ p { text-wrap: pretty; }
 }
 .wrap-narrow { max-width: var(--maxw-narrow); }
 
-.section { padding-block: clamp(3.6rem, 8vw, 7.5rem); position: relative; }
-.section-sm { padding-block: clamp(2.4rem, 5vw, 4rem); }
+/* A megjelenés-animációk oldalirányban eltolva indulnak (`data-reveal="right"`),
+   ezért a szakaszok levágják a kilógó részt. `clip` és nem `hidden`, mert így
+   nem jön létre görgetési kontextus — a ragadós (sticky) elemek működnek benne. */
+.section { padding-block: clamp(3.6rem, 8vw, 7.5rem); position: relative; overflow-x: clip; }
+.section-sm { padding-block: clamp(2.4rem, 5vw, 4rem); overflow-x: clip; }
 
 .section-head {
   display: flex;

@@ -30,8 +30,12 @@
     </div>
   </header>
 
-  <!-- ============================ ESZKÖZTÁR ============================ -->
-  <div class="wrap">
+  <!-- ============================ ESZKÖZTÁR + ÉTLAP ============================
+       Az eszköztár és az étlap szándékosan EGY közös szülőben van: a
+       `position: sticky` csak addig tapad, amíg a szülője látszik, így az
+       egész lista görgetése közben elérhetők maradnak a szűrők. -->
+  <section style="padding-bottom:clamp(3rem,6vw,5rem)">
+    <div class="wrap">
     <div class="menu-toolbar">
       <div class="search">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
@@ -57,11 +61,7 @@
     <div class="filter-row" style="margin-bottom:1.6rem" id="tagFilter"></div>
 
     <p class="tiny dim" id="resultCount" style="margin-bottom:1.4rem"></p>
-  </div>
 
-  <!-- ============================ ÉTLAP ============================ -->
-  <section style="padding-bottom:clamp(3rem,6vw,5rem)">
-    <div class="wrap">
       <div class="menu-list" id="menuList"></div>
       <div class="empty hidden" id="menuEmpty">
         <p>Erre nincs találat. Próbálj más kifejezést, vagy töröld a szűrőket.</p>

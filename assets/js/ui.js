@@ -177,7 +177,11 @@ const UI = (() => {
         </div>
       </div>`);
 
-    document.body.prepend(bar);
+    /* A sávot NEM egy közös wrapperben hagyjuk: a `position: sticky` elem csak
+       addig tapad, amíg a szülője látszik, és egy 100 px magas wrapper után
+       azonnal elúszna. Ezért a három blokkot a <body> közvetlen gyerekeként
+       fűzzük be — így a nav a teljes oldalon végig a tetején marad. */
+    [...bar.children].reverse().forEach(n => document.body.prepend(n));
 
     /* Ragadós fejléc árnyék */
     const nav = $('#nav');
