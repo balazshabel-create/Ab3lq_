@@ -863,7 +863,19 @@
       const u = Store.user();
       const t = Store.tier(u.points);
 
-      $('#pAvatar').innerHTML = Art.avatar(u.name, 108);
+      /* A profilkép is felülnézeti pizza — a feltétek a névből származnak,
+         így mindenkinek másmilyen. Hoverre forogni kezd. */
+      const g = Art.rng(u.name);
+      const pool = ['mozzarella', 'szalami', 'bazsalikom', 'gomba', 'paprika',
+                    'olivabogyo', 'prosciutto', 'rukkola', 'paradicsom', 'kukorica'];
+      const picked = [];
+      while (picked.length < 3) {
+        const t = pool[Math.floor(g() * pool.length)];
+        if (!picked.includes(t)) picked.push(t);
+      }
+      $('#pAvatar').innerHTML = Art.pizza({ seed: u.name, toppings: picked, size: 108,
+                                            alt: u.name + ' profilképe' });
+      UI.spinOnHover($('#pAvatar'));
       $('#pName').textContent = u.name;
       $('#pSince').textContent = `Vendégünk ${new Date(u.since).getFullYear()} óta`;
       $('#pTier').className = 'tier tier-' + t.id;

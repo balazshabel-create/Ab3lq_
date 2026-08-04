@@ -635,12 +635,11 @@
 @media (max-width: 760px) { .profile-hero { grid-template-columns: 1fr; text-align: center; justify-items: center; } }
 
 .profile-face {
-  width: 108px; height: 108px;
-  border-radius: 32% 68% 62% 38% / 42% 38% 62% 58%;
-  overflow: hidden;
+  width: 118px; height: 118px;
+  border-radius: 50%;
+  display: grid; place-items: center;
   border: 2px solid var(--gold);
   box-shadow: 0 0 0 6px rgba(233,180,76,.10);
-  animation: wobble 9s ease-in-out infinite;
 }
 .tier {
   display: inline-flex; align-items: center; gap: .4rem;

@@ -64,7 +64,11 @@ const UI = (() => {
     const root = document.documentElement;
     root.classList.add('cursor-on');
 
-    const dot  = el('div', 'cursor cursor-dot');
+    /* A mutató maga egy pizzaszelet: a klasszikus nyíl sziluettje, fehér
+       kontúrral. A szelet hegye pontosan az egér valódi pozíciójára esik. */
+    const SIZE = 34;
+    const TIP = Art.CURSOR_TIP * SIZE;
+    const dot  = el('div', 'cursor cursor-slice', Art.cursorPizza(SIZE));
     const ring = el('div', 'cursor cursor-ring', '<span class="cursor-label"></span>');
     document.body.append(dot, ring);
     const label = $('.cursor-label', ring);
@@ -82,7 +86,7 @@ const UI = (() => {
     (function loop() {
       rx += (mx - rx) * 0.17;
       ry += (my - ry) * 0.17;
-      dot.style.transform  = `translate3d(${mx - 3.5}px, ${my - 3.5}px, 0)`;
+      dot.style.transform  = `translate3d(${mx - TIP}px, ${my - TIP}px, 0)`;
       ring.style.transform = `translate3d(${rx - 19}px, ${ry - 19}px, 0)`;
       requestAnimationFrame(loop);
     })();
@@ -410,6 +414,47 @@ const UI = (() => {
       });
       c.addEventListener('mouseleave', () => { c.style.transform = ''; });
     });
+  }
+
+  /**
+   * Hoverre pörgő elem: az egér ráérkezésekor felgyorsul, levételekor
+   * lelassul — és ott áll meg, ahol épp tart (nem ugrik vissza nullára,
+   * ahogy egy sima CSS animáció tenné).
+   * @param {HTMLElement} node  a külső doboz (a benne lévő SVG forog)
+   * @param {number} speed      csúcsfordulatszám fok/másodpercben
+   */
+  function spinOnHover(node, speed = 105) {
+    if (!node || node.dataset.spin) return;
+    node.dataset.spin = '1';
+
+    let angle = 0, vel = 0, target = 0, last = 0, raf = null;
+
+    const step = (t) => {
+      if (!last) last = t;
+      const dt = Math.min(0.05, (t - last) / 1000);
+      last = t;
+      vel += (target - vel) * Math.min(1, dt * 4.5);   // lágy fel- és lefutás
+      angle = (angle + vel * dt) % 360;
+      const inner = node.firstElementChild;
+      if (inner) inner.style.transform = `rotate(${angle.toFixed(2)}deg)`;
+      if (target !== 0 || Math.abs(vel) > 0.5) {
+        raf = requestAnimationFrame(step);
+      } else {
+        raf = null; last = 0; vel = 0;
+      }
+    };
+    const start = () => {
+      target = speed;
+      if (!raf) { last = 0; raf = requestAnimationFrame(step); }
+    };
+    const stop = () => { target = 0; };
+
+    node.addEventListener('mouseenter', start);
+    node.addEventListener('mouseleave', stop);
+    node.addEventListener('focus', start);
+    node.addEventListener('blur', stop);
+    /* Érintőképernyőn koppintásra pörög egyet */
+    node.addEventListener('touchstart', () => { start(); setTimeout(stop, 1400); }, { passive: true });
   }
 
   /* ======================================================================
@@ -793,7 +838,7 @@ const UI = (() => {
 
   return {
     $, $$, el, esc, boot, header, footer, toast, modal, reveal, counters, tilt,
-    splitText, confetti, leafRain, openCart, closeCart, statusMarkup, paintStatus,
+    spinOnHover, splitText, confetti, leafRain, openCart, closeCart, statusMarkup, paintStatus,
     dishCard, openDish, bindDishes, tagChips, heatMeter, allergenRow, starRow, ctaBand, NAV, page
   };
 })();

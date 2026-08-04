@@ -22,7 +22,15 @@
      BEJELENTKEZÉS
      ====================================================================== */
   function initLogin() {
-    $('#loginLogo').innerHTML = Art.logo(56);
+    /* A bejelentkezés fölötti kör egy felülnézeti pizza: ha ráviszed az
+       egeret, forogni kezd, és addig pörög, amíg le nem veszed róla. */
+    $('#loginLogo').innerHTML =
+      `<div class="spin-pizza" id="loginPizza" tabindex="0" role="img"
+            aria-label="Basilico Bistro — vidd rá az egeret, és megforgatja magát">
+        ${Art.pizza({ seed: 'basilico-login', base: 'paradicsom', size: 96,
+                      toppings: ['mozzarella', 'szalami', 'bazsalikom'] })}
+      </div>`;
+    UI.spinOnHover($('#loginPizza'));
     $('#loginForm').addEventListener('submit', e => {
       e.preventDefault();
       const ok = Store.adminLogin($('#lUser').value.trim(), $('#lPass').value);

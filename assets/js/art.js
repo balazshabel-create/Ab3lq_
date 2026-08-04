@@ -320,6 +320,62 @@ const Art = (() => {
 </svg>`;
   }
 
+  /* ---------- Egérmutató ------------------------------------------------- */
+
+  /**
+   * Pizzaszelet egérmutató a klasszikus nyíl sziluettjében.
+   * A szelet csúcsa a viewBox (2,2) pontján van — a `tip` érték adja meg,
+   * hány képpontot kell visszatolni, hogy a hegye pontosan a kurzor
+   * valódi pozíciójára essen.
+   */
+  const CURSOR_TIP = 2 / 40;   // a csúcs helye a viewBox arányában
+
+  function cursorPizza(size = 34) {
+    const id = uid('cur');
+    /* A külső kontúr a klasszikus nyíl sziluettje: hegyes csúcs bal fölül,
+       a széles vég kifelé domborodó kéreggel. A belső (sajtos) réteg a két
+       vágott élt szinte eléri — kéreg csak a széles végen van, ahogy egy
+       valódi szeleten. */
+    const OUTER = 'M2 2 L7 31 Q19.4 28.9 27.5 20 Z';
+    const INNER = 'M3.1 3.7 L7.05 25.4 Q16.6 24.5 22.4 17.7 Z';
+    return `<svg viewBox="0 0 40 40" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <linearGradient id="${id}d" x1="0" y1="0" x2=".7" y2="1">
+      <stop offset="0%" stop-color="#F2D9A8"/><stop offset="100%" stop-color="#C9924E"/>
+    </linearGradient>
+    <linearGradient id="${id}s" x1="0" y1="0" x2=".6" y2="1">
+      <stop offset="0%" stop-color="#F2D79B"/><stop offset="55%" stop-color="#E8C36F"/><stop offset="100%" stop-color="#D8452F"/>
+    </linearGradient>
+    <filter id="${id}f" x="-40%" y="-40%" width="190%" height="190%">
+      <feDropShadow dx="1" dy="2" stdDeviation="1.6" flood-color="#000" flood-opacity=".45"/>
+    </filter>
+  </defs>
+  <g filter="url(#${id}f)">
+    <!-- fehér kontúr, mint az eredeti rendszer-kurzoron -->
+    <path d="${OUTER}" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="${OUTER}" fill="url(#${id}d)"/>
+    <path d="${INNER}" fill="url(#${id}s)"/>
+    <!-- olvadt sajtfoltok -->
+    <ellipse cx="8.6" cy="20.8" rx="2.1" ry="1.5" fill="#FBF6E9" opacity=".75"/>
+    <ellipse cx="13.4" cy="20.2" rx="2.3" ry="1.6" fill="#FBF6E9" opacity=".7"/>
+    <ellipse cx="7.3" cy="9.8" rx="1.5" ry="1.1" fill="#FBF6E9" opacity=".8"/>
+    <!-- szalámi -->
+    <circle cx="10" cy="17" r="2.2" fill="#C4362B"/>
+    <circle cx="9.4" cy="16.4" r=".72" fill="#8E241B" opacity=".55"/>
+    <circle cx="15.5" cy="16" r="1.8" fill="#C4362B"/>
+    <circle cx="16" cy="16.6" r=".6" fill="#8E241B" opacity=".5"/>
+    <circle cx="7.4" cy="12" r="1.5" fill="#C4362B"/>
+    <!-- bazsalikom -->
+    <ellipse cx="12.6" cy="12.6" rx="1.4" ry="2.2" fill="#4FA45E" transform="rotate(36 12.6 12.6)"/>
+    <ellipse cx="16.8" cy="20.6" rx="1.2" ry="1.9" fill="#4FA45E" transform="rotate(-26 16.8 20.6)"/>
+    <!-- sült foltok a kérgen -->
+    <ellipse cx="11.8" cy="28.2" rx="1.5" ry=".9" fill="#8A5320" opacity=".42"/>
+    <ellipse cx="17.6" cy="26.4" rx="1.3" ry=".8" fill="#8A5320" opacity=".38" transform="rotate(-18 17.6 26.4)"/>
+    <ellipse cx="23" cy="22.4" rx="1.1" ry=".75" fill="#8A5320" opacity=".38" transform="rotate(-42 23 22.4)"/>
+  </g>
+</svg>`;
+  }
+
   /* ---------- Logó ------------------------------------------------------- */
 
   function logo(size = 40, mono = false) {
@@ -866,7 +922,8 @@ const Art = (() => {
       onerror="this.outerHTML=this.dataset.fb" data-fb="${fallbackSvg.replace(/"/g, '&quot;')}">`;
   }
 
-  return { pizza, logo, avatar, scene, sceneKeys, map, floorplan, sparkline, donut, icon, iconSolid, photo, rng, TOPPINGS };
+  return { pizza, logo, avatar, scene, sceneKeys, map, floorplan, sparkline, donut,
+           icon, iconSolid, photo, rng, cursorPizza, CURSOR_TIP, TOPPINGS };
 })();
 
 window.Art = Art;
