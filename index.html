@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="hu" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Basilico Bistro — Kőkemencés nápolyi pizza Budapesten</title>
+<meta name="description" content="48 órán át kelesztett tészta, kőkemence, olasz alapanyagok. Basilico Bistro, Budapest VIII. kerület. Asztalfoglalás online, azonnali visszaigazolással.">
+<meta name="theme-color" content="#0E0D0C">
+<meta property="og:title" content="Basilico Bistro — Kőkemencés nápolyi pizza">
+<meta property="og:description" content="48 órás tészta, 485 °C-os kemence, 90 másodperc. Budapest, Kőfaragó utca 15.">
+<meta property="og:type" content="restaurant">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='23' fill='%23E0503F'/%3E%3Cpath d='M24 36c0-9 5-14 13-15 0 9-5 14-13 15Z' fill='%237BD08C'/%3E%3Cpath d='M24 36c0-9-5-14-13-15 0 9 5 14 13 15Z' fill='%234C9A5C'/%3E%3Cpath d='M24 38V22' stroke='%23E9B44C' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/css/base.css">
+<link rel="stylesheet" href="assets/css/components.css">
+<link rel="stylesheet" href="assets/css/pages.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Restaurant",
+  "name": "Basilico Bistro",
+  "servesCuisine": ["Olasz", "Pizza"],
+  "priceRange": "$$",
+  "address": { "@type": "PostalAddress", "streetAddress": "Kőfaragó utca 15.", "addressLocality": "Budapest", "postalCode": "1085", "addressCountry": "HU" },
+  "telephone": "+36 1 234 5678",
+  "aggregateRating": { "@type": "AggregateRating", "ratingValue": "4.9", "reviewCount": "1284" },
+  "acceptsReservations": "True"
+}
+</script>
+</head>
+<body data-page="home">
+<a class="skip-link" href="#main">Ugrás a tartalomra</a>
+
+<main id="main">
+
+  <!-- ============================ HERO ============================ -->
+  <section class="hero">
+    <div class="glow glow-a" style="top:-8%;left:-6%"></div>
+    <div class="glow glow-b" style="bottom:-14%;right:-4%"></div>
+
+    <div class="wrap hero-inner">
+      <div class="hero-copy">
+        <span class="eyebrow" data-reveal>Budapest VIII. · Palotanegyed · 2020 óta</span>
+
+        <h1 data-split>
+          <span class="line">Kilencven</span>
+          <span class="line">másodperc</span>
+          <span class="line"><span class="mark">tökéletesség</span></span>
+        </h1>
+
+        <p class="lead" data-reveal style="--reveal-delay:180ms">
+          Negyvennyolc órán át kelesztjük a tésztát. Négyszáznyolcvanöt fokon sütjük.
+          Aztán kilencven másodperc, és az asztalodon van. Nincs trükk — csak idő,
+          hő és olasz alapanyagok.
+        </p>
+
+        <div class="hero-actions" data-reveal style="--reveal-delay:280ms">
+          <a class="btn btn-primary btn-lg" href="foglalas.html" data-cursor="foglalás">
+            Asztalt foglalok <span class="arr">→</span>
+          </a>
+          <a class="btn btn-ghost btn-lg" href="etlap.html" data-cursor="étlap">Megnézem az étlapot</a>
+        </div>
+
+        <div data-reveal style="--reveal-delay:360ms" data-status-big></div>
+
+        <div class="hero-facts" data-reveal style="--reveal-delay:440ms" id="heroFacts"></div>
+      </div>
+
+      <div class="hero-art">
+        <div class="hero-ring r1"></div>
+        <div class="hero-ring r2"></div>
+        <div class="steam" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="hero-pizza" id="heroPizza"></div>
+
+        <div class="orbit o1"><span class="ico">🔥</span> 485 °C kemence</div>
+        <div class="orbit o2"><span class="ico">⏱</span> 48 órás tészta</div>
+        <div class="orbit o3"><span class="ico">🌿</span> Saját bazsalikom</div>
+      </div>
+    </div>
+
+    <div class="scroll-hint" aria-hidden="true"><span>Görgess</span><i></i></div>
+  </section>
+
+  <!-- ============================ FUTÓSÁV ============================ -->
+  <div class="ticker" aria-hidden="true">
+    <div class="ticker-track" id="ticker"></div>
+  </div>
+
+  <!-- ============================ AKCIÓK ============================ -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="grid g-4" id="promos"></div>
+    </div>
+  </section>
+
+  <!-- ============================ NÉPSZERŰEK ============================ -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head center" data-reveal>
+        <span class="eyebrow">A vendégek választása</span>
+        <h2>Amit a legtöbbször <span class="mark">kiviszünk</span></h2>
+        <p class="lead">Az elmúlt 90 nap rendelései alapján. A sorrend hetente frissül —
+          és néha meglepetéseket okoz.</p>
+      </div>
+
+      <div class="grid g-4" id="topPizzas"></div>
+
+      <div class="center-text mt-3" data-reveal>
+        <a class="btn btn-ghost" href="etlap.html">Mind a <span id="menuCount">…</span> tétel az étlapon <span class="arr">→</span></a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ A FOLYAMAT ============================ -->
+  <section class="section" style="background:var(--bg-2);border-block:1px solid var(--line)">
+    <div class="wrap">
+      <div class="section-head" data-reveal>
+        <span class="eyebrow">Ahogy készül</span>
+        <h2>Négy lépés, semmi rövidítés</h2>
+      </div>
+
+      <div class="grid g-4">
+        <article class="card value-card" data-reveal data-tilt>
+          <div class="ico">🌾</div>
+          <h3>1. Liszt és idő</h3>
+          <p class="muted" style="font-size:.9rem">Caputo 00-ás liszt, víz, só, minimális élesztő.
+            Aztán 48 óra hideg érlelés. Ettől lesz könnyű, és ettől nem fekszi meg a gyomrod.</p>
+        </article>
+        <article class="card value-card" data-reveal data-tilt style="--reveal-delay:100ms">
+          <div class="ico">👐</div>
+          <h3>2. Kézzel, mindig</h3>
+          <p class="muted" style="font-size:.9rem">Nyújtófát soha nem látott a tésztánk.
+            Kézzel húzzuk ki, hogy a perem levegős maradjon — ez a <em>cornicione</em>.</p>
+        </article>
+        <article class="card value-card" data-reveal data-tilt style="--reveal-delay:200ms">
+          <div class="ico">🔥</div>
+          <h3>3. Kemence, 485 °C</h3>
+          <p class="muted" style="font-size:.9rem">Tölgyfával fűtjük, samottkővel raktuk.
+            Kilencven másodperc alatt megsül — ennyi idő alatt a paradicsom még friss marad.</p>
+        </article>
+        <article class="card value-card" data-reveal data-tilt style="--reveal-delay:300ms">
+          <div class="ico">🍽</div>
+          <h3>4. Azonnal az asztalra</h3>
+          <p class="muted" style="font-size:.9rem">A pizza nem vár. Ahogy kijön, visszük.
+            Ezért nem is csomagoljuk elő — helyben mindig jobb.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ SZÁMOK ============================ -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="grid g-4" id="stats"></div>
+    </div>
+  </section>
+
+  <!-- ============================ TÖRTÉNET ============================ -->
+  <section class="section">
+    <div class="wrap">
+      <div class="g-split">
+        <div data-reveal="left" id="storyArt" style="border-radius:var(--r-xl);overflow:hidden;border:1px solid var(--line)"></div>
+        <div data-reveal="right">
+          <span class="eyebrow">A történet</span>
+          <h2 class="mt-1">Egy nápolyi és egy <span class="mark">józsefvárosi</span></h2>
+          <p class="lead mt-2">
+            Marco 2019-ben jött Budapestre két hétre. Nóra a Kőfaragó utcában keresett helyet
+            egy kávézónak. A kettő találkozásából lett a Basilico — és Marco azóta sem ment haza.
+          </p>
+          <p class="muted mt-2" style="font-size:.94rem">
+            Három héttel a nyitás után bezárt az ország. Kiszállítottunk biciklivel,
+            néha ingyen, mert a szomszédok is szorult helyzetben voltak. Hat évvel később
+            ugyanaz a kemence, ugyanaz a tészta-recept, és jó néhány visszatérő vendég,
+            akit a keresztnevén szólítunk.
+          </p>
+          <div class="row mt-3" style="gap:.7rem">
+            <a class="btn btn-primary" href="rolunk.html">A teljes történet <span class="arr">→</span></a>
+            <a class="btn btn-ghost" href="galeria.html">Galéria</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ GALÉRIA ELŐNÉZET ============================ -->
+  <section class="section" style="background:var(--bg-2);border-block:1px solid var(--line)">
+    <div class="wrap">
+      <div class="section-head center" data-reveal>
+        <span class="eyebrow">Egy pillantás</span>
+        <h2>Így néz ki nálunk egy este</h2>
+      </div>
+      <div class="grid g-3" id="galleryPeek"></div>
+      <div class="center-text mt-3" data-reveal>
+        <a class="btn btn-ghost" href="galeria.html">Teljes galéria <span class="arr">→</span></a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ VÉLEMÉNYEK ============================ -->
+  <section class="section">
+    <div class="wrap wrap-narrow">
+      <div class="section-head center" data-reveal>
+        <span class="eyebrow">Vendégeink mondták</span>
+        <h2>4,9 csillag, 1284 értékelés</h2>
+      </div>
+      <div class="reviews" data-reveal>
+        <div class="review-track" id="reviewTrack"></div>
+        <div class="review-dots" id="reviewDots"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ NYITVATARTÁS ============================ -->
+  <section class="section" style="background:var(--bg-2);border-block:1px solid var(--line)">
+    <div class="wrap">
+      <div class="g-split">
+        <div data-reveal="left">
+          <span class="eyebrow">Mikor gyere</span>
+          <h2 class="mt-1">Nyitvatartás</h2>
+          <p class="muted mt-2" style="font-size:.94rem">
+            Hétfőn zárva tartunk — ilyenkor takarítjuk ki a kemencét és tervezzük az új tételeket.
+            A konyha záróra előtt 30 perccel veszi fel az utolsó rendelést.
+          </p>
+          <div class="mt-3" data-status-big></div>
+          <div class="row mt-3" style="gap:.6rem">
+            <a class="btn btn-primary" href="foglalas.html">Asztalfoglalás</a>
+            <a class="btn btn-ghost" href="kapcsolat.html">Hogyan jutok oda?</a>
+          </div>
+        </div>
+        <div class="card" data-reveal="right" style="padding:1.6rem">
+          <div id="hoursTable"></div>
+          <div class="divider mt-3">🌿</div>
+          <div class="row mt-2" id="features" style="gap:.5rem"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ HÍRLEVÉL ============================ -->
+  <section class="section-sm">
+    <div class="wrap wrap-narrow center-text" data-reveal>
+      <p class="script">Ne maradj le a heti újdonságról</p>
+      <h2 style="font-size:clamp(1.6rem,3vw,2.4rem)">Havonta egy levél. Tényleg csak egy.</h2>
+      <p class="muted mt-1" style="font-size:.92rem">Új tételek, szezonális alapanyagok, borvacsorák. Leiratkozás egy kattintás.</p>
+      <form class="row mt-3" id="newsletter" style="justify-content:center;gap:.6rem">
+        <input class="input" type="email" required placeholder="te@email.hu" aria-label="E-mail cím" style="max-width:300px">
+        <button class="btn btn-gold" type="submit">Feliratkozom</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ============================ CTA ============================ -->
+  <div id="cta"></div>
+
+</main>
+
+<script src="assets/js/art.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/pages.js"></script>
+</body>
+</html>

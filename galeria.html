@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="hu" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Galéria — Basilico Bistro</title>
+<meta name="description" content="A kemence, a konyha, a terasz és a csapat. Nézz körbe a Basilico Bistróban.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='23' fill='%23E0503F'/%3E%3Cpath d='M24 36c0-9 5-14 13-15 0 9-5 14-13 15Z' fill='%237BD08C'/%3E%3Cpath d='M24 36c0-9-5-14-13-15 0 9 5 14 13 15Z' fill='%234C9A5C'/%3E%3Cpath d='M24 38V22' stroke='%23E9B44C' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/css/base.css">
+<link rel="stylesheet" href="assets/css/components.css">
+<link rel="stylesheet" href="assets/css/pages.css">
+</head>
+<body data-page="galeria">
+<a class="skip-link" href="#main">Ugrás a tartalomra</a>
+
+<main id="main">
+
+  <header class="page-head">
+    <div class="deco" id="headDeco"></div>
+    <div class="wrap page-head-inner">
+      <nav class="crumbs" aria-label="Morzsamenü">
+        <a href="index.html">Főoldal</a> <span>/</span> <span>Galéria</span>
+      </nav>
+      <h1 data-split>Nézz <span class="mark">körbe</span></h1>
+      <p class="lead">
+        A kemence, a tészta, a terasz és az emberek. Kattints bármelyikre a nagy nézethez —
+        a nyílbillentyűkkel lapozhatsz.
+      </p>
+    </div>
+  </header>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="filter-row" id="galFilter" style="margin-bottom:1.8rem"></div>
+      <div class="gallery" id="gallery"></div>
+    </div>
+  </section>
+
+  <!-- 360°-os körbenézés hangulatában: automatikus diavetítés -->
+  <section class="section" style="background:var(--bg-2);border-block:1px solid var(--line)">
+    <div class="wrap">
+      <div class="section-head center" data-reveal>
+        <span class="eyebrow">Egy este nálunk</span>
+        <h2>Öt óra, tizenkét kép</h2>
+        <p class="lead">Nyomd meg a lejátszást, és végignézheted, hogyan telik egy péntek este
+          a Kőfaragó utcában — nyitástól zárásig.</p>
+      </div>
+      <div class="card" data-reveal style="padding:1rem">
+        <div id="slideshow" style="border-radius:var(--r);overflow:hidden"></div>
+        <div class="row row-between mt-2">
+          <div>
+            <b id="slideTitle" style="font-family:var(--f-display);font-size:1.1rem"></b>
+            <p class="tiny dim" id="slideText"></p>
+          </div>
+          <div class="row" style="gap:.4rem">
+            <button class="icon-btn" id="slidePrev" aria-label="Előző">‹</button>
+            <button class="icon-btn" id="slidePlay" aria-label="Lejátszás">▶</button>
+            <button class="icon-btn" id="slideNext" aria-label="Következő">›</button>
+          </div>
+        </div>
+        <div class="progress mt-2"><i id="slideBar"></i></div>
+      </div>
+    </div>
+  </section>
+
+  <div id="cta"></div>
+</main>
+
+<!-- Fénydoboz -->
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Nagy nézet">
+  <div class="lightbox-stage">
+    <div class="lightbox-frame" id="lbFrame"></div>
+    <div class="lightbox-bar">
+      <div>
+        <b id="lbTitle" style="font-family:var(--f-display);font-size:1.2rem"></b>
+        <p class="tiny dim" id="lbText"></p>
+      </div>
+      <div class="lightbox-nav">
+        <button class="lb-arrow" id="lbPrev" aria-label="Előző kép">‹</button>
+        <button class="lb-arrow" id="lbNext" aria-label="Következő kép">›</button>
+        <button class="lb-arrow" id="lbClose" aria-label="Bezárás">×</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/art.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/pages.js"></script>
+</body>
+</html>

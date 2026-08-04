@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="hu" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Asztalfoglalás — Basilico Bistro</title>
+<meta name="description" content="Foglalj asztalt online 30 másodperc alatt. Válaszd ki a saját asztalodat az alaprajzon, azonnali visszaigazolással.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='23' fill='%23E0503F'/%3E%3Cpath d='M24 36c0-9 5-14 13-15 0 9-5 14-13 15Z' fill='%237BD08C'/%3E%3Cpath d='M24 36c0-9-5-14-13-15 0 9 5 14 13 15Z' fill='%234C9A5C'/%3E%3Cpath d='M24 38V22' stroke='%23E9B44C' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/css/base.css">
+<link rel="stylesheet" href="assets/css/components.css">
+<link rel="stylesheet" href="assets/css/pages.css">
+</head>
+<body data-page="foglalas">
+<a class="skip-link" href="#main">Ugrás a tartalomra</a>
+
+<main id="main">
+
+  <header class="page-head">
+    <div class="deco" id="headDeco"></div>
+    <div class="wrap page-head-inner">
+      <nav class="crumbs" aria-label="Morzsamenü">
+        <a href="index.html">Főoldal</a> <span>/</span> <span>Asztalfoglalás</span>
+      </nav>
+      <h1 data-split>Asztal<span class="mark">foglalás</span></h1>
+      <p class="lead">
+        Négy lépés, harminc másodperc. Kiválaszthatod a konkrét asztalodat is az alaprajzon —
+        a foglaltakat élőben mutatjuk.
+      </p>
+      <div data-status-big></div>
+    </div>
+  </header>
+
+  <section class="section">
+    <div class="wrap booking">
+
+      <!-- =================== VARÁZSLÓ =================== -->
+      <div class="card" style="padding:clamp(1.3rem,3vw,2.2rem)" data-reveal>
+        <div class="steps" id="steps">
+          <div class="step on"><i></i><span>1 · Vendégek</span></div>
+          <div class="step"><i></i><span>2 · Időpont</span></div>
+          <div class="step"><i></i><span>3 · Asztal</span></div>
+          <div class="step"><i></i><span>4 · Adatok</span></div>
+        </div>
+
+        <!-- 1. lépés -->
+        <div class="step-panel on" data-step="0">
+          <h3>Hányan jöttök?</h3>
+          <p class="muted tiny mt-1">Nyolc főnél nagyobb társasághoz írj inkább e-mailt — külön menüt állítunk össze.</p>
+
+          <div class="row mt-3" style="gap:1.4rem;align-items:center">
+            <div class="counter-box">
+              <button id="peopleMinus" aria-label="Kevesebb vendég">−</button>
+              <span class="val" id="peopleVal">2</span>
+              <button id="peoplePlus" aria-label="Több vendég">+</button>
+            </div>
+            <div>
+              <b id="peopleWord">fő</b>
+              <p class="tiny dim" id="peopleHint">Tökéletes egy nyugodt vacsorához.</p>
+            </div>
+          </div>
+
+          <div class="filter-row mt-3" id="quickPeople"></div>
+
+          <h4 class="mt-3">Az alkalom</h4>
+          <div class="filter-row mt-1" id="occasionRow"></div>
+
+          <div class="row mt-3" style="justify-content:flex-end">
+            <button class="btn btn-primary" data-next>Tovább <span class="arr">→</span></button>
+          </div>
+        </div>
+
+        <!-- 2. lépés -->
+        <div class="step-panel" data-step="1">
+          <h3>Mikorra?</h3>
+          <p class="muted tiny mt-1">A zárt napokat és a betelt idősávokat kiszürkítjük.</p>
+
+          <div class="mt-3">
+            <div class="filter-row" id="dayRow"></div>
+          </div>
+
+          <div class="field mt-3" style="max-width:260px">
+            <label for="dateInput">Vagy válassz dátumot</label>
+            <input class="input" type="date" id="dateInput">
+          </div>
+
+          <h4 class="mt-3">Időpont</h4>
+          <div class="slot-grid mt-1" id="slotGrid"></div>
+          <p class="tiny dim mt-2" id="slotNote"></p>
+
+          <div class="row mt-3" style="justify-content:space-between">
+            <button class="btn btn-ghost" data-prev>← Vissza</button>
+            <button class="btn btn-primary" data-next>Tovább <span class="arr">→</span></button>
+          </div>
+        </div>
+
+        <!-- 3. lépés -->
+        <div class="step-panel" data-step="2">
+          <h3>Melyik asztalt szeretnéd?</h3>
+          <p class="muted tiny mt-1">Kattints egy szabad asztalra. Ha mindegy, ugorj tovább — mi választunk neked.</p>
+
+          <div class="floorplan mt-3" id="floorplan"></div>
+          <div class="table-legend">
+            <span><i style="background:#8A6A4A"></i>Szabad</span>
+            <span><i style="background:#4C9A5C"></i>Kiválasztva</span>
+            <span><i style="background:#4A3630"></i>Foglalt vagy túl kicsi ennyi főnek</span>
+          </div>
+          <p class="mt-2" id="tableInfo"></p>
+
+          <div class="row mt-3" style="justify-content:space-between">
+            <button class="btn btn-ghost" data-prev>← Vissza</button>
+            <button class="btn btn-primary" data-next>Tovább <span class="arr">→</span></button>
+          </div>
+        </div>
+
+        <!-- 4. lépés -->
+        <div class="step-panel" data-step="3">
+          <h3>Már csak az adataid</h3>
+          <form id="bookForm" novalidate>
+            <div class="grid g-2 mt-3">
+              <div class="field">
+                <label for="bName">Név <span class="req">*</span></label>
+                <input class="input" id="bName" required autocomplete="name" placeholder="Kovács Anna">
+                <span class="field-msg"></span>
+              </div>
+              <div class="field">
+                <label for="bPhone">Telefonszám <span class="req">*</span></label>
+                <input class="input" id="bPhone" required autocomplete="tel" type="tel" placeholder="+36 30 123 4567">
+                <span class="field-msg"></span>
+              </div>
+            </div>
+            <div class="field mt-2">
+              <label for="bEmail">E-mail (a visszaigazoláshoz)</label>
+              <input class="input" id="bEmail" type="email" autocomplete="email" placeholder="anna@email.hu">
+              <span class="field-msg"></span>
+            </div>
+            <div class="field mt-2">
+              <label for="bNote">Megjegyzés</label>
+              <textarea class="textarea" id="bNote" placeholder="Allergia, gyerekülés, meglepetés, kedvenc asztal…"></textarea>
+            </div>
+
+            <label class="check mt-3">
+              <input type="checkbox" id="bTerms" required>
+              <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
+              <span>Elfogadom, hogy a foglalás adatait a visszaigazoláshoz felhasználjátok. <span class="req">*</span></span>
+            </label>
+            <label class="check mt-2">
+              <input type="checkbox" id="bNews">
+              <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
+              <span>Kérem a havi hírlevelet az újdonságokról.</span>
+            </label>
+
+            <div class="row mt-3" style="justify-content:space-between">
+              <button class="btn btn-ghost" type="button" data-prev>← Vissza</button>
+              <button class="btn btn-accent btn-lg" type="submit">Foglalás véglegesítése ✓</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- =================== ÖSSZEGZŐ =================== -->
+      <aside data-reveal="right">
+        <div class="card recap">
+          <h3 style="font-size:1.15rem">A foglalásod</h3>
+          <div class="mt-2" id="recap"></div>
+          <div class="divider mt-3">🍕</div>
+          <p class="tiny dim mt-2">
+            Az asztalt a foglalás időpontjától <b>15 percig</b> tartjuk.
+            Ha csúsztok, hívj minket — megvárunk.
+          </p>
+          <a class="btn btn-ghost btn-block btn-sm mt-2" href="tel:+3612345678">
+            Inkább telefonálok
+          </a>
+        </div>
+
+        <div class="card mt-3">
+          <h4 style="font-family:var(--f-body);font-size:.78rem;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)">Jó tudni</h4>
+          <ul class="stack mt-2" style="gap:.6rem;font-size:.86rem">
+            <li class="muted">🕐 Péntek és szombat este 19–21 között telt ház szokott lenni.</li>
+            <li class="muted">🐕 A teraszra hozhatod a kutyát, vizestál jár hozzá.</li>
+            <li class="muted">🎂 Ha szülinap van, szólj — gyertyát viszünk a desszerthez.</li>
+            <li class="muted">🧾 Céges számlához add meg az adatokat a megjegyzésben.</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- =================== KORÁBBI FOGLALÁSOK =================== -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="panel" data-reveal>
+        <div class="panel-head">
+          <h3>Az eddigi foglalásaid</h3>
+          <span class="tiny dim">Ebben a böngészőben tárolva</span>
+        </div>
+        <div class="panel-body" id="myBookings"></div>
+      </div>
+    </div>
+  </section>
+
+  <div id="cta"></div>
+</main>
+
+<script src="assets/js/art.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/pages.js"></script>
+</body>
+</html>

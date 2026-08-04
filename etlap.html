@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="hu" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Étlap — Basilico Bistro</title>
+<meta name="description" content="Kőkemencés pizzák, friss tészták, előételek, saláták és desszertek. Allergénjelöléssel, csípősség-szinttel, 32 és 40 cm-es árakkal.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='23' fill='%23E0503F'/%3E%3Cpath d='M24 36c0-9 5-14 13-15 0 9-5 14-13 15Z' fill='%237BD08C'/%3E%3Cpath d='M24 36c0-9-5-14-13-15 0 9 5 14 13 15Z' fill='%234C9A5C'/%3E%3Cpath d='M24 38V22' stroke='%23E9B44C' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/css/base.css">
+<link rel="stylesheet" href="assets/css/components.css">
+<link rel="stylesheet" href="assets/css/pages.css">
+</head>
+<body data-page="etlap">
+<a class="skip-link" href="#main">Ugrás a tartalomra</a>
+
+<main id="main">
+
+  <header class="page-head">
+    <div class="deco" id="headDeco"></div>
+    <div class="wrap page-head-inner">
+      <nav class="crumbs" aria-label="Morzsamenü">
+        <a href="index.html">Főoldal</a> <span>/</span> <span>Étlap</span>
+      </nav>
+      <h1 data-split>Az <span class="mark">étlap</span></h1>
+      <p class="lead">
+        Minden pizzánk kőkemencében készül, 90 másodperc alatt. A tészta 48 órán át kel,
+        gluténmentes verzió +690 Ft. Az árak forintban, áfával értendők.
+      </p>
+      <div data-status-big></div>
+    </div>
+  </header>
+
+  <!-- ============================ ESZKÖZTÁR ============================ -->
+  <div class="wrap">
+    <div class="menu-toolbar">
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
+        <input class="input" id="menuSearch" type="search" placeholder="Keress ételre, alapanyagra…  ( / )" aria-label="Keresés az étlapon">
+      </div>
+
+      <div class="filter-row" id="catFilter"></div>
+
+      <div class="row" style="margin-left:auto;gap:.6rem">
+        <div class="segmented" id="sizeSwitch" role="group" aria-label="Pizzaméret">
+          <button data-size="32" class="on">32 cm</button>
+          <button data-size="40">40 cm</button>
+        </div>
+        <select class="select" id="sortBy" aria-label="Rendezés" style="width:auto">
+          <option value="default">Alapértelmezett</option>
+          <option value="price-asc">Ár szerint növekvő</option>
+          <option value="price-desc">Ár szerint csökkenő</option>
+          <option value="name">Név szerint</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="filter-row" style="margin-bottom:1.6rem" id="tagFilter"></div>
+
+    <p class="tiny dim" id="resultCount" style="margin-bottom:1.4rem"></p>
+  </div>
+
+  <!-- ============================ ÉTLAP ============================ -->
+  <section style="padding-bottom:clamp(3rem,6vw,5rem)">
+    <div class="wrap">
+      <div class="menu-list" id="menuList"></div>
+      <div class="empty hidden" id="menuEmpty">
+        <p>Erre nincs találat. Próbálj más kifejezést, vagy töröld a szűrőket.</p>
+        <button class="btn btn-ghost btn-sm" id="clearFilters">Szűrők törlése</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ PIZZAÉPÍTŐ ============================ -->
+  <section class="section" style="background:var(--bg-2);border-block:1px solid var(--line)" id="epito">
+    <div class="wrap">
+      <div class="section-head center" data-reveal>
+        <span class="eyebrow">Csináld magad</span>
+        <h2>Építsd meg a <span class="mark">saját</span> pizzádat</h2>
+        <p class="lead">Válassz alapot, tésztát és feltéteket — a rajz és az ár azonnal frissül.
+          Amit itt összeraksz, azt pontosan úgy sütjük ki.</p>
+      </div>
+
+      <div class="builder">
+        <div>
+          <div class="builder-stage" data-reveal="zoom">
+            <div class="builder-pizza" id="builderPizza"></div>
+          </div>
+
+          <div class="mt-3">
+            <h4 style="margin-bottom:.7rem">Alap</h4>
+            <div class="filter-row" id="baseRow"></div>
+          </div>
+          <div class="mt-3">
+            <h4 style="margin-bottom:.7rem">Tészta</h4>
+            <div class="filter-row" id="doughRow"></div>
+          </div>
+          <div class="mt-3">
+            <h4 style="margin-bottom:.7rem">Méret</h4>
+            <div class="filter-row" id="sizeRow"></div>
+          </div>
+          <div class="mt-3">
+            <h4 style="margin-bottom:.7rem">Feltétek <span class="tiny dim" id="topCount"></span></h4>
+            <div class="topping-grid" id="toppingGrid"></div>
+          </div>
+        </div>
+
+        <aside class="card builder-summary" data-reveal="right">
+          <h3 style="font-size:1.2rem">A te pizzád</h3>
+          <input class="input mt-2" id="pizzaName" placeholder="Adj neki nevet…" maxlength="28" aria-label="Pizza neve">
+          <div class="mt-3" id="sumLines"></div>
+          <div class="sum-total">
+            <span class="muted">Végösszeg</span>
+            <b id="sumTotal">0 Ft</b>
+          </div>
+          <button class="btn btn-primary btn-block mt-3" id="builderAdd">Kosárba teszem</button>
+          <button class="btn btn-ghost btn-block btn-sm mt-2" id="builderReset">Kezdjük elölről</button>
+          <p class="tiny dim mt-2">
+            Tipp: a szarvasgomba és a pisztácia együtt meglepően jól működik.
+            Ha elakadsz, nyomd meg a „Lepj meg” gombot.
+          </p>
+          <button class="btn btn-gold btn-block btn-sm mt-2" id="builderRandom">🎲 Lepj meg!</button>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ ALLERGÉNEK ============================ -->
+  <section class="section-sm">
+    <div class="wrap">
+      <div class="card" data-reveal>
+        <h3 style="font-size:1.1rem">Allergén-jelölések</h3>
+        <p class="muted tiny mt-1">Az ételkártyákon látható betűjelek jelentése. Kérdés esetén szólj a kollégáknak — mindig tudják a pontos összetételt.</p>
+        <div class="row mt-2" id="allergenLegend" style="gap:.8rem"></div>
+        <p class="tiny dim mt-2">
+          A konyhánk nem allergénmentes környezet: glutént, tejet, tojást, diót és halat egyaránt használunk.
+          Súlyos allergia esetén kérjük, jelezd előre a foglalásnál.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <div id="cta"></div>
+</main>
+
+<script src="assets/js/art.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/pages.js"></script>
+</body>
+</html>

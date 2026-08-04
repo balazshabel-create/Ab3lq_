@@ -1,0 +1,950 @@
+/* ==========================================================================
+   BASILICO BISTRO — pages.css
+   Oldalspecifikus elrendezések: hero, étlap, pizzaépítő, galéria,
+   foglalás, rólunk, kapcsolat, profil, admin.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. HERO — főoldal
+   -------------------------------------------------------------------------- */
+.hero {
+  position: relative;
+  min-height: min(94vh, 900px);
+  display: flex; align-items: center;
+  padding-block: clamp(3rem, 7vw, 6rem);
+  overflow: hidden;
+}
+.hero::after {
+  content: '';
+  position: absolute; inset: 0; z-index: 0;
+  background:
+    radial-gradient(1100px 620px at 78% 22%, rgba(196,96,58,.20), transparent 62%),
+    radial-gradient(760px 520px at 8% 82%, rgba(76,154,92,.20), transparent 62%);
+  pointer-events: none;
+}
+.hero-inner {
+  position: relative; z-index: 2;
+  display: grid;
+  grid-template-columns: 1.06fr .94fr;
+  gap: clamp(1.6rem, 4vw, 3.4rem);
+  align-items: center;
+  width: 100%;
+}
+@media (max-width: 900px) {
+  .hero-inner { grid-template-columns: 1fr; }
+  .hero-art { order: -1; max-width: 420px; margin-inline: auto; }
+}
+
+.hero-copy { display: flex; flex-direction: column; gap: 1.35rem; align-items: flex-start; }
+.hero h1 { max-width: 12ch; }
+.hero h1 .line { display: block; overflow: hidden; }
+.hero-actions { display: flex; gap: .8rem; flex-wrap: wrap; }
+
+.hero-facts {
+  display: flex; gap: 1.6rem; flex-wrap: wrap;
+  padding-top: 1.2rem; margin-top: .4rem;
+  border-top: 1px solid var(--line);
+  width: 100%;
+}
+.fact b {
+  display: block;
+  font-family: var(--f-display);
+  font-size: 1.85rem; line-height: 1;
+  color: var(--gold);
+}
+.fact span { font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+
+/* Forgó pizza a hero-ban */
+.hero-art { position: relative; display: grid; place-items: center; }
+.hero-pizza {
+  width: min(100%, 500px);
+  animation: float-y 7s ease-in-out infinite;
+  filter: drop-shadow(0 40px 60px rgba(0,0,0,.5));
+}
+.hero-pizza svg { animation: spin 66s linear infinite; }
+.hero-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px dashed var(--line-strong);
+  animation: spin-rev 40s linear infinite;
+  pointer-events: none;
+}
+.hero-ring.r1 { inset: -6%; }
+.hero-ring.r2 { inset: -16%; border-style: solid; border-color: var(--line); animation-duration: 70s; }
+
+/* Lebegő buborékok a pizza körül */
+.orbit {
+  position: absolute;
+  display: flex; align-items: center; gap: .5rem;
+  padding: .5rem .85rem;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow);
+  font-size: .78rem; font-weight: 600;
+  animation: float-soft 6s ease-in-out infinite;
+  z-index: 3;
+}
+.orbit .ico { font-size: 1rem; }
+.orbit.o1 { top: 8%;  left: -4%;  animation-delay: -1s; }
+.orbit.o2 { bottom: 16%; right: -6%; animation-delay: -3s; }
+.orbit.o3 { bottom: 2%; left: 12%; animation-delay: -5s; }
+@media (max-width: 620px) {
+  /* Kisebb kijelzőn a buborékok a pizza dobozán belülre húzódnak,
+     hogy egyik se lógjon ki a képernyő szélén. */
+  .hero-art { max-width: 320px; }
+  .orbit { font-size: .7rem; padding: .38rem .68rem; gap: .35rem; }
+  .orbit.o1 { top: 2%;  left: 0; }
+  .orbit.o2 { bottom: 14%; right: 0; }
+  .orbit.o3 { bottom: -2%; left: 8%; }
+}
+
+/* Gőz */
+.steam { position: absolute; top: 4%; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; z-index: 3; }
+.steam i {
+  display: block; width: 9px; height: 42px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(180deg, rgba(246,239,227,.55), transparent);
+  filter: blur(5px);
+  animation: steam 3.4s ease-in-out infinite;
+}
+.steam i:nth-child(2) { animation-delay: .9s; }
+.steam i:nth-child(3) { animation-delay: 1.8s; }
+
+/* Görgetés-tipp */
+.scroll-hint {
+  position: absolute; bottom: 1.6rem; left: 50%;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: .5rem;
+  font-size: .68rem; letter-spacing: .24em; text-transform: uppercase;
+  color: var(--text-dim); z-index: 3;
+}
+.scroll-hint i {
+  display: block; width: 1px; height: 46px;
+  background: linear-gradient(180deg, var(--gold), transparent);
+  animation: float-y 2.2s ease-in-out infinite;
+}
+
+/* --------------------------------------------------------------------------
+   2. Szalag / futósáv
+   -------------------------------------------------------------------------- */
+.ticker {
+  border-block: 1px solid var(--line);
+  background: var(--bg-2);
+  padding: .9rem 0;
+  overflow: hidden;
+  position: relative;
+}
+.ticker-track { display: flex; width: max-content; animation: marquee 30s linear infinite; }
+.ticker:hover .ticker-track { animation-play-state: paused; }
+.ticker-track span {
+  display: inline-flex; align-items: center; gap: 1.2rem;
+  padding-inline: 1.4rem;
+  font-family: var(--f-display);
+  font-size: clamp(1.1rem, 2.4vw, 1.7rem);
+  font-style: italic;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.ticker-track span em { color: var(--gold); font-style: normal; }
+
+/* --------------------------------------------------------------------------
+   3. Kiemelt pizzák (főoldal)
+   -------------------------------------------------------------------------- */
+.pizza-card {
+  display: flex; flex-direction: column;
+  text-align: center;
+  gap: .8rem;
+  padding: 1.6rem 1.3rem;
+}
+.pizza-card .art {
+  width: 100%; max-width: 210px; margin-inline: auto;
+  transition: transform .6s var(--ease-out);
+}
+.pizza-card:hover .art { transform: rotate(22deg) scale(1.07); }
+.pizza-card h3 { font-size: 1.28rem; }
+.pizza-card .ings { font-size: .82rem; color: var(--text-dim); min-height: 2.6em; }
+.pizza-card .price-row { display: flex; align-items: center; justify-content: center; gap: .6rem; margin-top: .3rem; }
+.pizza-card .price { font-family: var(--f-display); font-size: 1.5rem; color: var(--gold); }
+.pizza-card .tags { display: flex; gap: .3rem; justify-content: center; flex-wrap: wrap; min-height: 1.4em; }
+
+/* Rangsor-jelvény */
+.rank {
+  position: absolute; top: 1rem; left: 1rem;
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--gold-lt), var(--gold));
+  color: #241B08;
+  font-family: var(--f-display); font-weight: 900;
+  font-size: .95rem;
+  box-shadow: 0 6px 18px rgba(233,180,76,.35);
+}
+
+/* --------------------------------------------------------------------------
+   4. ÉTLAP
+   -------------------------------------------------------------------------- */
+.menu-toolbar {
+  position: sticky; top: var(--nav-h); z-index: 40;
+  display: flex; gap: .8rem; align-items: center; flex-wrap: wrap;
+  padding: .9rem 0;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 2rem;
+}
+.filter-row { display: flex; gap: .45rem; flex-wrap: wrap; }
+
+@media (max-width: 560px) {
+  /* Mobilon az eszköztár nem tapad, és minden eleme teljes szélességű sorba kerül */
+  .menu-toolbar { position: static; }
+  .menu-toolbar .search { max-width: none; flex: 1 1 100%; }
+  .menu-toolbar > .row { width: 100%; margin-left: 0 !important; }
+  .menu-toolbar #sortBy { flex: 1; width: auto !important; min-width: 0; }
+}
+
+.menu-list { display: flex; flex-direction: column; gap: 3rem; }
+.menu-group-title {
+  display: flex; align-items: center; gap: 1rem;
+  margin-bottom: 1.3rem;
+}
+.menu-group-title h2 { font-size: clamp(1.5rem, 3vw, 2.2rem); white-space: nowrap; }
+.menu-group-title::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--line-strong), transparent); }
+.menu-group-title .cnt {
+  font-size: .74rem; color: var(--text-dim);
+  padding: .2rem .6rem; border: 1px solid var(--line); border-radius: var(--r-pill);
+}
+
+.menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 1.1rem; }
+.menu-grid > * { min-width: 0; }
+
+.dish {
+  position: relative;
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 1rem;
+  padding: 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  transition: transform var(--t) var(--ease-out), border-color var(--t), box-shadow var(--t), background var(--t);
+}
+.dish:hover {
+  transform: translateY(-4px);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow);
+  background: var(--surface-2);
+}
+.dish-art { width: 92px; height: 92px; transition: transform .55s var(--ease-out); }
+.dish:hover .dish-art { transform: rotate(-18deg) scale(1.08); }
+.dish-main { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+.dish-head { display: flex; align-items: baseline; gap: .6rem; }
+.dish-head h3 { font-size: 1.06rem; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.dish-ings { overflow-wrap: anywhere; }
+.dish-price { font-family: var(--f-display); font-size: 1.14rem; color: var(--gold); white-space: nowrap; }
+.dish-ings { font-size: .81rem; color: var(--text-dim); line-height: 1.5; }
+.dish-foot { display: flex; align-items: center; justify-content: space-between; gap: .6rem; margin-top: .35rem; flex-wrap: wrap; }
+.dish-tags { display: flex; gap: .28rem; flex-wrap: wrap; }
+.dish-add {
+  width: 34px; height: 34px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  color: var(--gold);
+  transition: all var(--t-fast) var(--ease-back);
+}
+.dish-add:hover { background: var(--basil); color: #fff; transform: scale(1.14) rotate(90deg); border-color: transparent; }
+.dish.sold-out { opacity: .48; }
+.dish.sold-out .dish-add { pointer-events: none; }
+.dish-ribbon {
+  position: absolute; top: .8rem; right: .8rem;
+  font-size: .6rem; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: .16rem .45rem; border-radius: var(--r-xs);
+  background: var(--tomato); color: #fff;
+}
+
+/* Allergénsáv */
+.allergens { display: flex; gap: .3rem; }
+.allergen {
+  width: 20px; height: 20px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--surface-3);
+  font-size: .58rem; font-weight: 700;
+  color: var(--text-dim);
+  cursor: help;
+}
+
+/* Csípősség-mérő */
+.heat { display: inline-flex; gap: 2px; }
+.heat i { width: 5px; height: 12px; border-radius: 2px; background: var(--surface-3); }
+.heat i.on { background: linear-gradient(180deg, var(--tomato-lt), var(--tomato)); }
+
+/* --------------------------------------------------------------------------
+   5. PIZZAÉPÍTŐ
+   -------------------------------------------------------------------------- */
+.builder {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: clamp(1.2rem, 3vw, 2.4rem);
+  align-items: start;
+}
+@media (max-width: 880px) { .builder { grid-template-columns: 1fr; } }
+
+.builder-stage {
+  position: relative;
+  display: grid; place-items: center;
+  padding: clamp(1.4rem, 4vw, 3rem);
+  background:
+    radial-gradient(circle at 50% 45%, rgba(233,180,76,.13), transparent 62%),
+    linear-gradient(160deg, var(--surface), var(--bg-2));
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+}
+.builder-stage::before {
+  content: '';
+  position: absolute; inset: -40%;
+  background: conic-gradient(from 0deg, transparent, rgba(233,180,76,.07), transparent 40%);
+  animation: spin 18s linear infinite;
+}
+.builder-pizza { position: relative; width: min(100%, 400px); z-index: 2; transition: transform .5s var(--ease-back); }
+.builder-pizza.bump { transform: scale(1.05) rotate(-4deg); }
+
+.topping-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: .55rem; }
+.topping {
+  display: flex; flex-direction: column; align-items: center; gap: .35rem;
+  padding: .7rem .4rem;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: .74rem; text-align: center;
+  transition: all var(--t-fast) var(--ease-back);
+}
+.topping .dotc { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 -3px 6px rgba(0,0,0,.25); }
+.topping:hover { transform: translateY(-3px); border-color: var(--line-strong); }
+.topping.on { background: rgba(76,154,92,.16); border-color: var(--basil); color: var(--basil-lt); }
+.topping .p { font-size: .66rem; color: var(--text-dim); }
+
+.builder-summary { position: sticky; top: calc(var(--nav-h) + 1rem); }
+.sum-line { display: flex; justify-content: space-between; font-size: .86rem; padding: .3rem 0; color: var(--text-soft); }
+.sum-total {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding-top: .8rem; margin-top: .6rem;
+  border-top: 1px dashed var(--line-strong);
+}
+.sum-total b { font-family: var(--f-display); font-size: 1.9rem; color: var(--gold); }
+
+/* --------------------------------------------------------------------------
+   6. GALÉRIA
+   -------------------------------------------------------------------------- */
+.gallery {
+  columns: 3;
+  column-gap: 1rem;
+}
+@media (max-width: 900px) { .gallery { columns: 2; } }
+@media (max-width: 520px) { .gallery { columns: 1; } }
+
+.shot {
+  position: relative;
+  break-inside: avoid;
+  margin-bottom: 1rem;
+  border-radius: var(--r);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  transition: transform var(--t) var(--ease-out), box-shadow var(--t), border-color var(--t);
+  display: block; width: 100%;
+  text-align: left;
+}
+.shot:hover { transform: translateY(-6px) scale(1.012); box-shadow: var(--shadow-lg); border-color: var(--line-strong); }
+.shot-media { position: relative; overflow: hidden; }
+.shot-media svg, .shot-media img { width: 100%; transition: transform .8s var(--ease-out); }
+.shot:hover .shot-media svg, .shot:hover .shot-media img { transform: scale(1.07); }
+.shot-cap {
+  position: absolute; inset: auto 0 0 0;
+  padding: 2.6rem .95rem .9rem;
+  background: linear-gradient(180deg, transparent, rgba(6,5,4,.88));
+  transform: translateY(12px);
+  opacity: 0;
+  transition: all var(--t) var(--ease-out);
+  color: #F6EFE3;
+}
+.shot:hover .shot-cap { transform: none; opacity: 1; }
+.shot-cap h4 { font-size: 1rem; }
+.shot-cap p { font-size: .76rem; opacity: .75; }
+/* Állandó felirat egyes csempéken — ettől lesz változatos a masonry ritmusa */
+.shot-foot {
+  padding: .95rem 1.05rem 1.05rem;
+  border-top: 1px solid var(--line);
+}
+.shot-foot h4 { font-size: 1.02rem; }
+.shot-foot p { font-size: .8rem; color: var(--text-dim); margin-top: .15rem; }
+
+.shot-zoom {
+  position: absolute; top: .8rem; right: .8rem;
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: rgba(10,9,8,.6);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  opacity: 0; transform: scale(.6);
+  transition: all var(--t) var(--ease-back);
+}
+.shot:hover .shot-zoom { opacity: 1; transform: none; }
+.shot.hide { display: none; }
+
+/* --------------------------------------------------------------------------
+   7. FOGLALÁS
+   -------------------------------------------------------------------------- */
+.booking {
+  display: grid;
+  grid-template-columns: 1.25fr .75fr;
+  gap: clamp(1.2rem, 3vw, 2.6rem);
+  align-items: start;
+}
+@media (max-width: 900px) { .booking { grid-template-columns: 1fr; } }
+
+.steps { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1.8rem; }
+.step {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex; flex-direction: column; gap: .45rem;
+  font-size: .72rem; color: var(--text-dim);
+  letter-spacing: .06em; text-transform: uppercase;
+}
+.step span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 560px) {
+  /* Négy lépés két sorban, hogy a feliratok is olvashatók maradjanak */
+  .step { flex: 1 1 calc(50% - .4rem); }
+}
+.step i {
+  display: block; height: 3px; border-radius: 2px;
+  background: var(--surface-3);
+  overflow: hidden; position: relative;
+}
+.step i::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, var(--basil), var(--gold));
+  transform: scaleX(0); transform-origin: left;
+  transition: transform .55s var(--ease-out);
+}
+.step.done i::after, .step.on i::after { transform: scaleX(1); }
+.step.on { color: var(--gold); font-weight: 600; }
+.step.done { color: var(--basil-lt); }
+
+.step-panel { display: none; animation: rise .5s var(--ease-out); }
+.step-panel.on { display: block; }
+
+.counter-box {
+  display: inline-flex; align-items: center; gap: 1.1rem;
+  padding: .5rem .7rem;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.counter-box button {
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--surface-3);
+  font-size: 1.2rem;
+  transition: all var(--t-fast) var(--ease-back);
+}
+.counter-box button:hover { background: var(--basil); color: #fff; transform: scale(1.1); }
+.counter-box .val { font-family: var(--f-display); font-size: 1.9rem; min-width: 2ch; text-align: center; }
+
+.slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: .5rem; }
+.slot {
+  padding: .62rem .3rem;
+  text-align: center;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: .86rem; font-weight: 600;
+  transition: all var(--t-fast) var(--ease-back);
+}
+.slot:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); transform: translateY(-2px); }
+.slot.on { background: linear-gradient(135deg, var(--basil), var(--basil-dk)); color: #fff; border-color: transparent; box-shadow: 0 8px 20px rgba(76,154,92,.3); }
+.slot:disabled { opacity: .3; text-decoration: line-through; cursor: not-allowed; }
+.slot .left { display: block; font-size: .6rem; font-weight: 400; opacity: .7; }
+
+/* Asztaltérkép */
+.floorplan {
+  position: relative;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(160deg, var(--surface), var(--bg-2));
+  padding: 1rem;
+  overflow: hidden;
+}
+.floorplan svg { width: 100%; height: auto; }
+.floorplan .table-hit { cursor: pointer; transition: opacity var(--t-fast); }
+.floorplan .table-hit:hover { opacity: .82; }
+.table-legend { display: flex; gap: 1rem; flex-wrap: wrap; font-size: .76rem; color: var(--text-dim); margin-top: .8rem; }
+.table-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: .35rem; vertical-align: -1px; }
+
+/* Foglalás összegzőkártya */
+.recap { position: sticky; top: calc(var(--nav-h) + 1rem); }
+.recap-row { display: flex; justify-content: space-between; gap: 1rem; padding: .5rem 0; border-bottom: 1px dashed var(--line); font-size: .87rem; }
+.recap-row span { color: var(--text-dim); }
+.recap-row b { font-weight: 600; text-align: right; }
+
+/* Sikeres foglalás */
+.success-code {
+  font-family: var(--f-display);
+  font-size: 2.2rem; letter-spacing: .16em;
+  color: var(--gold);
+  padding: .8rem 1.4rem;
+  border: 1px dashed var(--gold);
+  border-radius: var(--r);
+  display: inline-block;
+  background: rgba(233,180,76,.07);
+}
+
+/* --------------------------------------------------------------------------
+   8. RÓLUNK — idővonal, csapat
+   -------------------------------------------------------------------------- */
+.timeline { position: relative; padding-left: 2.2rem; }
+.timeline::before {
+  content: ''; position: absolute; left: 7px; top: 6px; bottom: 6px;
+  width: 2px;
+  background: linear-gradient(180deg, var(--basil), var(--gold), var(--tomato));
+  border-radius: 2px;
+}
+.tl-item { position: relative; padding-bottom: 2.2rem; }
+.tl-item::before {
+  content: ''; position: absolute; left: -2.2rem; top: .35rem;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--bg); border: 3px solid var(--gold);
+  box-shadow: 0 0 0 4px rgba(233,180,76,.14);
+}
+.tl-year { font-family: var(--f-display); font-size: 1.5rem; color: var(--gold); line-height: 1; }
+.tl-item h4 { margin: .35rem 0 .3rem; font-family: var(--f-body); font-size: 1rem; }
+
+.team-card { text-align: center; padding: 1.7rem 1.2rem; }
+.team-card .face { width: 118px; height: 118px; margin: 0 auto 1rem; border-radius: 50%; overflow: hidden; border: 2px solid var(--line-strong); transition: transform var(--t) var(--ease-back), border-color var(--t); }
+.team-card:hover .face { transform: scale(1.07) rotate(-4deg); border-color: var(--gold); }
+.team-card .role { font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; color: var(--basil-lt); }
+.team-card .quote { font-family: var(--f-hand); font-size: 1.12rem; color: var(--text-soft); margin-top: .6rem; }
+
+.value-card { padding: 1.6rem 1.4rem; }
+.value-card .ico {
+  width: 52px; height: 52px; margin-bottom: 1rem;
+  display: grid; place-items: center;
+  border-radius: var(--r);
+  background: linear-gradient(135deg, rgba(76,154,92,.22), rgba(233,180,76,.14));
+  border: 1px solid var(--line);
+  font-size: 1.4rem;
+}
+
+/* Vélemények */
+.reviews { position: relative; overflow: hidden; }
+.review-track { display: flex; transition: transform .7s var(--ease-out); }
+.review-slide { flex: 0 0 100%; padding-inline: .5rem; }
+.review-card { padding: clamp(1.5rem, 3vw, 2.6rem); text-align: center; }
+.review-card blockquote {
+  font-family: var(--f-display);
+  font-size: clamp(1.1rem, 2.2vw, 1.6rem);
+  font-style: italic;
+  line-height: 1.5;
+  margin-block: 1rem;
+  text-wrap: balance;
+}
+.review-dots { display: flex; gap: .45rem; justify-content: center; margin-top: 1.4rem; }
+.review-dots button {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--surface-3);
+  transition: all var(--t) var(--ease-back);
+}
+.review-dots button.on { width: 26px; border-radius: var(--r-pill); background: var(--gold); }
+
+/* GYIK */
+.faq-item { border-bottom: 1px solid var(--line); }
+.faq-q {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  width: 100%; text-align: left;
+  padding: 1.15rem 0;
+  font-family: var(--f-display); font-size: 1.08rem; font-weight: 700;
+  transition: color var(--t-fast);
+}
+.faq-q:hover { color: var(--gold); }
+.faq-q i {
+  flex: none; width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border-radius: 50%; border: 1px solid var(--line-strong);
+  font-style: normal; font-size: 1rem;
+  transition: transform var(--t) var(--ease-back), background var(--t-fast);
+}
+.faq-item.on .faq-q i { transform: rotate(45deg); background: var(--gold); color: #000; border-color: transparent; }
+.faq-a { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .45s var(--ease-out); }
+.faq-item.on .faq-a { grid-template-rows: 1fr; }
+.faq-a > div { overflow: hidden; }
+.faq-a p { padding-bottom: 1.2rem; color: var(--text-soft); font-size: .92rem; }
+
+/* --------------------------------------------------------------------------
+   9. KAPCSOLAT
+   -------------------------------------------------------------------------- */
+.contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(1.2rem, 3vw, 2.6rem); align-items: start; }
+@media (max-width: 860px) { .contact-grid { grid-template-columns: 1fr; } }
+
+.info-item { display: flex; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--line); }
+.info-item .ico {
+  width: 42px; height: 42px; flex: none;
+  display: grid; place-items: center;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--gold);
+}
+.info-item h4 { font-family: var(--f-body); font-size: .74rem; letter-spacing: .14em; text-transform: uppercase; color: var(--text-dim); margin-bottom: .18rem; }
+
+.map-frame {
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  position: relative;
+}
+.map-frame svg { width: 100%; height: auto; display: block; }
+.map-pin { animation: float-y 2.4s ease-in-out infinite; transform-origin: center bottom; }
+
+/* --------------------------------------------------------------------------
+   10. PROFIL
+   -------------------------------------------------------------------------- */
+.profile-hero {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: clamp(1rem, 3vw, 2rem);
+  align-items: center;
+  padding: clamp(1.4rem, 3vw, 2.4rem);
+  border-radius: var(--r-xl);
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(700px 300px at 12% 0%, rgba(76,154,92,.18), transparent 60%),
+    radial-gradient(600px 320px at 92% 100%, rgba(224,80,63,.16), transparent 60%),
+    var(--surface);
+  overflow: hidden;
+  position: relative;
+}
+@media (max-width: 760px) { .profile-hero { grid-template-columns: 1fr; text-align: center; justify-items: center; } }
+
+.profile-face {
+  width: 108px; height: 108px;
+  border-radius: 32% 68% 62% 38% / 42% 38% 62% 58%;
+  overflow: hidden;
+  border: 2px solid var(--gold);
+  box-shadow: 0 0 0 6px rgba(233,180,76,.10);
+  animation: wobble 9s ease-in-out infinite;
+}
+.tier {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .3rem .8rem;
+  border-radius: var(--r-pill);
+  font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+}
+.tier-bronze { background: rgba(196,96,58,.2);  color: #E39774; }
+.tier-silver { background: rgba(200,210,220,.16); color: #CBD5E1; }
+.tier-gold   { background: rgba(233,180,76,.2);  color: var(--gold-lt); }
+.tier-basil  { background: rgba(76,154,92,.2);   color: var(--basil-lt); }
+
+.progress {
+  height: 9px; border-radius: var(--r-pill);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.progress i {
+  display: block; height: 100%;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--basil), var(--gold));
+  width: 0;
+  transition: width 1.2s var(--ease-out);
+  position: relative;
+}
+.progress i::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2.4s linear infinite;
+}
+
+/* Pecsétkártya */
+.stampcard {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: .55rem;
+}
+@media (max-width: 620px) { .stampcard { grid-template-columns: repeat(4, 1fr); } }
+.stamp {
+  aspect-ratio: 1;
+  width: 100%; max-width: 88px;
+  margin-inline: auto;
+  border-radius: 50%;
+  border: 2px dashed var(--line-strong);
+  display: grid; place-items: center;
+  color: var(--text-dim);
+  font-size: clamp(1rem, 2.2vw, 1.6rem);
+  font-weight: 700;
+  transition: all var(--t) var(--ease-back);
+}
+.stamp.free { font-size: .62rem; letter-spacing: .06em; }
+.stamp.on {
+  border-style: solid; border-color: transparent;
+  background: linear-gradient(135deg, var(--gold-lt), var(--terra));
+  color: #2A1B08;
+  transform: rotate(-8deg);
+  box-shadow: 0 6px 16px rgba(233,180,76,.28);
+}
+.stamp.free { border-color: var(--basil); color: var(--basil-lt); }
+
+.tabs { display: flex; gap: .3rem; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab {
+  position: relative;
+  padding: .8rem 1.1rem;
+  font-size: .88rem; font-weight: 600;
+  color: var(--text-dim);
+  white-space: nowrap;
+  transition: color var(--t-fast);
+}
+.tab::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -1px;
+  height: 2px; background: var(--gold);
+  transform: scaleX(0); transition: transform var(--t) var(--ease-out);
+}
+.tab:hover { color: var(--text); }
+.tab.on { color: var(--gold); }
+.tab.on::after { transform: scaleX(1); }
+.tab-panel { display: none; animation: rise .45s var(--ease-out); padding-top: 1.6rem; }
+.tab-panel.on { display: block; }
+
+.order-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 1rem; align-items: center;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+  transition: border-color var(--t-fast), transform var(--t-fast);
+}
+.order-row:hover { border-color: var(--line-strong); transform: translateX(4px); }
+.order-date {
+  text-align: center; line-height: 1.1;
+  padding-right: 1rem; border-right: 1px solid var(--line);
+}
+.order-date b { display: block; font-family: var(--f-display); font-size: 1.5rem; color: var(--gold); }
+.order-date span { font-size: .66rem; text-transform: uppercase; letter-spacing: .1em; color: var(--text-dim); }
+
+.state {
+  padding: .2rem .6rem; border-radius: var(--r-pill);
+  font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+}
+.state-new     { background: rgba(233,180,76,.18); color: var(--gold-lt); }
+.state-ok      { background: rgba(76,154,92,.18);  color: var(--basil-lt); }
+.state-done    { background: rgba(140,150,160,.16); color: #B6C0CA; }
+.state-cancel  { background: rgba(224,80,63,.16);  color: var(--tomato-lt); }
+
+/* --------------------------------------------------------------------------
+   11. ADMIN
+   -------------------------------------------------------------------------- */
+.admin-shell { display: grid; grid-template-columns: 244px 1fr; min-height: 100vh; }
+@media (max-width: 900px) { .admin-shell { grid-template-columns: 1fr; } }
+
+.admin-side {
+  background: var(--bg-2);
+  border-right: 1px solid var(--line);
+  padding: 1.3rem 1rem;
+  display: flex; flex-direction: column; gap: .25rem;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+@media (max-width: 900px) {
+  .admin-side { position: static; height: auto; flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .admin-side .side-label, .admin-side .side-foot { display: none; }
+}
+.side-label { font-size: .64rem; letter-spacing: .2em; text-transform: uppercase; color: var(--text-dim); padding: 1rem .8rem .4rem; }
+.side-item {
+  display: flex; align-items: center; gap: .7rem;
+  padding: .68rem .8rem;
+  border-radius: var(--r-sm);
+  font-size: .88rem; font-weight: 500;
+  color: var(--text-soft);
+  white-space: nowrap;
+  transition: all var(--t-fast) var(--ease);
+}
+.side-item svg { width: 17px; height: 17px; flex: none; }
+.side-item:hover { background: var(--surface); color: var(--text); }
+.side-item.on { background: linear-gradient(100deg, rgba(76,154,92,.22), transparent); color: var(--gold); box-shadow: inset 2px 0 0 var(--gold); }
+.side-foot { margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--line); }
+
+.admin-main { padding: clamp(1.1rem, 3vw, 2.2rem); min-width: 0; }
+.admin-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap;
+  margin-bottom: 1.8rem;
+}
+
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; }
+.kpi { padding: 1.2rem; }
+.kpi .lab { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+.kpi .num { font-family: var(--f-display); font-size: 2.1rem; line-height: 1.1; margin-top: .3rem; }
+.kpi .delta { font-size: .76rem; font-weight: 600; }
+.kpi .delta.up { color: var(--basil-lt); }
+.kpi .delta.down { color: var(--tomato-lt); }
+.kpi .spark { margin-top: .7rem; }
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap;
+  padding: 1.1rem 1.3rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-2);
+}
+.panel-head h3 { font-size: 1.06rem; }
+.panel-body { padding: 1.3rem; }
+.panel-body.flush { padding: 0; }
+
+.table-wrap { overflow-x: auto; }
+.tbl { min-width: 640px; font-size: .87rem; }
+.tbl thead th {
+  text-align: left;
+  padding: .8rem 1.1rem;
+  font-size: .68rem; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--text-dim); font-weight: 600;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-2);
+  position: sticky; top: 0;
+}
+.tbl tbody td { padding: .85rem 1.1rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.tbl tbody tr { transition: background var(--t-fast); }
+.tbl tbody tr:hover { background: var(--surface-2); }
+.tbl .num-cell { font-variant-numeric: tabular-nums; }
+
+.row-actions { display: flex; gap: .35rem; }
+.mini-btn {
+  padding: .3rem .6rem;
+  border-radius: var(--r-xs);
+  border: 1px solid var(--line);
+  font-size: .72rem; font-weight: 600;
+  color: var(--text-soft);
+  transition: all var(--t-fast);
+}
+.mini-btn:hover { border-color: var(--line-strong); color: var(--text); background: var(--surface-2); }
+.mini-btn.ok:hover     { background: var(--basil); color: #fff; border-color: transparent; }
+.mini-btn.danger:hover { background: var(--tomato); color: #fff; border-color: transparent; }
+
+/* Bejelentkezés */
+.login-shell { min-height: 100vh; display: grid; place-items: center; padding: 1.4rem; position: relative; overflow: hidden; }
+.login-card { width: min(420px, 100%); padding: clamp(1.6rem, 4vw, 2.6rem); position: relative; z-index: 2; }
+.login-hint {
+  font-size: .76rem;
+  padding: .7rem .9rem;
+  border-radius: var(--r-sm);
+  background: rgba(233,180,76,.1);
+  border: 1px dashed rgba(233,180,76,.35);
+  color: var(--gold-lt);
+}
+
+/* Diagramok */
+.bars { display: flex; align-items: flex-end; gap: .5rem; height: 170px; }
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: .45rem; height: 100%; justify-content: flex-end; }
+.bar {
+  width: 100%; max-width: 40px;
+  border-radius: var(--r-xs) var(--r-xs) 2px 2px;
+  background: linear-gradient(180deg, var(--basil-lt), var(--basil-dk));
+  height: 0;
+  transition: height 1s var(--ease-out);
+  position: relative;
+}
+.bar:hover { background: linear-gradient(180deg, var(--gold-lt), var(--terra)); }
+.bar-col .lab { font-size: .68rem; color: var(--text-dim); }
+.bar-col .val { font-size: .7rem; font-weight: 700; color: var(--gold); }
+
+.donut-wrap { display: flex; align-items: center; gap: 1.4rem; flex-wrap: wrap; }
+.donut { width: 148px; height: 148px; flex: none; }
+.donut circle { transition: stroke-dasharray 1.1s var(--ease-out); }
+.legend-list { display: flex; flex-direction: column; gap: .45rem; font-size: .84rem; }
+.legend-list i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: .5rem; }
+
+/* Beérkezett üzenet */
+.msg-row {
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid var(--line);
+  transition: background var(--t-fast);
+  cursor: pointer;
+}
+.msg-row:hover { background: var(--surface-2); }
+.msg-row.unread { border-left: 3px solid var(--gold); }
+.msg-row .meta { display: flex; justify-content: space-between; gap: 1rem; font-size: .76rem; color: var(--text-dim); }
+
+/* Kapcsoló */
+.switch { position: relative; display: inline-block; width: 44px; height: 25px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .track {
+  position: absolute; inset: 0;
+  background: var(--surface-3);
+  border-radius: var(--r-pill);
+  transition: background var(--t);
+}
+.switch .track::before {
+  content: ''; position: absolute;
+  width: 19px; height: 19px; left: 3px; top: 3px;
+  background: var(--text-soft);
+  border-radius: 50%;
+  transition: transform var(--t) var(--ease-back), background var(--t);
+}
+.switch input:checked + .track { background: var(--basil); }
+.switch input:checked + .track::before { transform: translateX(19px); background: #fff; }
+
+/* --------------------------------------------------------------------------
+   12. Oldalfejléc (belső oldalak)
+   -------------------------------------------------------------------------- */
+.page-head {
+  position: relative;
+  padding-block: clamp(3rem, 7vw, 5.6rem) clamp(2rem, 4vw, 3rem);
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  background:
+    radial-gradient(900px 400px at 20% -10%, rgba(76,154,92,.18), transparent 62%),
+    radial-gradient(760px 380px at 88% 0%, rgba(224,80,63,.15), transparent 62%);
+}
+.page-head-inner { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 1rem; }
+.crumbs { display: flex; align-items: center; gap: .5rem; font-size: .78rem; color: var(--text-dim); }
+.crumbs a:hover { color: var(--gold); }
+.page-head .deco {
+  position: absolute; right: -60px; top: 50%;
+  transform: translateY(-50%);
+  width: 320px; opacity: .13;
+  animation: spin 90s linear infinite;
+  pointer-events: none;
+}
+
+/* CTA sáv */
+.cta-band {
+  position: relative;
+  border-radius: var(--r-xl);
+  padding: clamp(2rem, 5vw, 3.6rem);
+  overflow: hidden;
+  background: linear-gradient(120deg, var(--basil-dk), #1c3d24 45%, var(--terra));
+  background-size: 220% 220%;
+  animation: gradient-pan 16s ease infinite;
+  text-align: center;
+  color: #fff;
+}
+.cta-band::before {
+  content: '';
+  position: absolute; inset: -50%;
+  background: conic-gradient(from 0deg, transparent, rgba(255,255,255,.07), transparent 45%);
+  animation: spin 22s linear infinite;
+}
+.cta-band > * { position: relative; z-index: 2; }

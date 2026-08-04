@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="hu" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kapcsolat — Basilico Bistro</title>
+<meta name="description" content="Cím, telefonszám, nyitvatartás, megközelítés és gyakori kérdések. Írj nekünk közvetlenül.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='23' fill='%23E0503F'/%3E%3Cpath d='M24 36c0-9 5-14 13-15 0 9-5 14-13 15Z' fill='%237BD08C'/%3E%3Cpath d='M24 36c0-9-5-14-13-15 0 9 5 14 13 15Z' fill='%234C9A5C'/%3E%3Cpath d='M24 38V22' stroke='%23E9B44C' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/css/base.css">
+<link rel="stylesheet" href="assets/css/components.css">
+<link rel="stylesheet" href="assets/css/pages.css">
+</head>
+<body data-page="kapcsolat">
+<a class="skip-link" href="#main">Ugrás a tartalomra</a>
+
+<main id="main">
+
+  <header class="page-head">
+    <div class="deco" id="headDeco"></div>
+    <div class="wrap page-head-inner">
+      <nav class="crumbs" aria-label="Morzsamenü">
+        <a href="index.html">Főoldal</a> <span>/</span> <span>Kapcsolat</span>
+      </nav>
+      <h1 data-split>Írj vagy <span class="mark">gyere be</span></h1>
+      <p class="lead">
+        A Kőfaragó utca 15. alatt találsz minket, a Palotanegyed szívében.
+        Telefonon nyitvatartási időben elérünk, e-mailre 24 órán belül válaszolunk.
+      </p>
+      <div data-status-big></div>
+    </div>
+  </header>
+
+  <section class="section">
+    <div class="wrap contact-grid">
+
+      <!-- ============ INFÓK + TÉRKÉP ============ -->
+      <div data-reveal="left">
+        <div id="contactInfo"></div>
+
+        <div class="map-frame mt-3" id="map"></div>
+
+        <div class="grid g-2 mt-3">
+          <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener"
+             href="https://maps.google.com/?q=Budapest%2C%20K%C5%91farag%C3%B3%20utca%2015.">Útvonaltervezés ↗</a>
+          <a class="btn btn-ghost btn-sm" href="tel:+3612345678">Hívom őket</a>
+        </div>
+
+        <div class="card mt-3">
+          <h4 style="font-family:var(--f-body);font-size:.78rem;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)">Megközelítés</h4>
+          <ul class="stack mt-2" style="gap:.6rem;font-size:.88rem">
+            <li class="muted"><b>Metró:</b> M2 Blaha Lujza tér — 6 perc séta.</li>
+            <li class="muted"><b>Villamos:</b> 4-es, 6-os, Blaha Lujza tér megálló.</li>
+            <li class="muted"><b>Busz:</b> 9-es, Horváth Mihály tér — 3 perc.</li>
+            <li class="muted"><b>Autó:</b> fizetős zóna 8–20 között, a ház előtt általában van hely.</li>
+            <li class="muted"><b>Bicikli:</b> saját tárolónk van a bejárat mellett.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ ŰRLAP ============ -->
+      <div data-reveal="right">
+        <div class="card" style="padding:clamp(1.3rem,3vw,2.2rem)">
+          <h2 style="font-size:1.6rem">Üzenet a csapatnak</h2>
+          <p class="muted tiny mt-1">Rendezvény, panasz, dicséret, elhagyott sál — mindegy, mi. Elolvassuk.</p>
+
+          <form id="contactForm" class="mt-3" novalidate>
+            <div class="grid g-2">
+              <div class="field">
+                <label for="cName">Név <span class="req">*</span></label>
+                <input class="input" id="cName" required autocomplete="name" placeholder="Kovács Anna">
+                <span class="field-msg"></span>
+              </div>
+              <div class="field">
+                <label for="cEmail">E-mail <span class="req">*</span></label>
+                <input class="input" id="cEmail" type="email" required autocomplete="email" placeholder="anna@email.hu">
+                <span class="field-msg"></span>
+              </div>
+            </div>
+
+            <div class="field mt-2">
+              <label for="cTopic">Miről van szó?</label>
+              <select class="select" id="cTopic">
+                <option>Általános kérdés</option>
+                <option>Rendezvény, csoportos foglalás</option>
+                <option>Visszajelzés, panasz</option>
+                <option>Allergia, összetevők</option>
+                <option>Sajtó, együttműködés</option>
+                <option>Álláslehetőség</option>
+              </select>
+            </div>
+
+            <div class="field mt-2">
+              <label for="cMsg">Üzenet <span class="req">*</span></label>
+              <textarea class="textarea" id="cMsg" required placeholder="Írd le, miben segíthetünk…"></textarea>
+              <span class="field-msg"></span>
+            </div>
+
+            <label class="check mt-3">
+              <input type="checkbox" id="cTerms" required>
+              <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
+              <span>Hozzájárulok, hogy a megadott adataimat a válaszadáshoz felhasználjátok. <span class="req">*</span></span>
+            </label>
+
+            <button class="btn btn-primary btn-block btn-lg mt-3" type="submit">Üzenet küldése</button>
+            <p class="tiny dim mt-2" style="text-align:center">
+              Az üzenet az admin felület postaládájába kerül — nézd meg az <a href="admin.html" style="color:var(--gold)">admin oldalon</a>.
+            </p>
+          </form>
+        </div>
+
+        <div class="card mt-3">
+          <h4 style="font-family:var(--f-body);font-size:.78rem;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)">Gyorsabb út</h4>
+          <div class="grid g-2 mt-2">
+            <a class="btn btn-ghost btn-sm" href="foglalas.html">Asztalfoglalás</a>
+            <a class="btn btn-ghost btn-sm" href="etlap.html">Étlap megnyitása</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GYIK ============ -->
+  <section class="section" style="background:var(--bg-2);border-block:1px solid var(--line)">
+    <div class="wrap wrap-narrow">
+      <div class="section-head center" data-reveal>
+        <span class="eyebrow">Mielőtt írnál</span>
+        <h2>Gyakori kérdések</h2>
+        <p class="lead">A leggyakrabban ezekre kérdeznek rá. Ha nincs köztük a tiéd, írj bátran.</p>
+      </div>
+      <div id="faq" data-reveal></div>
+    </div>
+  </section>
+
+  <div id="cta"></div>
+</main>
+
+<script src="assets/js/art.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/pages.js"></script>
+</body>
+</html>
