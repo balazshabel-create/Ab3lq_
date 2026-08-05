@@ -27,10 +27,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Pages bekapcsolása és beállítása
+      # Egyszeri teendő a repó tulajdonosának:
+      # Settings → Pages → Source = "GitHub Actions".
+      # A workflow tokenje nem tudja magától létrehozni a Pages oldalt
+      # (ahhoz admin jog kell), de a bekapcsolás után minden push publikál.
+      - name: Pages beállítások beolvasása
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: Oldal feltöltése
         uses: actions/upload-pages-artifact@v3
