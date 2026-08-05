@@ -1,0 +1,42 @@
+# A weboldal publikálása GitHub Pages-re.
+# A repó statikus (nincs build lépés), ezért a gyökeret töltjük fel változatlanul.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - claude/basilico-bistro-website-urhfyt
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pages bekapcsolása és beállítása
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Oldal feltöltése
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Publikálás
+        id: deployment
+        uses: actions/deploy-pages@v4
