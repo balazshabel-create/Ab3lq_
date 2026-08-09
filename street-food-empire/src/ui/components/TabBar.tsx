@@ -7,31 +7,31 @@ import { Text } from '@/ui/components/primitives';
 import { HIT_SIZE, palette, spacing } from '@/ui/theme';
 
 /**
- * ALSÓ NAVIGÁCIÓ
+ * BOTTOM NAVIGATION
  *
- * Saját, minimális tab-sáv – nem használunk navigációs könyvtárat, mert a
- * játék 6 képernyője között nincs szükség stackre, mély linkelésre vagy
- * átmenetekre. Ez ~200 KB-tal kisebb csomag és gyorsabb hidegindítás.
+ * A small custom tab bar - no navigation library, because the game's 6 screens
+ * need no stack, deep linking or transitions. That is ~200 KB less bundle and a
+ * faster cold start.
  *
- * A "pötty" (dot) jelzi, ha egy fülön van felvehető jutalom — ez a
- * visszatérés egyik legerősebb ösztönzője.
+ * The dot marks a tab that has a reward waiting - one of the strongest
+ * incentives to come back.
  */
 
 export type TabKey = 'stand' | 'upgrades' | 'staff' | 'cities' | 'missions' | 'shop';
 
 export const TABS: readonly { key: TabKey; label: string; icon: IconName }[] = [
   { key: 'stand', label: 'Stand', icon: 'stand' },
-  { key: 'upgrades', label: 'Gépek', icon: 'upgrade' },
-  { key: 'staff', label: 'Csapat', icon: 'chef' },
-  { key: 'cities', label: 'Városok', icon: 'city' },
-  { key: 'missions', label: 'Küldetés', icon: 'quest' },
-  { key: 'shop', label: 'Bolt', icon: 'shop' },
+  { key: 'upgrades', label: 'Machines', icon: 'upgrade' },
+  { key: 'staff', label: 'Crew', icon: 'chef' },
+  { key: 'cities', label: 'Cities', icon: 'city' },
+  { key: 'missions', label: 'Missions', icon: 'quest' },
+  { key: 'shop', label: 'Shop', icon: 'shop' },
 ];
 
 type Props = {
   active: TabKey;
   onChange: (key: TabKey) => void;
-  /** Melyik füleken van felvehető jutalom / elérhető vásárlás. */
+  /** Which tabs have a claimable reward / available purchase. */
   badges?: Partial<Record<TabKey, boolean>>;
 };
 

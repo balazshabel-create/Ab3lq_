@@ -58,11 +58,11 @@ function OfflineModal() {
         </View>
 
         <Text variant="title" color={palette.text} align="center">
-          Amíg zárva voltál…
+          While you were away…
         </Text>
         <Text variant="caption" color={palette.textDim} align="center" style={{ marginTop: 4 }}>
-          {formatDuration(report.creditedSeconds)} termelés
-          {report.cappedOut ? ' (elérted a sapkát)' : ''}
+          {formatDuration(report.creditedSeconds)} of production
+          {report.cappedOut ? ' (cap reached)' : ''}
         </Text>
 
         <Text variant="display" color={palette.success} align="center" style={styles.amount}>
@@ -72,8 +72,8 @@ function OfflineModal() {
         {report.cappedOut ? (
           <Card style={styles.hintCard}>
             <Text variant="caption" color={palette.textMuted} align="center">
-              A jelenlegi sapkád {formatDuration(report.capHours * 3600)}. Raktár
-              fejlesztéssel és futárral növelheted.
+              Your current cap is {formatDuration(report.capHours * 3600)}. Raise it
+              with Storage upgrades and Couriers.
             </Text>
           </Card>
         ) : null}
@@ -81,7 +81,7 @@ function OfflineModal() {
 
       <Button
         label={adFree ? `Felveszem ${formatMoney(doubled)}` : `Dupla: ${formatMoney(doubled)}`}
-        sublabel={adFree ? 'reklámmentes bónusz' : 'rövid videó megnézésével'}
+        sublabel={adFree ? 'ad-free bonus' : 'watch a short video'}
         tone="success"
         disabled={busy}
         onPress={() => void claimOffline(true)}
@@ -127,25 +127,25 @@ function RewardModal() {
         return {
           icon: 'coin' as const,
           title: 'Food Coin!',
-          body: `+${formatNumber(popup.reward.amount)} érme`,
+          body: `+${formatNumber(popup.reward.amount)} coins`,
           color: palette.coin,
         };
       case 'cash':
         return {
           icon: 'crate' as const,
-          title: 'Pénznyeremény!',
-          body: `${formatMoney(popup.reward.amount)} (${formatDuration(popup.reward.seconds)} bevétele)`,
+          title: 'Cash prize!',
+          body: `${formatMoney(popup.reward.amount)} (${formatDuration(popup.reward.seconds)} of income)`,
           color: palette.cash,
         };
       case 'booster':
         return {
           icon: 'flame' as const,
-          title: popup.reward.booster === 'turbo' ? 'Turbó műszak!' : 'Dupla bevétel!',
-          body: 'A bónusz azonnal aktiválódott.',
+          title: popup.reward.booster === 'turbo' ? 'Turbo shift!' : 'Double income!',
+          body: 'The bonus is active right now.',
           color: palette.primary,
         };
       default:
-        return { icon: 'crate' as const, title: 'Jutalom', body: '', color: palette.primary };
+        return { icon: 'crate' as const, title: 'Reward', body: '', color: palette.primary };
     }
   })();
 
@@ -184,7 +184,7 @@ function AchievementModal() {
           <Icon name="trophy" size={36} color={palette.accent} tint={palette.primary} />
         </View>
         <Text variant="caption" color={palette.textDim} align="center">
-          ÚJ EREDMÉNY
+          NEW ACHIEVEMENT
         </Text>
         <Text variant="title" color={palette.text} align="center">
           {achievement.name}
@@ -203,13 +203,13 @@ function AchievementModal() {
           <View style={styles.rewardChip}>
             <Icon name="flame" size={14} color={palette.success} />
             <Text variant="label" color={palette.text} style={{ marginLeft: 6 }}>
-              +{Math.round(achievement.incomeBonus * 100)}% bevétel
+              +{Math.round(achievement.incomeBonus * 100)}% income
             </Text>
           </View>
         </View>
       </View>
 
-      <Button label="Tovább" tone="primary" onPress={dismiss} style={{ marginTop: spacing.lg }} />
+      <Button label="Continue" tone="primary" onPress={dismiss} style={{ marginTop: spacing.lg }} />
     </ModalShell>
   );
 }

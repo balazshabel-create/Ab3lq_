@@ -30,13 +30,13 @@ type CatCoat = {
 
 /** Bundapaletták – meleg, cukrászdába illő tónusok. */
 const COATS: readonly CatCoat[] = [
-  { fur: '#F2C094', patch: '#E09A5F', ear: '#F5B2B2' }, // vörös cirmos
-  { fur: '#E8E4DC', patch: '#C9C3B8', ear: '#F0B8BC' }, // krém
-  { fur: '#9DA3AE', patch: '#7B8291', ear: '#E6A6AC' }, // szürke
+  { fur: '#F2C094', patch: '#E09A5F', ear: '#F5B2B2' }, // ginger tabby
+  { fur: '#E8E4DC', patch: '#C9C3B8', ear: '#F0B8BC' }, // cream
+  { fur: '#9DA3AE', patch: '#7B8291', ear: '#E6A6AC' }, // grey
   { fur: '#4A4550', patch: '#332F3A', ear: '#C98F96' }, // fekete
-  { fur: '#F7EDE2', patch: '#EFB68C', ear: '#F3AEB4' }, // háromszínű
+  { fur: '#F7EDE2', patch: '#EFB68C', ear: '#F3AEB4' }, // calico
   { fur: '#D8B08C', patch: '#B98A63', ear: '#EDA9AF' }, // homok
-  { fur: '#B8CBD8', patch: '#93AEC0', ear: '#E4A3AA' }, // kékesszürke
+  { fur: '#B8CBD8', patch: '#93AEC0', ear: '#E4A3AA' }, // blue grey
 ];
 
 /** Kiegészítők – ezek adják a legtöbb felismerhető változatosságot. */
@@ -78,7 +78,7 @@ export const CatSprite = React.memo(function CatSprite({
         <Path d="M32 45c4.6 0 8.4 3 10.4 7.6-3 1.6-6.6 2.4-10.4 2.4V45Z" fill={coat.patch} />
       ) : null}
 
-      {/* --- Fül --- */}
+      {/* --- Ears --- */}
       <Path d="M18 26 16 12l12 6-10 8Z" fill={coat.fur} />
       <Path d="M46 26 48 12l-12 6 10 8Z" fill={coat.fur} />
       <Path d="M20.5 23 19.5 16l6 3-5 4Z" fill={coat.ear} />
@@ -112,13 +112,13 @@ export const CatSprite = React.memo(function CatSprite({
         </G>
       )}
 
-      {/* --- Orr és bajusz --- */}
+      {/* --- Nose and whiskers --- */}
       <Path d="M32 34.4l-2 1.6h4l-2-1.6Z" fill={coat.ear} />
       <G stroke={coat.patch} strokeWidth={1.2} strokeLinecap="round" opacity={0.75}>
         <Path d="M16 32h6M16 36h6M42 32h6M42 36h6" />
       </G>
 
-      {/* --- Kiegészítők --- */}
+      {/* --- Accessories --- */}
       {accessory === 'scarf' ? (
         <G>
           <Rect x={22} y={42} width={20} height={6} rx={3} fill={accent} />

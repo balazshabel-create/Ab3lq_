@@ -119,7 +119,7 @@ describe('városok', () => {
 
     const result = actions.unlockCity(state, city.id);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain('maxold');
+    if (!result.ok) expect(result.error).toContain('Max out');
   });
 
   it('a menedzserek hiánya önmagában is megakasztja a költözést', () => {

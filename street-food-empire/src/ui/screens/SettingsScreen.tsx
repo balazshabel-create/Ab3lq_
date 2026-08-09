@@ -28,106 +28,106 @@ export function SettingsScreen({ onClose }: { onClose: () => void }) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <SectionTitle title="Beállítások" />
+      <SectionTitle title="Settings" />
 
       <Card>
         <SettingRow
-          label="Hang"
-          hint="Effektek a kiszolgálásnál és vásárlásnál"
+          label="Sound"
+          hint="Sound effects when serving and buying"
           value={state.settings.sound}
           onChange={() => toggleSetting('sound')}
         />
         <Divider />
         <SettingRow
-          label="Rezgés"
-          hint="Visszajelzés koppintásnál"
+          label="Haptics"
+          hint="Feedback on every tap"
           value={state.settings.haptics}
           onChange={() => toggleSetting('haptics')}
         />
         <Divider />
         <SettingRow
-          label="Csökkentett animáció"
-          hint="Gyengébb készüléken simább futás"
+          label="Reduced motion"
+          hint="Smoother on weaker devices"
           value={state.settings.reducedMotion}
           onChange={() => toggleSetting('reducedMotion')}
         />
         <Divider />
         <SettingRow
-          label="Személyre szabott reklám"
-          hint="Kikapcsolva is ugyanannyi jutalom jár"
+          label="Personalised ads"
+          hint="Rewards stay the same when this is off"
           value={state.settings.personalizedAds}
           onChange={() => toggleSetting('personalizedAds')}
         />
       </Card>
 
-      <SectionTitle title="Statisztika" />
+      <SectionTitle title="Statistics" />
       <Card>
-        <StatRow label="Összes bevétel" value={formatMoney(state.stats.lifetimeEarnings)} />
-        <StatRow label="Ebben a futásban" value={formatMoney(state.runEarnings)} />
-        <StatRow label="Kézi kiszolgálás" value={formatNumber(state.stats.totalTaps)} />
-        <StatRow label="Megvett szintek" value={formatNumber(state.stats.totalLevelsBought)} />
-        <StatRow label="Menedzserek" value={formatNumber(state.stats.managersHired)} />
+        <StatRow label="Total earnings" value={formatMoney(state.stats.lifetimeEarnings)} />
+        <StatRow label="This run" value={formatMoney(state.runEarnings)} />
+        <StatRow label="Hand-served orders" value={formatNumber(state.stats.totalTaps)} />
+        <StatRow label="Levels bought" value={formatNumber(state.stats.totalLevelsBought)} />
+        <StatRow label="Managers" value={formatNumber(state.stats.managersHired)} />
         <StatRow label="Franchise" value={formatNumber(state.franchiseCount)} />
-        <StatRow label="Teljesített küldetés" value={formatNumber(state.stats.questsCompleted)} />
+        <StatRow label="Quests completed" value={formatNumber(state.stats.questsCompleted)} />
         <StatRow
-          label="Offline sapka"
+          label="Offline cap"
           value={formatDuration(useGameStore.getState().multipliers.offlineCapHours * 3600)}
         />
       </Card>
 
-      <SectionTitle title="Vásárlások" />
+      <SectionTitle title="Purchases" />
       <Card>
         <Text variant="caption" color={palette.textDim} style={{ marginBottom: spacing.md }}>
-          Ha új készüléken játszol, vagy újratelepítetted a játékot, itt tudod
-          visszahozni a korábbi vásárlásaidat.
+          If you play on a new device or reinstalled the game, you can bring
+          back your earlier purchases here.
         </Text>
         <Button
-          label="Vásárlások visszaállítása"
+          label="Restore purchases"
           tone="secondary"
           disabled={busy}
           onPress={() => void restore()}
         />
       </Card>
 
-      <SectionTitle title="Veszélyzóna" />
+      <SectionTitle title="Danger zone" />
       <Card>
         <Text variant="caption" color={palette.textDim} style={{ marginBottom: spacing.md }}>
-          A törlés minden haladást elvisz: pénz, városok, csillagok, eredmények.
-          A megvásárolt csomagok megmaradnak.
+          Deleting wipes all progress: cash, cities, stars, achievements. The
+          packs you purchased are kept.
         </Text>
-        <Button label="Játék törlése" tone="danger" onPress={() => setResetOpen(true)} />
+        <Button label="Delete game" tone="danger" onPress={() => setResetOpen(true)} />
       </Card>
 
       <Card style={styles.debugCard}>
         <Text variant="caption" color={palette.textDim}>
-          Reklámszolgáltató: {adService.name}
+          Ad provider: {adService.name}
           {adService.isMock ? ' (teszt)' : ''}
         </Text>
         <Text variant="caption" color={palette.textDim}>
-          Bolt: {iapService.isMock ? 'teszt' : 'éles'} · {iapService.currentState}
+          Store: {iapService.isMock ? 'test' : 'live'} · {iapService.currentState}
         </Text>
       </Card>
 
-      <Button label="Vissza a játékhoz" tone="ghost" onPress={onClose} style={{ marginTop: spacing.lg }} />
+      <Button label="Back to the game" tone="ghost" onPress={onClose} style={{ marginTop: spacing.lg }} />
 
       <ModalShell
         visible={resetOpen}
         onClose={() => setResetOpen(false)}
-        title="Biztosan törlöd?"
+        title="Delete everything?"
       >
         <Text variant="body" color={palette.textMuted}>
-          Ez a művelet nem vonható vissza. Minden haladásod elvész, és a játék
-          a legelejéről indul.
+          This cannot be undone. All your progress is lost and the game starts
+          from the very beginning.
         </Text>
         <View style={{ flexDirection: 'row', marginTop: spacing.xl }}>
           <Button
-            label="Mégsem"
+            label="Cancel"
             tone="ghost"
             onPress={() => setResetOpen(false)}
             style={{ flex: 1 }}
           />
           <Button
-            label="Törlés"
+            label="Delete"
             tone="danger"
             onPress={() => {
               setResetOpen(false);

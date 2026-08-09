@@ -2,26 +2,26 @@ import { CITIES, CITY_SCALING } from '@/game/content/cities';
 import type { CityId, ProductCategory, ProductDef, ProductId } from '@/game/types';
 
 /**
- * TERMÉKEK
+ * PRODUCTS
  *
- * Városonként 6 termék, azonos matematikai vázzal:
+ * 6 products per city, all on the same mathematical skeleton:
  *
- *   ár(n)      = baseCost * 1.07^n          (n = már megvett szintek száma)
- *   bevétel/mp = szint * baseRevenue / baseCycleSeconds
+ *   price(n)  = baseCost * 1.07^n          (n = levels already bought)
+ *   income/s  = level * baseRevenue / baseCycleSeconds
  *
- * A vázat két arány határozza meg (docs/ECONOMY.md):
- *   - szomszédos termékek ára     ×14
- *   - szomszédos termékek bev./mp ×3,6
+ * Two ratios define the skeleton (docs/ECONOMY.md):
+ *   - price of neighbouring products     x14
+ *   - income/s of neighbouring products  x3.6
  *
- * Mivel az ár gyorsabban nő, mint a bevétel, egy új termék 1. szintje
- * *kevésbé* hatékony, mint a régi termék következő szintje – egészen addig,
- * amíg a régi terméknél a 1,07^n árgörbe utol nem éri. Ez a váltakozás adja a
- * "mindig van mit venni" érzést, és nem igényel mesterséges zárakat.
+ * Because price grows faster than income, level 1 of a new product is *less*
+ * efficient than the next level of the old one - right up until the 1.07^n
+ * price curve of the old product catches up. That alternation is what creates
+ * the "there is always something to buy" feeling, with no artificial gates.
  */
 
 const COST_GROWTH = 1.07;
 
-/** Az 1. város termékeinek nyers alapértékei. A többi város ebből skálázódik. */
+/** Raw base values for city 1's products. Every other city scales from these. */
 type ProductSeed = {
   slug: string;
   name: string;
@@ -32,16 +32,16 @@ type ProductSeed = {
   baseCycleSeconds: number;
 };
 
-/** Minden városban ugyanaz a 6 "szerep", de saját névvel és ikonnal. */
+/** The same 6 "roles" in every city, but with their own names and icons. */
 /**
- * A ciklusidők szándékosan RÖVIDEK (1–12 mp).
+ * Cycle times are SHORT on purpose (1-12s).
  *
- * Egy fél percig készülő adag menü-szinten még elfogadható, de a látható
- * konyhában elviselhetetlen: a játékos csak néz egy alig mozduló csíkot.
- * A bevétel/mp arányok viszont változatlanok — a `baseRevenue` értékeket
- * együtt csökkentettük a ciklusidőkkel, tehát a gazdaság hangolása áll.
+ * A batch that takes half a minute is acceptable in a menu, but unbearable in a
+ * visible kitchen: the player just stares at a barely moving bar. The income/s
+ * ratios are unchanged though - `baseRevenue` was lowered together with the
+ * cycle times, so the economy tuning still holds.
  *
- *   bevétel/mp = 1 · 3,5 · 13 · 47 · 170 · 610   (mint korábban)
+ *   income/s = 1 . 3.5 . 13 . 47 . 170 . 610   (as before)
  */
 const PRODUCT_SLOTS: readonly {
   slug: string;
@@ -59,30 +59,30 @@ const PRODUCT_SLOTS: readonly {
   { slug: 'dessert', category: 'sweet', icon: 'swirl', baseCost: 2_690_000, baseRevenue: 7_320, baseCycleSeconds: 12 },
 ];
 
-/** Városonkénti nevek – a 6 szerep sorrendjében. */
+/** Per-city names - in the order of the 6 roles. */
 const CITY_PRODUCT_NAMES: Record<CityId, readonly string[]> = {
-  budapest: ['Bécsi virsli', 'Sült krumpli tölcsér', 'Lángos', 'Gyros tekercs', 'Bodzás limonádé', 'Kürtőskalács'],
-  prague: ['Grillkolbász', 'Sajtos hasábburgonya', 'Bramborák', 'Csirkés pita', 'Meggyes szóda', 'Fahéjas tekercs'],
-  berlin: ['Currywurst', 'Pommes rot-weiß', 'Perec', 'Döner tál', 'Almás fröccs', 'Berlini fánk'],
-  istanbul: ['Kokoreç falatka', 'Fűszeres burgonya', 'Simit karika', 'Adana dürüm', 'Ayran korsó', 'Baklava kocka'],
-  bangkok: ['Satay nyárs', 'Ropogós banán', 'Roti palacsinta', 'Pad thai doboz', 'Jeges thai tea', 'Mangós ragadós rizs'],
-  newyork: ['Sarki hot dog', 'Fűszeres steak-fries', 'Kovászos bagel', 'Halal tál', 'Egg cream', 'Cheesecake szelet'],
+  budapest: ['Sausage Roll', 'Paper Cone Fries', 'Fried Flatbread', 'Gyros Wrap', 'Elderflower Soda', 'Chimney Cake'],
+  prague: ['Grilled Klobasa', 'Cheesy Fries', 'Potato Pancake', 'Chicken Pita', 'Cherry Fizz', 'Cinnamon Roll'],
+  berlin: ['Currywurst', 'Pommes Rot-Weiss', 'Soft Pretzel', 'Doner Bowl', 'Apple Spritz', 'Berliner Donut'],
+  istanbul: ['Street Skewer', 'Spiced Potatoes', 'Simit Ring', 'Adana Durum', 'Ayran Jug', 'Baklava Square'],
+  bangkok: ['Satay Sticks', 'Crispy Banana', 'Roti Pancake', 'Pad Thai Box', 'Iced Thai Tea', 'Mango Sticky Rice'],
+  newyork: ['Corner Hot Dog', 'Loaded Steak Fries', 'Sourdough Bagel', 'Halal Platter', 'Egg Cream', 'Cheesecake Slice'],
 };
 
 /**
- * Az a városon belüli összbevétel, aminél a termék megjelenik a listában.
- * Az alapár 60%-a: mire eljutsz idáig, épp majdnem meg tudod venni.
+ * The city-wide total earnings at which the product appears in the list.
+ * 60% of its base price: by the time you get here you can almost afford it.
  */
 function unlockThreshold(baseCost: number, slotIndex: number): number {
   return slotIndex === 0 ? 0 : baseCost * 0.6;
 }
 
 /**
- * A menedzser ára ≈ a termék 14. szintjének hatszorosa.
+ * Manager price is about six times the product's level-14 price.
  *
- * Korábban ennek a négyszerese volt, és az első menedzserre percekig kellett
- * gyűjteni — miközben a játékos épp az automatizálást tanulja meg. Az első
- * menedzser most nagyjából 60 Ft, ami néhány kiszolgálás.
+ * It used to be four times that, and saving for the first manager took minutes
+ * - exactly while the player is learning what automation is. The first manager
+ * now costs about $13, which is a handful of orders.
  */
 function managerCostFor(baseCost: number): number {
   return Math.round(baseCost * Math.pow(COST_GROWTH, 14) * 5);
@@ -90,7 +90,7 @@ function managerCostFor(baseCost: number): number {
 
 function buildCityProducts(cityId: CityId): ProductDef[] {
   const scaling = CITY_SCALING[cityId];
-  if (!scaling) throw new Error(`Nincs skálázás a városhoz: ${cityId}`);
+  if (!scaling) throw new Error(`No scaling for city: ${cityId}`);
   const names = CITY_PRODUCT_NAMES[cityId] ?? [];
 
   return PRODUCT_SLOTS.map((slot, index) => {
@@ -138,7 +138,7 @@ for (const product of PRODUCTS) {
 
 export function getProduct(id: ProductId): ProductDef {
   const product = PRODUCT_BY_ID.get(id);
-  if (!product) throw new Error(`Ismeretlen termék: ${id}`);
+  if (!product) throw new Error(`Unknown product: ${id}`);
   return product;
 }
 
@@ -150,5 +150,5 @@ export function productsOfCity(cityId: CityId): readonly ProductDef[] {
   return PRODUCTS_BY_CITY.get(cityId) ?? [];
 }
 
-/** Az első város első terméke – ezt kapja ingyen a játékos. */
+/** The first product of the first city - the player gets this for free. */
 export const STARTER_PRODUCT_ID: ProductId = PRODUCTS[0]!.id;

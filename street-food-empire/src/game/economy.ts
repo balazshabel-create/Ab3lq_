@@ -118,8 +118,8 @@ export function nextMilestone(level: number): { level: number; label: string } |
     if (level < milestone.level) {
       const label =
         'income' in milestone && milestone.income
-          ? `×${milestone.income} bevétel`
-          : 'kétszer gyorsabb';
+          ? `×${milestone.income} income`
+          : 'twice as fast';
       return { level: milestone.level, label };
     }
   }
@@ -127,7 +127,7 @@ export function nextMilestone(level: number): { level: number; label: string } |
   const { repeatFrom, repeatEvery, repeatIncome } = GAME_CONFIG.milestones;
   const base = Math.max(level, repeatFrom);
   const next = Math.floor(base / repeatEvery) * repeatEvery + repeatEvery;
-  return { level: next, label: `×${repeatIncome} bevétel` };
+  return { level: next, label: `×${repeatIncome} income` };
 }
 
 // ---------------------------------------------------------------------------

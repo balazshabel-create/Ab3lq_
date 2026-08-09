@@ -87,13 +87,13 @@ export function Sheet({ visible, title, subtitle, onClose, children }: Props) {
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {/* A háttér elsötétül, de a jelenet átlátszik – látszik, hogy megy tovább. */}
+      {/* The backdrop dims, but the scene shows through - you can see it keeps running. */}
       <Animated.View style={[styles.backdrop, { opacity: backdrop }]} pointerEvents="auto">
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="Panel bezárása"
+          accessibilityLabel="Close panel"
         />
       </Animated.View>
 
@@ -126,7 +126,7 @@ export function Sheet({ visible, title, subtitle, onClose, children }: Props) {
             onPress={onClose}
             hitSlop={14}
             accessibilityRole="button"
-            accessibilityLabel="Bezárás"
+            accessibilityLabel="Close"
             style={styles.close}
           >
             <Icon name="close" size={20} color={palette.textMuted} />

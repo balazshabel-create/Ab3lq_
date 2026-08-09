@@ -43,10 +43,10 @@ export function MissionsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} removeClippedSubviews>
-      {/* --- Események --- */}
+      {/* --- Events --- */}
       {events.length > 0 ? (
         <>
-          <SectionTitle title="Élő esemény" hint="ma" />
+          <SectionTitle title="Live event" hint="today" />
           {events.map((event) => (
             <Card key={event.id} style={[styles.eventCard, { borderColor: event.color }]}>
               <View style={styles.eventHeader}>
@@ -63,16 +63,16 @@ export function MissionsScreen() {
         </>
       ) : null}
 
-      {/* --- Napi küldetések --- */}
+      {/* --- Daily quests --- */}
       <SectionTitle
-        title="Napi küldetések"
+        title="Daily quests"
         hint={`${quests.filter((q) => q.claimed).length}/${quests.length}`}
       />
 
       {quests.length === 0 ? (
         <EmptyState
-          title="Nincs aktív küldetés"
-          body="Az új küldetések éjfélkor érkeznek."
+          title="No active quests"
+          body="New quests arrive at midnight."
         />
       ) : (
         quests.map((quest) => (
@@ -114,17 +114,17 @@ export function MissionsScreen() {
         <Card style={styles.bonusCard}>
           <View style={{ flex: 1 }}>
             <Text variant="label" color={palette.text}>
-              Mind a {quests.length} teljesítve
+              All {quests.length} completed
             </Text>
             <Text variant="caption" color={palette.textDim}>
-              Bónusz: +{GAME_CONFIG.coins.dailyAllCompleteBonus} Food Coin
+              Bonus: +{GAME_CONFIG.coins.dailyAllCompleteBonus} Food Coins
             </Text>
           </View>
           {state.daily.allClaimedBonusTaken ? (
             <Icon name="check" size={22} color={palette.success} />
           ) : (
             <Button
-              label="Felveszem"
+              label="Claim"
               compact
               tone={allQuestsClaimed(state) ? 'success' : 'ghost'}
               disabled={!allQuestsClaimed(state)}
@@ -136,7 +136,7 @@ export function MissionsScreen() {
 
       {/* --- Achievementek --- */}
       <SectionTitle
-        title="Eredmények"
+        title="Achievements"
         hint={`${unlockedCount}/${ACHIEVEMENTS.length}`}
       />
 

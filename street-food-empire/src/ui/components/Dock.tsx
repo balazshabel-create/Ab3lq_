@@ -30,12 +30,12 @@ export type PanelKey =
   | 'shop';
 
 export const DOCK_ITEMS: readonly { key: PanelKey; label: string; icon: IconName }[] = [
-  { key: 'products', label: 'Kínálat', icon: 'stand' },
-  { key: 'upgrades', label: 'Gépek', icon: 'upgrade' },
-  { key: 'staff', label: 'Csapat', icon: 'chef' },
-  { key: 'cities', label: 'Helyek', icon: 'city' },
-  { key: 'missions', label: 'Küldetés', icon: 'quest' },
-  { key: 'shop', label: 'Bolt', icon: 'shop' },
+  { key: 'products', label: 'Menu', icon: 'stand' },
+  { key: 'upgrades', label: 'Machines', icon: 'upgrade' },
+  { key: 'staff', label: 'Crew', icon: 'chef' },
+  { key: 'cities', label: 'Places', icon: 'city' },
+  { key: 'missions', label: 'Missions', icon: 'quest' },
+  { key: 'shop', label: 'Shop', icon: 'shop' },
 ];
 
 export const Dock = React.memo(function Dock({
@@ -185,7 +185,7 @@ export const RewardRail = React.memo(function RewardRail() {
         icon="flame"
         color={palette.primary}
         label="×2"
-        caption={doubleGate.allowed ? (free ? 'ingyen' : 'videó') : '—'}
+        caption={doubleGate.allowed ? (free ? 'free' : 'video') : '—'}
         ready={doubleGate.allowed && !busy}
         onPress={() => void watchRewarded('doubleIncome')}
         seed={1}
@@ -193,8 +193,8 @@ export const RewardRail = React.memo(function RewardRail() {
       <RewardButton
         icon="clock"
         color={palette.info}
-        label="Turbó"
-        caption={turboGate.allowed ? (free ? 'ingyen' : 'videó') : '—'}
+        label="Turbo"
+        caption={turboGate.allowed ? (free ? 'free' : 'video') : '—'}
         ready={turboGate.allowed && !busy}
         onPress={() => void watchRewarded('turbo')}
         seed={2}
@@ -202,8 +202,8 @@ export const RewardRail = React.memo(function RewardRail() {
       <RewardButton
         icon="crate"
         color={palette.premium}
-        label="Láda"
-        caption={crateGate.allowed ? 'nyitható' : (crateWait ?? '—')}
+        label="Crate"
+        caption={crateGate.allowed ? 'ready' : (crateWait ?? '—')}
         ready={crateGate.allowed && !busy}
         onPress={() => void openFreeCrate()}
         seed={3}

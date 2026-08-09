@@ -55,8 +55,8 @@ export function ShopScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} removeClippedSubviews>
-      {/* --- Food Coin költés --- */}
-      <SectionTitle title="Food Coin ajánlatok" hint={`${formatNumber(state.coins)} érme`} />
+      {/* --- Food Coin spends --- */}
+      <SectionTitle title="Food Coin offers" hint={`${formatNumber(state.coins)} coins`} />
 
       {COIN_SPENDS.map((spend) => {
         const affordable = state.coins >= spend.coinCost;
@@ -91,8 +91,8 @@ export function ShopScreen() {
         );
       })}
 
-      {/* --- Kinézetek --- */}
-      <SectionTitle title="Kinézet" hint="csak vizuális" />
+      {/* --- Looks --- */}
+      <SectionTitle title="Looks" hint="visual only" />
       <View style={styles.cosmeticRow}>
         {COSMETICS.map((cosmetic) => {
           const owned = state.ownedCosmeticIds.includes(cosmetic.id);
@@ -122,7 +122,7 @@ export function ShopScreen() {
                 {cosmetic.name}
               </Text>
               <Text variant="caption" color={palette.textDim}>
-                {active ? 'Aktív' : owned ? 'Beállít' : goldLocked ? 'Zárt' : `${cosmetic.coinCost} érme`}
+                {active ? 'Active' : owned ? 'Use' : goldLocked ? 'Locked' : `${cosmetic.coinCost} coins`}
               </Text>
             </Touchable>
           );
@@ -130,7 +130,7 @@ export function ShopScreen() {
       </View>
 
       {/* --- IAP --- */}
-      <SectionTitle title="Támogatás" hint="valódi vásárlás" />
+      <SectionTitle title="Support" hint="real purchase" />
 
       {IAP_PRODUCTS.map((product) => {
         const owned = product.entitlement
@@ -153,7 +153,7 @@ export function ShopScreen() {
             </Text>
 
             <Button
-              label={owned ? 'Megvásárolva' : (prices[product.sku] ?? product.fallbackPrice)}
+              label={owned ? 'Purchased' : (prices[product.sku] ?? product.fallbackPrice)}
               tone={owned ? 'ghost' : product.type === 'nonConsumable' ? 'premium' : 'primary'}
               disabled={owned || busy}
               onPress={() => void purchase(product.sku)}
@@ -163,7 +163,7 @@ export function ShopScreen() {
       })}
 
       <Button
-        label="Vásárlások visszaállítása"
+        label="Restore purchases"
         tone="ghost"
         disabled={busy}
         onPress={() => void restore()}
@@ -171,8 +171,8 @@ export function ShopScreen() {
       />
 
       <Text variant="caption" color={palette.textDim} align="center" style={styles.disclaimer}>
-        A játék teljes egészében végigjátszható vásárlás nélkül. A Food Coin
-        küldetésekből, eredményekből és ládákból is gyűjthető.
+        The game can be completed in full without spending anything. Food Coins
+        can also be earned from quests, achievements and crates.
       </Text>
     </ScrollView>
   );

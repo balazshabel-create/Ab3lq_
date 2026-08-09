@@ -1,58 +1,58 @@
 import type { AchievementDef } from '@/game/types';
 
 /**
- * ACHIEVEMENTEK
+ * ACHIEVEMENTS
  *
- * Franchise (presztízs) után is megmaradnak, és mindegyik ad egy kis **tartós,
- * additív** globális bevételbónuszt. Ez adja a "sose vesztek el semmit"
- * érzést, ami az idle játékok visszatérési arányának egyik motorja.
+ * They survive a franchise (prestige) reset, and each grants a small
+ * **permanent, additive** global income bonus. That is what creates the "I
+ * never lose anything" feeling, one of the engines behind idle-game retention.
  *
- * Összes bónusz mind a 27 teljesítésével: +2,04 (azaz ×3,04 globális bevétel).
+ * Total bonus with all 27 unlocked: +2.04 (i.e. x3.04 global income).
  */
 
 type Seed = Omit<AchievementDef, 'id'> & { id: string };
 
 const SEEDS: readonly Seed[] = [
-  // --- Bevétel ---
-  { id: 'earn-1k', name: 'Első ezres', description: 'Keress összesen $1 000-t.', metric: 'lifetimeEarnings', threshold: 1e3, coinReward: 10, incomeBonus: 0.02 },
-  { id: 'earn-100k', name: 'Törzsvendégek', description: 'Keress összesen $100 E-t.', metric: 'lifetimeEarnings', threshold: 1e5, coinReward: 15, incomeBonus: 0.03 },
-  { id: 'earn-10m', name: 'Sorban állnak', description: 'Keress összesen $10 M-t.', metric: 'lifetimeEarnings', threshold: 1e7, coinReward: 20, incomeBonus: 0.04 },
-  { id: 'earn-1b', name: 'Városi legenda', description: 'Keress összesen $1 Mrd-t.', metric: 'lifetimeEarnings', threshold: 1e9, coinReward: 30, incomeBonus: 0.06 },
-  { id: 'earn-1t', name: 'Étteremmágnás', description: 'Keress összesen $1 B-t.', metric: 'lifetimeEarnings', threshold: 1e12, coinReward: 45, incomeBonus: 0.08 },
-  { id: 'earn-1qa', name: 'Gasztrobirodalom', description: 'Keress összesen $1 T-t.', metric: 'lifetimeEarnings', threshold: 1e18, coinReward: 80, incomeBonus: 0.15 },
+  // --- Earnings ---
+  { id: 'earn-1k', name: 'First Thousand', description: 'Earn $1,000 in total.', metric: 'lifetimeEarnings', threshold: 1e3, coinReward: 10, incomeBonus: 0.02 },
+  { id: 'earn-100k', name: 'Regulars', description: 'Earn $100 K in total.', metric: 'lifetimeEarnings', threshold: 1e5, coinReward: 15, incomeBonus: 0.03 },
+  { id: 'earn-10m', name: 'Round the Block', description: 'Earn $10 M in total.', metric: 'lifetimeEarnings', threshold: 1e7, coinReward: 20, incomeBonus: 0.04 },
+  { id: 'earn-1b', name: 'Local Legend', description: 'Earn $1 B in total.', metric: 'lifetimeEarnings', threshold: 1e9, coinReward: 30, incomeBonus: 0.06 },
+  { id: 'earn-1t', name: 'Food Tycoon', description: 'Earn $1 T in total.', metric: 'lifetimeEarnings', threshold: 1e12, coinReward: 45, incomeBonus: 0.08 },
+  { id: 'earn-1qa', name: 'Street Food Empire', description: 'Earn $1 Qi in total.', metric: 'lifetimeEarnings', threshold: 1e18, coinReward: 80, incomeBonus: 0.15 },
 
-  // --- Kézi kiszolgálás ---
-  { id: 'tap-100', name: 'Kezdő kezek', description: 'Szolgálj ki 100 vevőt kézzel.', metric: 'totalTaps', threshold: 100, coinReward: 10, incomeBonus: 0.02 },
-  { id: 'tap-1000', name: 'Gyors ujjak', description: 'Szolgálj ki 1 000 vevőt kézzel.', metric: 'totalTaps', threshold: 1_000, coinReward: 15, incomeBonus: 0.03 },
-  { id: 'tap-10000', name: 'Pultkirály', description: 'Szolgálj ki 10 000 vevőt kézzel.', metric: 'totalTaps', threshold: 10_000, coinReward: 25, incomeBonus: 0.05 },
+  // --- Hand service ---
+  { id: 'tap-100', name: 'Fresh Hands', description: 'Serve 100 customers by hand.', metric: 'totalTaps', threshold: 100, coinReward: 10, incomeBonus: 0.02 },
+  { id: 'tap-1000', name: 'Quick Fingers', description: 'Serve 1,000 customers by hand.', metric: 'totalTaps', threshold: 1_000, coinReward: 15, incomeBonus: 0.03 },
+  { id: 'tap-10000', name: 'Counter King', description: 'Serve 10,000 customers by hand.', metric: 'totalTaps', threshold: 10_000, coinReward: 25, incomeBonus: 0.05 },
 
-  // --- Fejlesztés ---
-  { id: 'levels-100', name: 'Építkezünk', description: 'Vegyél összesen 100 termékszintet.', metric: 'totalLevelsBought', threshold: 100, coinReward: 10, incomeBonus: 0.02 },
-  { id: 'levels-1000', name: 'Nagyüzem', description: 'Vegyél összesen 1 000 termékszintet.', metric: 'totalLevelsBought', threshold: 1_000, coinReward: 20, incomeBonus: 0.04 },
-  { id: 'levels-10000', name: 'Sosem elég', description: 'Vegyél összesen 10 000 termékszintet.', metric: 'totalLevelsBought', threshold: 10_000, coinReward: 35, incomeBonus: 0.07 },
+  // --- Upgrades ---
+  { id: 'levels-100', name: 'Building Up', description: 'Buy 100 product levels in total.', metric: 'totalLevelsBought', threshold: 100, coinReward: 10, incomeBonus: 0.02 },
+  { id: 'levels-1000', name: 'Full Production', description: 'Buy 1,000 product levels in total.', metric: 'totalLevelsBought', threshold: 1_000, coinReward: 20, incomeBonus: 0.04 },
+  { id: 'levels-10000', name: 'Never Enough', description: 'Buy 10,000 product levels in total.', metric: 'totalLevelsBought', threshold: 10_000, coinReward: 35, incomeBonus: 0.07 },
 
-  // --- Menedzserek ---
-  { id: 'manager-1', name: 'Delegálás', description: 'Vegyél fel az első menedzsert.', metric: 'managersHired', threshold: 1, coinReward: 15, incomeBonus: 0.03 },
-  { id: 'manager-6', name: 'Teljes stáb', description: 'Vegyél fel 6 menedzsert.', metric: 'managersHired', threshold: 6, coinReward: 25, incomeBonus: 0.05 },
-  { id: 'manager-18', name: 'Középvezetés', description: 'Vegyél fel 18 menedzsert.', metric: 'managersHired', threshold: 18, coinReward: 40, incomeBonus: 0.08 },
-  { id: 'manager-36', name: 'Vezérkar', description: 'Vegyél fel 36 menedzsert.', metric: 'managersHired', threshold: 36, coinReward: 60, incomeBonus: 0.12 },
+  // --- Managers ---
+  { id: 'manager-1', name: 'Delegation', description: 'Hire your first manager.', metric: 'managersHired', threshold: 1, coinReward: 15, incomeBonus: 0.03 },
+  { id: 'manager-6', name: 'Full Crew', description: 'Hire 6 managers.', metric: 'managersHired', threshold: 6, coinReward: 25, incomeBonus: 0.05 },
+  { id: 'manager-18', name: 'Middle Management', description: 'Hire 18 managers.', metric: 'managersHired', threshold: 18, coinReward: 40, incomeBonus: 0.08 },
+  { id: 'manager-36', name: 'Head Office', description: 'Hire 36 managers.', metric: 'managersHired', threshold: 36, coinReward: 60, incomeBonus: 0.12 },
 
-  // --- Városok ---
-  { id: 'city-2', name: 'Határátlépés', description: 'Nyiss meg egy második várost.', metric: 'citiesUnlocked', threshold: 2, coinReward: 25, incomeBonus: 0.05 },
-  { id: 'city-4', name: 'Kontinensjáró', description: 'Nyiss meg 4 várost.', metric: 'citiesUnlocked', threshold: 4, coinReward: 50, incomeBonus: 0.1 },
-  { id: 'city-6', name: 'Világkonyha', description: 'Nyiss meg mind a 6 várost.', metric: 'citiesUnlocked', threshold: 6, coinReward: 100, incomeBonus: 0.2 },
+  // --- Cities ---
+  { id: 'city-2', name: 'Crossing Borders', description: 'Unlock a second city.', metric: 'citiesUnlocked', threshold: 2, coinReward: 25, incomeBonus: 0.05 },
+  { id: 'city-4', name: 'Continent Hopper', description: 'Unlock 4 cities.', metric: 'citiesUnlocked', threshold: 4, coinReward: 50, incomeBonus: 0.1 },
+  { id: 'city-6', name: 'World Kitchen', description: 'Unlock all 6 cities.', metric: 'citiesUnlocked', threshold: 6, coinReward: 100, incomeBonus: 0.2 },
 
   // --- Franchise ---
-  { id: 'franchise-1', name: 'Újrakezdés', description: 'Franchise-old a birodalmadat egyszer.', metric: 'franchiseCount', threshold: 1, coinReward: 30, incomeBonus: 0.06 },
-  { id: 'franchise-5', name: 'Sorozatalapító', description: 'Franchise-olj 5-ször.', metric: 'franchiseCount', threshold: 5, coinReward: 60, incomeBonus: 0.12 },
-  { id: 'franchise-25', name: 'Örök körforgás', description: 'Franchise-olj 25-ször.', metric: 'franchiseCount', threshold: 25, coinReward: 120, incomeBonus: 0.25 },
+  { id: 'franchise-1', name: 'Fresh Start', description: 'Franchise your empire once.', metric: 'franchiseCount', threshold: 1, coinReward: 30, incomeBonus: 0.06 },
+  { id: 'franchise-5', name: 'Serial Founder', description: 'Franchise 5 times.', metric: 'franchiseCount', threshold: 5, coinReward: 60, incomeBonus: 0.12 },
+  { id: 'franchise-25', name: 'Endless Cycle', description: 'Franchise 25 times.', metric: 'franchiseCount', threshold: 25, coinReward: 120, incomeBonus: 0.25 },
 
-  // --- Küldetés / láda ---
-  { id: 'quests-10', name: 'Napi rutin', description: 'Teljesíts 10 napi küldetést.', metric: 'questsCompleted', threshold: 10, coinReward: 20, incomeBonus: 0.03 },
-  { id: 'quests-100', name: 'Kitartás', description: 'Teljesíts 100 napi küldetést.', metric: 'questsCompleted', threshold: 100, coinReward: 60, incomeBonus: 0.1 },
-  { id: 'crates-25', name: 'Szerencsés kéz', description: 'Nyiss ki 25 ládát.', metric: 'cratesOpened', threshold: 25, coinReward: 25, incomeBonus: 0.04 },
-  { id: 'crates-200', name: 'Ládavadász', description: 'Nyiss ki 200 ládát.', metric: 'cratesOpened', threshold: 200, coinReward: 70, incomeBonus: 0.09 },
-  { id: 'ads-50', name: 'Támogató', description: 'Nézz meg 50 jutalomvideót.', metric: 'adsWatched', threshold: 50, coinReward: 40, incomeBonus: 0.08 },
+  // --- Quests / crates ---
+  { id: 'quests-10', name: 'Daily Routine', description: 'Complete 10 daily quests.', metric: 'questsCompleted', threshold: 10, coinReward: 20, incomeBonus: 0.03 },
+  { id: 'quests-100', name: 'Persistence', description: 'Complete 100 daily quests.', metric: 'questsCompleted', threshold: 100, coinReward: 60, incomeBonus: 0.1 },
+  { id: 'crates-25', name: 'Lucky Hand', description: 'Open 25 crates.', metric: 'cratesOpened', threshold: 25, coinReward: 25, incomeBonus: 0.04 },
+  { id: 'crates-200', name: 'Crate Hunter', description: 'Open 200 crates.', metric: 'cratesOpened', threshold: 200, coinReward: 70, incomeBonus: 0.09 },
+  { id: 'ads-50', name: 'Supporter', description: 'Watch 50 rewarded videos.', metric: 'adsWatched', threshold: 50, coinReward: 40, incomeBonus: 0.08 },
 ];
 
 export const ACHIEVEMENTS: readonly AchievementDef[] = SEEDS;
@@ -63,7 +63,7 @@ export function getAchievement(id: string): AchievementDef | null {
   return BY_ID.get(id) ?? null;
 }
 
-/** Az összes achievement bónuszának összege, ha mind megvan – balance-ellenőrzéshez. */
+/** Sum of every achievement bonus when all are unlocked - for balance checks. */
 export function totalAchievementBonus(): number {
   return ACHIEVEMENTS.reduce((sum, a) => sum + a.incomeBonus, 0);
 }

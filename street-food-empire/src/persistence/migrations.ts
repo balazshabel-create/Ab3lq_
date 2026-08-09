@@ -79,20 +79,20 @@ export function migrate(raw: RawSave): RawSave {
   while (version < GAME_CONFIG.saveVersion) {
     const step = MIGRATIONS.find((m) => m.from === version);
     if (!step) {
-      throw new Error(`Nincs migráció a(z) ${version}. verzióról.`);
+      throw new Error(`No migration from version ${version}.`);
     }
     current = step.migrate(current);
     version = step.to;
     current.version = version;
 
     guard += 1;
-    if (guard > 50) throw new Error('Végtelen migrációs ciklus.');
+    if (guard > 50) throw new Error('Infinite migration loop.');
   }
 
   if (version > GAME_CONFIG.saveVersion) {
     // Újabb mentés régebbi apphoz: nem próbáljuk visszafelé konvertálni.
     throw new Error(
-      `A mentés újabb (${version}), mint az alkalmazás (${GAME_CONFIG.saveVersion}).`,
+      `The save is newer (${version}) than the app (${GAME_CONFIG.saveVersion}).`,
     );
   }
 
@@ -234,6 +234,6 @@ export function coerceToGameState(raw: RawSave, wallMs: number): GameState {
 export function migrateAndCoerce(raw: RawSave, wallMs: number): GameState {
   const migrated = migrate(raw);
   const state = coerceToGameState(migrated, wallMs);
-  log.debug('Mentés migrálva és normalizálva', { version: state.version });
+  log.debug('Save migrated and normalised', { version: state.version });
   return state;
 }

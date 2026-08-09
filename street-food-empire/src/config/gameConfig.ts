@@ -135,16 +135,23 @@ export const GAME_CONFIG = {
   },
 
   /**
-   * Költözés a következő helyszínre.
+   * Moving to the next location.
    *
-   * Nem elég a pénz: a jelenlegi helyet ki kell maxolni. Ez adja a
-   * „kinőttem ezt a helyet” érzést, és megakadályozza, hogy a játékos
-   * átugorja a tartalmat, majd egy üres, fejletlen helyen ragadjon.
+   * Cash alone is not enough: the current spot has to be maxed out. That is
+   * what creates the "I have outgrown this place" feeling, and it stops the
+   * player from skipping content and getting stranded in an empty, undeveloped
+   * location.
+   *
+   * The bar is deliberately LOW (level 10 + managers). Level 25 on all six
+   * products meant the second city was hours away, and the most interesting
+   * thing the game has to offer - a new place - stayed hidden behind a grind.
+   * Ten levels plus a manager on every product is still a real milestone (it
+   * means the whole menu is unlocked and automated), but it lands in minutes.
    */
   cityUnlock: {
-    /** Minden terméknek el kell érnie ezt a szintet a jelenlegi helyen. */
-    requiredProductLevel: 25,
-    /** Minden terméknek automatizáltnak kell lennie. */
+    /** Every product has to reach this level in the current location. */
+    requiredProductLevel: 10,
+    /** Every product has to be automated. */
     requireAllManagers: true,
   },
 

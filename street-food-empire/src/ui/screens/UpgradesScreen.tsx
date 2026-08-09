@@ -9,14 +9,14 @@ import { Badge, Button, Card, SectionTitle, Text } from '@/ui/components/primiti
 import { palette, radius, spacing } from '@/ui/theme';
 
 /**
- * GÉPEK KÉPERNYŐ
+ * MACHINES SCREEN
  *
- * Egy gép = egy kártya. Mindig látszik:
+ * One machine = one card. Always visible:
  *   - mit ad a JELENLEGI szint (ha van),
- *   - és mit adna a következő, mennyiért.
+ *   - and what the next tier would give, and for how much.
  *
- * Ez a kettősség fontos: enélkül a játékos nem tudja megítélni, megéri-e a
- * fejlesztés, és inkább nem vesz semmit.
+ * That pairing matters: without it the player cannot judge whether an upgrade
+ * is worth it, and ends up buying nothing.
  */
 export function UpgradesScreen() {
   const tick = useGameStore((s) => s.tick);
@@ -25,7 +25,7 @@ export function UpgradesScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} removeClippedSubviews>
-      <SectionTitle title="Gépek és berendezés" hint={`${EQUIPMENT.length} db`} />
+      <SectionTitle title="Machines and equipment" hint={`${EQUIPMENT.length} total`} />
 
       {EQUIPMENT.map((equipment) => {
         const owned = state.equipment[equipment.id] ?? 0;
@@ -49,7 +49,7 @@ export function UpgradesScreen() {
                   {equipment.name}
                 </Text>
                 <Text variant="caption" color={palette.textDim}>
-                  {owned > 0 ? `${owned}. szint / ${equipment.tiers.length}` : 'Még nincs meg'}
+                  {owned > 0 ? `Tier ${owned} / ${equipment.tiers.length}` : 'Not owned yet'}
                 </Text>
               </View>
               {owned >= equipment.tiers.length ? (
@@ -77,7 +77,7 @@ export function UpgradesScreen() {
                   </Text>
                 </View>
                 <Button
-                  label="Fejlesztés"
+                  label="Upgrade"
                   sublabel={formatMoney(next.cost)}
                   tone="primary"
                   disabled={!affordable}
@@ -86,7 +86,7 @@ export function UpgradesScreen() {
               </>
             ) : (
               <Text variant="caption" color={palette.textDim}>
-                Ezt a gépet teljesen kifejlesztetted.
+                This machine is fully upgraded.
               </Text>
             )}
           </Card>

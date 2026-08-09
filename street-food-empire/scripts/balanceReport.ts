@@ -30,7 +30,7 @@ import { STAFF, staffLevelCost } from '../src/game/content/staff';
 import * as actions from '../src/game/actions';
 import { cycleSeconds, levelCost, revenuePerCycle, starsForRun } from '../src/game/economy';
 import { createInitialState } from '../src/game/initialState';
-import { computeMultipliers, totalIncomePerSecond } from '../src/game/selectors';
+import { cityMastery, computeMultipliers, totalIncomePerSecond } from '../src/game/selectors';
 import { creditEarnings } from '../src/game/simulate';
 import type { GameState, Multipliers } from '../src/game/types';
 
@@ -259,12 +259,18 @@ function run(): void {
     if (
       city &&
       state.cash >= city.unlockCost &&
-      state.stats.lifetimeEarnings >= city.unlockRequiresLifetime
+      state.stats.lifetimeEarnings >= city.unlockRequiresLifetime &&
+      // The mastery gate must be checked BEFORE calling the action: unlockCity
+      // fails silently here, and `continue` without a state change would spin
+      // the loop forever.
+      cityMastery(state, state.activeCityId).ready
     ) {
-      actions.unlockCity(state, city.id);
-      multipliers = computeMultipliers(state, wall);
-      note(`${city.name} megnyitva`);
-      continue;
+      const moved = actions.unlockCity(state, city.id);
+      if (moved.ok) {
+        multipliers = computeMultipliers(state, wall);
+        note(`${city.name} unlocked`);
+        continue;
+      }
     }
 
     const tapRate = tapRateAt(elapsed);

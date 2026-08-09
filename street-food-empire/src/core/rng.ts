@@ -36,7 +36,7 @@ export function createRng(seed: number): Rng {
     int: (min, max) => min + Math.floor(next() * (max - min + 1)),
     chance: (p) => next() < p,
     weighted: (items, weightOf) => {
-      if (items.length === 0) throw new Error('rng.weighted: üres lista');
+      if (items.length === 0) throw new Error('rng.weighted: empty list');
       let total = 0;
       for (const item of items) total += Math.max(0, weightOf(item));
       if (total <= 0) return items[0] as never;

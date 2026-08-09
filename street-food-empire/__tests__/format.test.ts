@@ -16,10 +16,10 @@ describe('formatNumber', () => {
   });
 
   it('utótagot használ ezertől', () => {
-    expect(formatNumber(1_000)).toBe('1 E');
-    expect(formatNumber(1_500)).toBe('1.5 E');
+    expect(formatNumber(1_000)).toBe('1 K');
+    expect(formatNumber(1_500)).toBe('1.5 K');
     expect(formatNumber(1_000_000)).toBe('1 M');
-    expect(formatNumber(2_500_000_000)).toBe('2.5 Mrd');
+    expect(formatNumber(2_500_000_000)).toBe('2.5 B');
   });
 
   it('nagyon nagy számoknál betűpárokra vált', () => {
@@ -29,7 +29,7 @@ describe('formatNumber', () => {
   });
 
   it('kezeli a negatív és a végtelen értéket', () => {
-    expect(formatNumber(-1500)).toBe('-1.5 E');
+    expect(formatNumber(-1500)).toBe('-1.5 K');
     expect(formatNumber(Infinity)).toBe('∞');
   });
 
@@ -54,15 +54,15 @@ describe('formatNumber', () => {
 
 describe('formatDuration', () => {
   it('másodperc, perc, óra, nap', () => {
-    expect(formatDuration(45)).toBe('45 mp');
-    expect(formatDuration(90)).toBe('1 p 30 mp');
-    expect(formatDuration(3600)).toBe('1 ó');
-    expect(formatDuration(3600 * 2 + 60 * 14)).toBe('2 ó 14 p');
-    expect(formatDuration(86400 * 3)).toBe('3 nap');
+    expect(formatDuration(45)).toBe('45s');
+    expect(formatDuration(90)).toBe('1m 30s');
+    expect(formatDuration(3600)).toBe('1h');
+    expect(formatDuration(3600 * 2 + 60 * 14)).toBe('2h 14m');
+    expect(formatDuration(86400 * 3)).toBe('3d');
   });
 
   it('negatív értéket nullaként kezel', () => {
-    expect(formatDuration(-10)).toBe('0 mp');
+    expect(formatDuration(-10)).toBe('0s');
   });
 });
 

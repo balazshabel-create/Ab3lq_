@@ -56,7 +56,7 @@ function loadModule(): RnIapModule | null {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     cachedModule = require('react-native-iap') as RnIapModule;
   } catch {
-    log.info('A react-native-iap nincs telepítve – mock vásárlás fut.');
+    log.info('react-native-iap is not installed - running mock purchases.');
     cachedModule = null;
   }
   return cachedModule;
@@ -98,10 +98,10 @@ export class RnIapProvider implements IapProvider {
       if (Platform.OS === 'android' && mod.flushFailedPurchasesCachedAsPendingAndroid) {
         await mod.flushFailedPurchasesCachedAsPendingAndroid().catch(() => undefined);
       }
-      log.info('IAP kapcsolat létrejött');
+      log.info('IAP connection established');
       return true;
     } catch (err) {
-      log.warn('IAP kapcsolódás sikertelen', err);
+      log.warn('IAP connection failed', err);
       return false;
     }
   }
@@ -118,14 +118,14 @@ export class RnIapProvider implements IapProvider {
         description: p.description,
       }));
     } catch (err) {
-      log.warn('Termékek lekérése sikertelen', err);
+      log.warn('Fetching products failed', err);
       return [];
     }
   }
 
   async purchase(sku: string): Promise<PurchaseResult> {
     const mod = this.mod;
-    if (!mod) return { status: 'error', reason: 'A bolt nem elérhető.' };
+    if (!mod) return { status: 'error', reason: 'The store is not available.' };
 
     try {
       const response = await mod.requestPurchase(
@@ -153,14 +153,14 @@ export class RnIapProvider implements IapProvider {
       return { status: 'purchased', sku: purchase.productId, transactionId };
     } catch (err) {
       if (isUserCancelled(err)) return { status: 'cancelled' };
-      log.warn('Vásárlás sikertelen', err);
-      return { status: 'error', reason: 'A vásárlás nem sikerült.' };
+      log.warn('Purchase failed', err);
+      return { status: 'error', reason: 'The purchase did not go through.' };
     }
   }
 
   async restorePurchases(): Promise<RestoreResult> {
     const mod = this.mod;
-    if (!mod) return { status: 'error', reason: 'A bolt nem elérhető.' };
+    if (!mod) return { status: 'error', reason: 'The store is not available.' };
 
     try {
       const purchases = await mod.getAvailablePurchases();
@@ -170,8 +170,8 @@ export class RnIapProvider implements IapProvider {
       }
       return { status: 'restored', skus: purchases.map((p) => p.productId) };
     } catch (err) {
-      log.warn('Visszaállítás sikertelen', err);
-      return { status: 'error', reason: 'A vásárlások visszaállítása nem sikerült.' };
+      log.warn('Restore failed', err);
+      return { status: 'error', reason: 'Restoring your purchases did not work.' };
     }
   }
 
@@ -186,7 +186,7 @@ export class RnIapProvider implements IapProvider {
     } catch (err) {
       // Ha a lezárás nem sikerül, a store újra kézbesíti – ezt a restore
       // folyamat kezeli, tehát a játékos nem veszít semmit.
-      log.warn('Tranzakció lezárása sikertelen', err);
+      log.warn('Finishing the transaction failed', err);
     }
   }
 
@@ -194,7 +194,7 @@ export class RnIapProvider implements IapProvider {
     try {
       await this.mod?.endConnection();
     } catch (err) {
-      log.debug('IAP lecsatlakozás hibája', err);
+      log.debug('IAP disconnect error', err);
     }
   }
 }

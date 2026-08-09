@@ -24,7 +24,7 @@ export class MockIapProvider implements IapProvider {
   private nextTransactionId = 1;
 
   async initialize(): Promise<boolean> {
-    log.info('MockIapProvider inicializálva (nincs valódi vásárlás)');
+    log.info('MockIapProvider initialised (no real purchases)');
     return true;
   }
 
@@ -40,7 +40,7 @@ export class MockIapProvider implements IapProvider {
 
   async purchase(sku: string): Promise<PurchaseResult> {
     const def = IAP_PRODUCTS.find((p) => p.sku === sku);
-    if (!def) return { status: 'error', reason: `Ismeretlen termék: ${sku}` };
+    if (!def) return { status: 'error', reason: `Unknown product: ${sku}` };
 
     await delay(400);
 
@@ -63,7 +63,7 @@ export class MockIapProvider implements IapProvider {
   }
 
   async finishTransaction(transactionId: string): Promise<void> {
-    log.debug('Mock tranzakció lezárva', transactionId);
+    log.debug('Mock transaction finished', transactionId);
   }
 
   async disconnect(): Promise<void> {

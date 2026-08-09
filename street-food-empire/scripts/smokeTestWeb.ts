@@ -1,12 +1,12 @@
 /**
- * FÜSTTESZT A WEB-ELŐNÉZETHEZ
+ * SMOKE TEST FOR THE WEB PREVIEW
  *
- * Betölti a `dist/preview.html`-t fejnélküli böngészőben, és VÉGIGJÁTSSZA a
- * legfontosabb hurkot: megvárja a vendéget, kiszolgálja, és ellenőrzi, hogy
- * tényleg nőtt-e a pénz. Ez fogja meg azt a hibaosztályt, amit a
- * típusellenőrzés és a unit tesztek nem: hogy a gomb elérhető-e egyáltalán.
+ * Loads `dist/preview.html` in a headless browser and actually PLAYS the most
+ * important loop: it waits for a customer, serves them, and checks that the
+ * cash really went up. This catches the class of bug that type checking and
+ * unit tests cannot: whether the button is reachable at all.
  *
- * Futtatás:  npx tsx scripts/smokeTestWeb.ts
+ * Run:  npx tsx scripts/smokeTestWeb.ts
  */
 
 import { existsSync, mkdirSync, readdirSync } from 'node:fs';
@@ -20,18 +20,18 @@ const previewPath = join(here, '..', 'dist', 'preview.html');
 const shotDir = join(here, '..', 'dist', 'shots');
 
 if (!existsSync(previewPath)) {
-  throw new Error('Nincs dist/preview.html – futtasd: npx tsx scripts/buildWebPreview.ts');
+  throw new Error('No dist/preview.html - run: npx tsx scripts/buildWebPreview.ts');
 }
 mkdirSync(shotDir, { recursive: true });
 
 const errors: string[] = [];
 
 /**
- * Az előtelepített Chromium megkeresése.
+ * Locate the pre-installed Chromium.
  *
- * A böngésző a PLAYWRIGHT_BROWSERS_PATH alatt van, de a verziószáma nem
- * feltétlenül egyezik a telepített playwright csomagéval – ilyenkor a
- * `launch()` letöltéssel próbálkozna, ami itt nem megy.
+ * The browser lives under PLAYWRIGHT_BROWSERS_PATH, but its version does not
+ * necessarily match the installed playwright package - in that case `launch()`
+ * would try to download one, which is not possible here.
  */
 function findChromium(): string | undefined {
   const root = process.env.PLAYWRIGHT_BROWSERS_PATH ?? '/opt/pw-browsers';
@@ -45,23 +45,23 @@ function findChromium(): string | undefined {
 }
 
 /**
- * A pontos készpénz a fejléc akadálymentesítési címkéjéből.
+ * The exact cash value, read from the header's accessibility label.
  *
- * A megjelenített „1,2 M Ft” formátum kerekít, tehát tesztelésre alkalmatlan;
- * a címke viszont a nyers egész értéket tartalmazza.
+ * The displayed "$1.2 M" format rounds, so it is useless for assertions; the
+ * label carries the raw integer.
  */
 async function readCash(page: Page): Promise<number> {
   return page.evaluate(() => {
-    const node = document.querySelector('[aria-label^="Készpénz "]');
+    const node = document.querySelector('[aria-label^="Cash "]');
     const label = node?.getAttribute('aria-label') ?? '';
-    const match = label.match(/Készpénz (\d+) dollár/);
+    const match = label.match(/Cash (\d+) dollars/);
     return match ? Number.parseInt(match[1] ?? '', 10) : NaN;
   });
 }
 
 async function main(): Promise<void> {
   const executablePath = findChromium();
-  console.log(`Böngésző: ${executablePath ?? '(alapértelmezett)'}`);
+  console.log(`Browser: ${executablePath ?? '(default)'}`);
 
   const browser = await chromium.launch(executablePath ? { executablePath } : {});
   const context = await browser.newContext({
@@ -69,8 +69,8 @@ async function main(): Promise<void> {
     deviceScaleFactor: 2,
   });
   const page = await context.newPage();
-  // Rövid alapértelmezett várakozás: egy hiányzó elem itt információ, nem ok
-  // arra, hogy fél percig álljon a teszt.
+  // Short default timeout: a missing element here is information, not a reason
+  // to stall the test for half a minute.
   page.setDefaultTimeout(6_000);
 
   page.on('console', (message) => {
@@ -80,55 +80,55 @@ async function main(): Promise<void> {
 
   await page.goto(`file://${previewPath}`, { waitUntil: 'load' });
 
-  // A játék akkor van kész, amikor a dokk gombjai megjelentek.
-  await page.getByRole('button', { name: 'Kínálat' }).waitFor({ timeout: 25_000 });
+  // The game is ready once the dock buttons have appeared.
+  await page.getByRole('button', { name: 'Menu' }).waitFor({ timeout: 25_000 });
   await page.waitForTimeout(1200);
 
   const shot = (name: string) => page.screenshot({ path: join(shotDir, `${name}.png`) });
-  await shot('01-kavezó');
+  await shot('01-cafe');
 
   // ------------------------------------------------------------------
-  // A LÉNYEG: érkezik-e vendég, és ki tudom-e szolgálni?
+  // THE POINT: does a customer arrive, and can I serve them?
   // ------------------------------------------------------------------
-  const serveButton = page.getByRole('button', { name: /elkészítése a vendégnek/ });
+  const serveButton = page.getByRole('button', { name: /^Cook .* for the customer$/ });
   await serveButton.first().waitFor({ timeout: 20_000 });
-  await page.waitForTimeout(1000); // amíg a vendég a helyére sétál
-  console.log('✓ Vendég megérkezett és koppintható.');
+  await page.waitForTimeout(1000); // while the customer walks into place
+  console.log('✓ Customer arrived and is tappable.');
 
   const cashBefore = await readCash(page);
 
-  // Néhány kiszolgálás: a virsli 1 mp alatt készül el.
+  // A few orders: the sausage takes 1 second to cook.
   let served = 0;
   for (let attempt = 0; attempt < 10 && served < 4; attempt += 1) {
     const button = serveButton.first();
     if (await button.isVisible().catch(() => false)) {
       await button.click({ timeout: 3000 }).catch(() => undefined);
       served += 1;
-      await page.waitForTimeout(1400); // főzés + átadás
+      await page.waitForTimeout(1400); // cooking + handover
     } else {
       await page.waitForTimeout(700);
     }
   }
-  await shot('02-kiszolgalas');
+  await shot('02-serving');
 
   const cashAfter = await readCash(page);
 
-  // A "készül…" jelzésnek meg kell jelennie főzés közben.
+  // The "cooking…" badge has to show up while cooking.
   await serveButton.first().click({ timeout: 3000 }).catch(() => undefined);
   await page.waitForTimeout(250);
-  const cookingVisible = (await page.getByText('készül…').count()) > 0;
-  await shot('03-fozes');
+  const cookingVisible = (await page.getByText('cooking…').count()) > 0;
+  await shot('03-cooking');
   await page.waitForTimeout(1500);
 
   // ------------------------------------------------------------------
-  // Panelek
+  // Panels
   // ------------------------------------------------------------------
   let panelsOpened = 0;
   for (const [label, name] of [
-    ['Kínálat', '04-kinalat'],
-    ['Gépek', '05-gepek'],
-    ['Helyek', '06-helyek'],
-    ['Bolt', '07-bolt'],
+    ['Menu', '04-menu'],
+    ['Machines', '05-machines'],
+    ['Places', '06-places'],
+    ['Shop', '07-shop'],
   ] as const) {
     const opened = await page
       .getByRole('button', { name: label })
@@ -137,7 +137,7 @@ async function main(): Promise<void> {
       .catch(() => false);
 
     if (!opened) {
-      errors.push(`A(z) "${label}" panel nem nyílt meg.`);
+      errors.push(`The "${label}" panel did not open.`);
       continue;
     }
 
@@ -145,16 +145,16 @@ async function main(): Promise<void> {
     await page.waitForTimeout(600);
     await shot(name);
 
-    // Bezárás a panel fejlécében lévő gombbal.
-    // `exact: true` kell: enélkül a „Bezárás” a háttér „Panel bezárása”
-    // címkéjére is illeszkedne, és a kettős találat hibát dobna.
+    // Close via the button in the panel header.
+    // `exact: true` is required: without it "Close" would also match the
+    // backdrop's "Close panel" label, and the double hit would throw.
     const closed = await page
-      .getByRole('button', { name: 'Bezárás', exact: true })
+      .getByRole('button', { name: 'Close', exact: true })
       .click({ timeout: 5_000 })
       .then(() => true)
       .catch(() => false);
 
-    if (!closed) errors.push(`A(z) "${label}" panel nem záródott be.`);
+    if (!closed) errors.push(`The "${label}" panel did not close.`);
     await page.waitForTimeout(600);
   }
 
@@ -162,20 +162,20 @@ async function main(): Promise<void> {
 
   // ------------------------------------------------------------------
   const income = cashAfter - cashBefore;
-  console.log('\n── FÜSTTESZT ──────────────────────────────');
-  console.log(`  Kiszolgálási kísérlet : ${served}`);
-  console.log(`  Készpénz előtte       : ${cashBefore}`);
-  console.log(`  Készpénz utána        : ${cashAfter}`);
-  console.log(`  Keresett              : ${income}`);
-  console.log(`  „készül…” látszott    : ${cookingVisible ? 'igen' : 'NEM'}`);
-  console.log(`  Képernyőképek         : dist/shots/`);
+  console.log('\n── SMOKE TEST ─────────────────────────────');
+  console.log(`  Serve attempts     : ${served}`);
+  console.log(`  Cash before        : ${cashBefore}`);
+  console.log(`  Cash after         : ${cashAfter}`);
+  console.log(`  Earned             : ${income}`);
+  console.log(`  "cooking…" visible : ${cookingVisible ? 'yes' : 'NO'}`);
+  console.log(`  Screenshots        : dist/shots/`);
 
   const checks: [string, boolean][] = [
-    ['Érkezik kiszolgálható vendég', served > 0],
-    ['A kiszolgálás tényleg fizet', Number.isFinite(income) && income > 0],
-    ['A főzés látszik a képernyőn', cookingVisible],
-    ['Mind a 4 panel megnyílik és bezárható', panelsOpened === 4],
-    ['Nincs konzolhiba', errors.length === 0],
+    ['A servable customer arrives', served > 0],
+    ['Serving actually pays', Number.isFinite(income) && income > 0],
+    ['Cooking is visible on screen', cookingVisible],
+    ['All 4 panels open and close', panelsOpened === 4],
+    ['No console errors', errors.length === 0],
   ];
 
   console.log('');
@@ -186,7 +186,7 @@ async function main(): Promise<void> {
   }
 
   if (errors.length > 0) {
-    console.log(`\n  Hibák (${errors.length}):`);
+    console.log(`\n  Errors (${errors.length}):`);
     for (const error of [...new Set(errors)].slice(0, 10)) {
       console.log(`    · ${error.slice(0, 180)}`);
     }
@@ -197,6 +197,6 @@ async function main(): Promise<void> {
 }
 
 void main().catch((error) => {
-  console.error('A füstteszt elszállt:', error);
+  console.error('The smoke test crashed:', error);
   process.exitCode = 1;
 });

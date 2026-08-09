@@ -48,7 +48,7 @@ export function CitiesScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} removeClippedSubviews>
       <SectionTitle
-        title="Helyszínek"
+        title="Locations"
         hint={`${state.unlockedCityIds.length}/${CITIES.length}`}
       />
 
@@ -81,7 +81,7 @@ export function CitiesScreen() {
                   </Text>
                 </View>
                 {isActive ? (
-                  <Badge label="AKTÍV" color={city.colors[0]} textColor="#1A0E03" />
+                  <Badge label="ACTIVE" color={city.colors[0]} textColor="#1A0E03" />
                 ) : status.unlocked ? (
                   <Icon name="check" size={18} color={palette.success} />
                 ) : (
@@ -93,38 +93,38 @@ export function CitiesScreen() {
                 <View style={styles.unlockBlock}>
                   <View style={styles.unlockRow}>
                     <Text variant="caption" color={palette.textMuted}>
-                      Ár: {formatMoney(city.unlockCost)}
+                      Price: {formatMoney(city.unlockCost)}
                     </Text>
                     <Text variant="caption" color={palette.accent}>
-                      {formatMultiplier(city.globalMultiplier)} globális bevétel
+                      {formatMultiplier(city.globalMultiplier)} global income
                     </Text>
                   </View>
 
                   {status.missingLifetime > 0 ? (
                     <Text variant="caption" color={palette.textDim}>
-                      Még {formatMoney(status.missingLifetime)} összbevétel kell
+                      {formatMoney(status.missingLifetime)} more total earnings needed
                     </Text>
                   ) : null}
 
-                  {/* A költözés fő kapuja: a jelenlegi helyet ki kell maxolni. */}
+                  {/* The main gate on relocating: max out the current spot. */}
                   <View style={styles.masteryBox}>
                     <Text variant="caption" color={palette.textMuted}>
-                      Költözés feltétele — a jelenlegi hely kimaxolása
+                      Relocation requirement — max out your current spot
                     </Text>
                     <Requirement
                       met={status.mastery.atLevel === status.mastery.totalProducts}
-                      label={`Minden termék ${status.mastery.requiredLevel}. szint`}
+                      label={`Every product at level ${status.mastery.requiredLevel}`}
                       progress={`${status.mastery.atLevel}/${status.mastery.totalProducts}`}
                     />
                     <Requirement
                       met={status.mastery.automated === status.mastery.totalProducts}
-                      label="Minden termék automatizált"
+                      label="Every product automated"
                       progress={`${status.mastery.automated}/${status.mastery.totalProducts}`}
                     />
                   </View>
 
                   <Button
-                    label="Megnyitom"
+                    label="Open it"
                     tone="primary"
                     compact
                     disabled={!status.affordable || busy}
@@ -134,7 +134,7 @@ export function CitiesScreen() {
                 </View>
               ) : (
                 <Text variant="caption" color={palette.textDim} style={{ marginTop: spacing.sm }}>
-                  Eddigi bevétel itt: {formatMoney(state.cityEarnings[city.id] ?? 0)}
+                  Earned here so far: {formatMoney(state.cityEarnings[city.id] ?? 0)}
                 </Text>
               )}
             </Card>
@@ -150,10 +150,10 @@ export function CitiesScreen() {
           <Icon name="star" size={26} color={palette.star} />
           <View style={{ flex: 1, marginLeft: spacing.md }}>
             <Text variant="heading" color={palette.text}>
-              Arany Merőkanál
+              Golden Ladle
             </Text>
             <Text variant="caption" color={palette.textDim}>
-              Minden csillag +2% bevétel, örökre
+              Every star is +2% income, forever
             </Text>
           </View>
         </View>
@@ -162,7 +162,7 @@ export function CitiesScreen() {
 
         <View style={styles.franchiseRow}>
           <Text variant="label" color={palette.textMuted}>
-            Most kapnál
+            You would get
           </Text>
           <Text variant="title" color={preview.canFranchise ? palette.star : palette.textDim}>
             +{formatNumber(preview.stars)}
@@ -172,7 +172,7 @@ export function CitiesScreen() {
         {!preview.canFranchise ? (
           <>
             <Text variant="caption" color={palette.textDim} style={{ marginBottom: spacing.sm }}>
-              A következő csillagig még {formatMoney(toNextStar)} kell ebben a futásban.
+              {formatMoney(toNextStar)} more in this run to reach the next star.
             </Text>
             <ProgressBar
               progress={Math.min(1, state.runEarnings / Math.max(1, state.runEarnings + toNextStar))}
@@ -182,8 +182,8 @@ export function CitiesScreen() {
         ) : null}
 
         <Button
-          label="Franchise indítása"
-          sublabel="Újrakezdés, de a csillagok megmaradnak"
+          label="Start franchise"
+          sublabel="Restart, but you keep your stars"
           tone="premium"
           disabled={!preview.canFranchise || busy}
           onPress={() => setConfirmOpen(true)}
@@ -191,7 +191,7 @@ export function CitiesScreen() {
         />
       </Card>
 
-      <SectionTitle title="Franchise fejlesztések" hint="csillagküszöbök" />
+      <SectionTitle title="Franchise perks" hint="star thresholds" />
 
       {FRANCHISE_PERKS.map((perk) => {
         const owned = state.ownedPerkIds.includes(perk.id);
@@ -225,7 +225,7 @@ export function CitiesScreen() {
               <Icon name="check" size={20} color={palette.success} />
             ) : (
               <Button
-                label="Aktivál"
+                label="Activate"
                 compact
                 tone={enough && requiresOk ? 'primary' : 'ghost'}
                 disabled={!enough || !requiresOk}
@@ -237,29 +237,29 @@ export function CitiesScreen() {
         );
       })}
 
-      {/* --- Megerősítő ablak --- */}
+      {/* --- Confirmation dialog --- */}
       <ModalShell
         visible={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         title="Biztosan franchise-olsz?"
       >
         <Text variant="body" color={palette.textMuted}>
-          Elveszíted: készpénz, termékek, menedzserek, gépek, alkalmazottak és a
-          megnyitott városok.
+          You lose: cash, products, managers, machines, staff and the cities you
+          have opened.
         </Text>
         <Text variant="body" color={palette.success} style={{ marginTop: spacing.md }}>
-          Megmarad: {formatNumber(preview.stars)} új csillag, az összes eddigi
-          csillag, achievement, Food Coin, kinézet és vásárlás.
+          You keep: {formatNumber(preview.stars)} new stars, all your existing
+          stars, achievements, Food Coins, looks and purchases.
         </Text>
         <View style={{ flexDirection: 'row', marginTop: spacing.xl }}>
           <Button
-            label="Mégsem"
+            label="Cancel"
             tone="ghost"
             onPress={() => setConfirmOpen(false)}
             style={{ flex: 1 }}
           />
           <Button
-            label="Indítás"
+            label="Start"
             tone="premium"
             onPress={() => {
               setConfirmOpen(false);

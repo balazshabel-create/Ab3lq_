@@ -89,7 +89,7 @@ export const BoosterBar = React.memo(function BoosterBar() {
               color={isSpeed ? palette.info : palette.primary}
             />
             <Text variant="caption" color={palette.text} style={{ marginLeft: 4 }}>
-              {isSpeed ? 'Turbó' : `×${booster.incomeMultiplier}`} · {formatCountdown(remaining)}
+              {isSpeed ? 'Turbo' : `×${booster.incomeMultiplier}`} · {formatCountdown(remaining)}
             </Text>
           </View>
         );

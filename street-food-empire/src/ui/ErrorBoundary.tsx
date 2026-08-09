@@ -36,7 +36,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   override componentDidCatch(error: Error, info: React.ErrorInfo): void {
-    log.error('Kezeletlen UI hiba', {
+    log.error('Unhandled UI error', {
       message: error.message,
       stack: error.stack,
       componentStack: info.componentStack,
@@ -59,11 +59,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
       <View style={styles.container}>
         <ScrollView contentContainerStyle={styles.content}>
           <Text variant="display" color={palette.primary} align="center">
-            Hoppá!
+            Oops!
           </Text>
           <Text variant="body" color={palette.textMuted} align="center" style={styles.body}>
-            Valami elromlott a játékban. A haladásod biztonságban van — az
-            utolsó mentés érintetlen.
+            Something went wrong. Your progress is safe - the last save is
+            untouched.
           </Text>
 
           <Card style={styles.errorCard}>
@@ -72,7 +72,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
             </Text>
           </Card>
 
-          <Button label="Újraindítom" tone="primary" onPress={this.handleReset} />
+          <Button label="Restart" tone="primary" onPress={this.handleReset} />
         </ScrollView>
       </View>
     );

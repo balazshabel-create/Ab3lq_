@@ -1,37 +1,37 @@
 import type { FranchisePerkDef } from '@/game/types';
 
 /**
- * FRANCHISE (presztízs) FEJLESZTÉSEK
+ * FRANCHISE (prestige) PERKS
  *
- * Az Arany Merőkanál (csillag) kettős szerepű, szándékosan játékosbarát módon:
- *  - **passzívan** minden megszerzett csillag +2% globális bevételt ad,
- *  - **és** küszöbként nyitja ezeket a perkeket.
+ * The Golden Ladle (star) has a deliberately player-friendly dual role:
+ *  - **passively** every star earned grants +2% global income,
+ *  - **and** it acts as the threshold that unlocks these perks.
  *
- * A perk megvásárlása NEM vonja le a csillagokat: a `starCost` egy elért
- * küszöb, nem költség. Így soha nincs "elrontottam a buildet" érzés, ami egy
- * casual mobiljátékban a legrosszabb, amit tehetsz — a fa minden ága
- * elérhető, csak idő kérdése. A `requires` mező adja a sorrendet.
+ * Buying a perk does NOT subtract stars: `starCost` is a threshold you reach,
+ * not a price you pay. So there is never a "I ruined my build" moment, which is
+ * the worst thing you can do in a casual mobile game - every branch of the tree
+ * is reachable, it is only a matter of time. The `requires` field sets order.
  */
 
 export const FRANCHISE_PERKS: readonly FranchisePerkDef[] = [
   {
     id: 'perk.head-start',
-    name: 'Indulótőke',
-    description: 'Minden franchise után 25 E Ft-tal és 3 szint alaptermékkel kezdesz.',
+    name: 'Seed Money',
+    description: 'After every franchise you start with $25 K and 3 extra levels on your first product.',
     starCost: 5,
     effects: [],
   },
   {
     id: 'perk.warm-oven',
-    name: 'Bemelegített kemence',
-    description: '×1,5 globális bevétel.',
+    name: 'Preheated Oven',
+    description: 'x1.5 global income.',
     starCost: 15,
     effects: [{ type: 'incomeMultiplier', scope: { kind: 'global' }, value: 1.5 }],
   },
   {
     id: 'perk.night-owl',
-    name: 'Éjjeli bagoly',
-    description: '+3 óra offline sapka és +10% offline arány.',
+    name: 'Night Owl',
+    description: '+3h offline cap and +10% offline rate.',
     starCost: 25,
     requires: 'perk.warm-oven',
     effects: [
@@ -41,38 +41,38 @@ export const FRANCHISE_PERKS: readonly FranchisePerkDef[] = [
   },
   {
     id: 'perk.fast-hands',
-    name: 'Gyors kezek',
-    description: '×1,5 kézi kiszolgálás értéke.',
+    name: 'Fast Hands',
+    description: 'x1.5 value on hand-served orders.',
     starCost: 40,
     effects: [{ type: 'tapMultiplier', value: 1.5 }],
   },
   {
     id: 'perk.franchise-manual',
-    name: 'Franchise-kézikönyv',
-    description: '×2,5 globális bevétel.',
+    name: 'Franchise Handbook',
+    description: 'x2.5 global income.',
     starCost: 80,
     requires: 'perk.warm-oven',
     effects: [{ type: 'incomeMultiplier', scope: { kind: 'global' }, value: 2.5 }],
   },
   {
     id: 'perk.supply-chain',
-    name: 'Saját beszállítói lánc',
-    description: 'Minden ciklus 20%-kal gyorsabb.',
+    name: 'Own Supply Chain',
+    description: 'Every cycle is 20% faster.',
     starCost: 140,
     effects: [{ type: 'cycleMultiplier', scope: { kind: 'global' }, value: 0.8 }],
   },
   {
     id: 'perk.brand',
-    name: 'Országos márka',
-    description: '×5 globális bevétel.',
+    name: 'National Brand',
+    description: 'x5 global income.',
     starCost: 300,
     requires: 'perk.franchise-manual',
     effects: [{ type: 'incomeMultiplier', scope: { kind: 'global' }, value: 5 }],
   },
   {
     id: 'perk.logistics',
-    name: 'Éjszakai logisztika',
-    description: '+6 óra offline sapka és +20% offline arány.',
+    name: 'Night Logistics',
+    description: '+6h offline cap and +20% offline rate.',
     starCost: 500,
     requires: 'perk.night-owl',
     effects: [
@@ -82,16 +82,16 @@ export const FRANCHISE_PERKS: readonly FranchisePerkDef[] = [
   },
   {
     id: 'perk.automation',
-    name: 'Teljes automatizálás',
-    description: 'Minden ciklus további 30%-kal gyorsabb.',
+    name: 'Full Automation',
+    description: 'Every cycle is a further 30% faster.',
     starCost: 900,
     requires: 'perk.supply-chain',
     effects: [{ type: 'cycleMultiplier', scope: { kind: 'global' }, value: 0.7 }],
   },
   {
     id: 'perk.empire',
-    name: 'Birodalmi konyha',
-    description: '×12 globális bevétel.',
+    name: 'Empire Kitchen',
+    description: 'x12 global income.',
     starCost: 2_000,
     requires: 'perk.brand',
     effects: [{ type: 'incomeMultiplier', scope: { kind: 'global' }, value: 12 }],
@@ -104,17 +104,17 @@ export function getPerk(id: string): FranchisePerkDef | null {
   return BY_ID.get(id) ?? null;
 }
 
-/** Megvehető-e a perk (van elég csillag és megvan az előfeltétel)? */
+/** Can the perk be bought (enough stars and the prerequisite owned)? */
 export function canBuyPerk(
   perk: FranchisePerkDef,
   stars: number,
   ownedIds: readonly string[],
 ): { ok: boolean; reason?: string } {
-  if (ownedIds.includes(perk.id)) return { ok: false, reason: 'Már megvan' };
+  if (ownedIds.includes(perk.id)) return { ok: false, reason: 'Owned' };
   if (perk.requires && !ownedIds.includes(perk.requires)) {
     const req = BY_ID.get(perk.requires);
-    return { ok: false, reason: `Előbb: ${req?.name ?? perk.requires}` };
+    return { ok: false, reason: `Needs: ${req?.name ?? perk.requires}` };
   }
-  if (stars < perk.starCost) return { ok: false, reason: `${perk.starCost} csillag kell` };
+  if (stars < perk.starCost) return { ok: false, reason: `Needs ${perk.starCost} stars` };
   return { ok: true };
 }

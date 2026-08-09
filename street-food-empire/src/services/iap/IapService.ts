@@ -45,14 +45,14 @@ class IapServiceImpl {
         const ready = await real.initialize(IAP_PRODUCTS.map((p) => p.sku));
         if (ready) {
           this.provider = real;
-          log.info('IAP szolgáltató: react-native-iap');
+          log.info('IAP provider: react-native-iap');
         } else {
-          log.warn('A store nem elérhető, mock IAP fut.');
+          log.warn('The store is unavailable, running mock IAP.');
           await this.provider.initialize(IAP_PRODUCTS.map((p) => p.sku));
         }
       } else {
         await this.provider.initialize(IAP_PRODUCTS.map((p) => p.sku));
-        log.info('IAP szolgáltató: mock (natív SDK nélkül)');
+        log.info('IAP provider: mock (no native SDK)');
       }
 
       await this.refreshProducts();
@@ -86,14 +86,14 @@ class IapServiceImpl {
 
   async purchase(sku: string): Promise<PurchaseResult> {
     if (this.state === 'purchasing') {
-      return { status: 'error', reason: 'Már fut egy vásárlás.' };
+      return { status: 'error', reason: 'A purchase is already running.' };
     }
     this.state = 'purchasing';
     try {
       return await this.provider.purchase(sku);
     } catch (err) {
-      log.error('Váratlan vásárlási hiba', err);
-      return { status: 'error', reason: 'Váratlan hiba történt.' };
+      log.error('Unexpected purchase error', err);
+      return { status: 'error', reason: 'An unexpected error occurred.' };
     } finally {
       this.state = 'ready';
     }
@@ -103,8 +103,8 @@ class IapServiceImpl {
     try {
       return await this.provider.restorePurchases();
     } catch (err) {
-      log.error('Váratlan visszaállítási hiba', err);
-      return { status: 'error', reason: 'Váratlan hiba történt.' };
+      log.error('Unexpected restore error', err);
+      return { status: 'error', reason: 'An unexpected error occurred.' };
     }
   }
 

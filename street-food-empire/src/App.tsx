@@ -65,13 +65,13 @@ function GameRoot() {
 }
 
 const PANEL_TITLES: Record<PanelKey | 'settings', { title: string; subtitle?: string }> = {
-  products: { title: 'Kínálat', subtitle: 'Termékek és menedzserek' },
-  upgrades: { title: 'Gépek', subtitle: 'Berendezés fejlesztése' },
-  staff: { title: 'Csapat', subtitle: 'Automatizálás és bónuszok' },
-  cities: { title: 'Helyszínek', subtitle: 'Költözés és franchise' },
-  missions: { title: 'Küldetések', subtitle: 'Napi feladatok és eredmények' },
-  shop: { title: 'Bolt', subtitle: 'Food Coin, kinézet, támogatás' },
-  settings: { title: 'Beállítások' },
+  products: { title: 'Menu', subtitle: 'Products and managers' },
+  upgrades: { title: 'Machines', subtitle: 'Upgrade your equipment' },
+  staff: { title: 'Crew', subtitle: 'Automation and bonuses' },
+  cities: { title: 'Locations', subtitle: 'Relocation and franchise' },
+  missions: { title: 'Missions', subtitle: 'Daily quests and achievements' },
+  shop: { title: 'Shop', subtitle: 'Food Coins, looks, support' },
+  settings: { title: 'Settings' },
 };
 
 function GameShell() {
@@ -94,7 +94,7 @@ function GameShell() {
 
   return (
     <View style={styles.shell}>
-      {/* --- A játék: mindig fut, mindig látszik --- */}
+      {/* --- The game: always running, always visible --- */}
       <CafeScene
         customers={customers}
         views={views}
@@ -103,7 +103,7 @@ function GameShell() {
         onServe={serveCustomer}
       />
 
-      {/* --- Rálebegő felület --- */}
+      {/* --- Floating interface --- */}
       <SafeAreaView style={styles.overlay} edges={['top']} pointerEvents="box-none">
         <Hud onSettings={() => setPanel('settings')} />
         <BoosterStrip />
@@ -119,7 +119,7 @@ function GameShell() {
         />
       </View>
 
-      {/* --- Felcsúszó panelek --- */}
+      {/* --- Slide-up panels --- */}
       <Sheet
         visible={panel !== null}
         title={panel ? PANEL_TITLES[panel].title : ''}
@@ -235,7 +235,7 @@ function BootErrorScreen({
   return (
     <View style={styles.boot}>
       <Text variant="title" color={palette.danger} align="center">
-        Nem sikerült elindulni
+        Could not start
       </Text>
       <Text
         variant="caption"
@@ -245,7 +245,7 @@ function BootErrorScreen({
       >
         {message ?? 'Ismeretlen hiba.'}
       </Text>
-      <Button label="Újrapróbálom" tone="primary" onPress={onRetry} />
+      <Button label="Try again" tone="primary" onPress={onRetry} />
     </View>
   );
 }

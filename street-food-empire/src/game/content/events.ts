@@ -1,22 +1,22 @@
 import type { GameEventDef } from '@/game/types';
 
 /**
- * IDŐSZAKOS ESEMÉNYEK
+ * TIMED EVENTS
  *
- * Teljesen offline működnek: a szabályok a készülék helyi dátumából
- * számítódnak, nincs szükség hálózatra. Ezért az esemény nem "jár le" akkor
- * sem, ha a játékos hónapokig nem frissít.
+ * Fully offline: the rules are computed from the device's local date, no
+ * network needed. That is why an event never "expires" even if the player does
+ * not update for months.
  *
- * Opcionálisan felülírható távoli JSON-nal (SFE_EVENTS_URL) – lásd
- * services/remoteEvents.ts. Ez az EGYETLEN online funkció a játékban, és ha
- * nem elérhető, a helyi naptár változatlanul működik.
+ * Optionally overridable with a remote JSON (SFE_EVENTS_URL) - see
+ * services/remoteEvents.ts. That is the ONLY online feature in the game, and if
+ * it is unreachable the local calendar keeps working unchanged.
  */
 
 export const GAME_EVENTS: readonly GameEventDef[] = [
   {
     id: 'weekend-rush',
-    name: 'Hétvégi roham',
-    description: 'Szombat–vasárnap dupla bevétel minden standon.',
+    name: 'Weekend Rush',
+    description: 'Double income at every stand on Saturday and Sunday.',
     schedule: { kind: 'weekly', days: [6, 0] },
     effects: [{ type: 'incomeMultiplier', scope: { kind: 'global' }, value: 2 }],
     color: '#F2994A',
@@ -24,8 +24,8 @@ export const GAME_EVENTS: readonly GameEventDef[] = [
   },
   {
     id: 'happy-hour',
-    name: 'Fizetésnapi hangulat',
-    description: 'Minden hónap 10-én és 25-én ×3 bevétel.',
+    name: 'Payday Mood',
+    description: 'x3 income on the 10th and 25th of every month.',
     schedule: { kind: 'monthDays', days: [10, 25] },
     effects: [{ type: 'incomeMultiplier', scope: { kind: 'global' }, value: 3 }],
     color: '#6FCF97',
@@ -33,8 +33,8 @@ export const GAME_EVENTS: readonly GameEventDef[] = [
   },
   {
     id: 'night-market',
-    name: 'Éjjeli piac',
-    description: 'Szerdánként feleannyi idő alatt készül el minden.',
+    name: 'Night Market',
+    description: 'Everything cooks in half the time on Wednesdays.',
     schedule: { kind: 'weekly', days: [3] },
     effects: [{ type: 'cycleMultiplier', scope: { kind: 'global' }, value: 0.5 }],
     color: '#BB6BD9',
@@ -42,8 +42,8 @@ export const GAME_EVENTS: readonly GameEventDef[] = [
   },
   {
     id: 'street-festival',
-    name: 'Utcazenei fesztivál',
-    description: 'A hónap 1-jén dupla offline bevétel és nagyobb sapka.',
+    name: 'Street Music Festival',
+    description: 'Double offline income and a bigger cap on the 1st.',
     schedule: { kind: 'monthDays', days: [1] },
     effects: [
       { type: 'offlineRate', value: 0.25 },
@@ -54,7 +54,7 @@ export const GAME_EVENTS: readonly GameEventDef[] = [
   },
 ];
 
-/** Ma aktív-e az esemény? A `wallMs` a helyi idő. */
+/** Is the event active today? `wallMs` is local time. */
 export function isEventActive(def: GameEventDef, wallMs: number): boolean {
   const date = new Date(wallMs);
   switch (def.schedule.kind) {
@@ -77,7 +77,7 @@ export function activeEvents(wallMs: number): readonly GameEventDef[] {
   return GAME_EVENTS.filter((e) => isEventActive(e, wallMs));
 }
 
-/** Mikor ér véget a ma aktív esemény (helyi éjfél)? Visszaszámlálóhoz. */
+/** When does today's event end (local midnight)? For the countdown. */
 export function endOfLocalDay(wallMs: number): number {
   const d = new Date(wallMs);
   d.setHours(23, 59, 59, 999);

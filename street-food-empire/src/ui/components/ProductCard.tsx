@@ -48,10 +48,10 @@ export const ProductCard = React.memo(function ProductCard({
         </View>
         <View style={{ flex: 1 }}>
           <Text variant="heading" color={palette.textMuted}>
-            Zárt termék
+            Locked product
           </Text>
           <Text variant="caption" color={palette.textDim}>
-            Keress {formatMoney(def.unlockAtCityEarnings)}-ot ebben a városban a feloldáshoz
+            Earn {formatMoney(def.unlockAtCityEarnings)} in this city to unlock it
           </Text>
         </View>
       </Card>
@@ -61,16 +61,16 @@ export const ProductCard = React.memo(function ProductCard({
   return (
     <Card style={styles.card} raised>
       <View style={styles.row}>
-        {/* --- Kézi kiszolgálás --- */}
+        {/* --- Hand service --- */}
         <Touchable
           onPress={() => onTap(def.id)}
           disabled={!view.canServe}
           accessibilityRole="button"
-          accessibilityLabel={`${def.name} kiszolgálása`}
+          accessibilityLabel={`Serve ${def.name}`}
           accessibilityHint={
             state.hasManager
-              ? 'Ez a termék automatikusan termel'
-              : 'Koppints egy adag eladásához'
+              ? 'This product earns automatically'
+              : 'Tap to sell one batch'
           }
           style={[styles.tapZone, !view.canServe && styles.tapZoneOff]}
         >
@@ -88,7 +88,7 @@ export const ProductCard = React.memo(function ProductCard({
             <Text variant="heading" color={palette.text} numberOfLines={1} style={{ flex: 1 }}>
               {def.name}
             </Text>
-            <Badge label={`sz. ${formatNumber(state.level)}`} color={palette.surfaceSunken} textColor={palette.textMuted} />
+            <Badge label={`lv. ${formatNumber(state.level)}`} color={palette.surfaceSunken} textColor={palette.textMuted} />
           </View>
 
           <Text
@@ -96,14 +96,14 @@ export const ProductCard = React.memo(function ProductCard({
             color={state.hasManager ? palette.success : owned ? palette.primary : palette.textDim}
           >
             {!owned
-              ? 'Még nincs megvéve'
+              ? 'Not bought yet'
               : state.hasManager
                 ? formatRate(view.incomePerSecond)
-                : `${formatMoney(view.revenuePerCycle)} / adag`}
+                : `${formatMoney(view.revenuePerCycle)} / batch`}
           </Text>
 
-          {/* Automatizáltnál a ciklus állása, kézinél a következő adagig
-              hátralévő idő – mindkettő ugyanabban a sávban. */}
+          {/* Cycle progress when automated, time until the next batch when
+              manual - both in the same bar. */}
           <View style={styles.progressRow}>
             <View style={{ flex: 1 }}>
               <ProgressBar
@@ -118,14 +118,14 @@ export const ProductCard = React.memo(function ProductCard({
                   ? 'folyamatos'
                   : `${view.cycleSeconds.toFixed(1)} mp`
                 : view.canServe
-                  ? 'kész!'
+                  ? 'ready!'
                   : `${view.cycleSeconds.toFixed(1)} mp`}
             </Text>
           </View>
 
           {view.nextMilestone ? (
             <Text variant="caption" color={palette.textDim}>
-              {formatNumber(view.nextMilestone.level)}. szinten: {view.nextMilestone.label}
+              At level {formatNumber(view.nextMilestone.level)}: {view.nextMilestone.label}
             </Text>
           ) : null}
         </View>
@@ -133,8 +133,8 @@ export const ProductCard = React.memo(function ProductCard({
 
       <View style={styles.actions}>
         <Button
-          label={owned ? `Fejlesztés ×${formatNumber(view.buyAmount)}` : 'Megveszem'}
-          sublabel={view.buyAmount > 0 ? formatMoney(view.buyCost) : 'Nincs elég pénz'}
+          label={owned ? `Upgrade ×${formatNumber(view.buyAmount)}` : 'Buy'}
+          sublabel={view.buyAmount > 0 ? formatMoney(view.buyCost) : 'Not enough cash'}
           onPress={() => onBuy(def.id)}
           disabled={!view.affordable}
           tone="primary"
@@ -143,12 +143,12 @@ export const ProductCard = React.memo(function ProductCard({
 
         {owned && !state.hasManager ? (
           <Button
-            label="Menedzser"
+            label="Manager"
             sublabel={formatMoney(def.managerCost)}
             onPress={() => onHireManager(def.id)}
             tone="secondary"
             style={{ flex: 1, marginLeft: spacing.sm }}
-            accessibilityHint="A menedzser automatikusan termel, offline is"
+            accessibilityHint="A manager earns automatically, even offline"
           />
         ) : null}
       </View>

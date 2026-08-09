@@ -99,10 +99,10 @@ export function ModalShell({
       <Pressable
         style={styles.backdrop}
         onPress={dismissable ? onClose : undefined}
-        accessibilityLabel={dismissable ? 'Bezárás' : undefined}
+        accessibilityLabel={dismissable ? 'Close' : undefined}
       >
-        {/* A belső Pressable elnyeli a koppintást, hogy a lapra kattintva
-            ne záródjon be az ablak. */}
+        {/* The inner Pressable swallows the tap so clicking the card does not
+            close the dialog. */}
         <Pressable style={[styles.sheet, shadow(3)]} onPress={() => undefined}>
           {title ? (
             <View style={styles.sheetHeader}>
@@ -114,7 +114,7 @@ export function ModalShell({
                   onPress={onClose}
                   hitSlop={12}
                   accessibilityRole="button"
-                  accessibilityLabel="Bezárás"
+                  accessibilityLabel="Close"
                 >
                   <Icon name="close" size={22} color={palette.textMuted} />
                 </Pressable>

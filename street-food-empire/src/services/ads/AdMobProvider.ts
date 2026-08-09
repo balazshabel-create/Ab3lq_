@@ -67,7 +67,7 @@ function loadModule(): MobileAdsModule | null {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     cachedModule = require('react-native-google-mobile-ads') as MobileAdsModule;
   } catch {
-    log.info('A react-native-google-mobile-ads nincs telepítve – mock reklámok futnak.');
+    log.info('react-native-google-mobile-ads is not installed - running mock ads.');
     cachedModule = null;
   }
   return cachedModule;
@@ -129,10 +129,10 @@ export class AdMobProvider implements AdProvider {
 
     try {
       await mod.default().initialize();
-      log.info('AdMob inicializálva');
+      log.info('AdMob initialised');
       return true;
     } catch (err) {
-      log.warn('AdMob inicializálás sikertelen', err);
+      log.warn('AdMob initialisation failed', err);
       return false;
     }
   }
@@ -162,7 +162,7 @@ export class AdMobProvider implements AdProvider {
       }),
       ad.addAdEventListener(mod.AdEventType.ERROR ?? 'error', (payload) => {
         entry.state = 'failed';
-        log.warn(`Rewarded betöltési hiba (${placement})`, payload);
+        log.warn(`Rewarded load error (${placement})`, payload);
       }),
     );
 
@@ -196,7 +196,7 @@ export class AdMobProvider implements AdProvider {
       }),
       ad.addAdEventListener(mod.AdEventType.ERROR ?? 'error', (payload) => {
         entry.state = 'failed';
-        log.warn('Interstitial betöltési hiba', payload);
+        log.warn('Interstitial load error', payload);
       }),
     );
 
@@ -227,7 +227,7 @@ export class AdMobProvider implements AdProvider {
     const entry = this.rewardedAds.get(placement);
 
     if (!mod || !entry || entry.state !== 'ready') {
-      return { status: 'unavailable', reason: 'A videó még nem töltődött be.' };
+      return { status: 'unavailable', reason: 'The video has not loaded yet.' };
     }
 
     return new Promise<RewardedResult>((resolve) => {
@@ -275,7 +275,7 @@ export class AdMobProvider implements AdProvider {
     const entry = this.interstitialAd;
 
     if (!mod || !entry || entry.state !== 'ready') {
-      return { status: 'skipped', reason: 'Nincs betöltött reklám.' };
+      return { status: 'skipped', reason: 'No ad is loaded.' };
     }
 
     return new Promise<InterstitialResult>((resolve) => {

@@ -2,90 +2,89 @@ import { GAME_CONFIG } from '@/config/gameConfig';
 import type { CoinSpendDef, CosmeticDef, ShopIapDef } from '@/game/types';
 
 /**
- * BOLT
+ * SHOP
  *
- * Három réteg, szigorúan elválasztva:
- *  1. **IAP** – valódi pénz. Csak kényelem és kozmetika, semmi olyan, ami
- *     nélkül a játék ne lenne végigjátszható.
- *  2. **Food Coin költés** – prémium valuta, amit ingyen is lehet szerezni
- *     (küldetés, achievement, láda, reklám). Ugyanazok az előnyök, csak idő
- *     kérdése.
- *  3. **Kozmetika** – tisztán vizuális, nulla játékhatás.
+ * Three strictly separated layers:
+ *  1. **IAP** - real money. Convenience and cosmetics only, nothing the game
+ *     cannot be completed without.
+ *  2. **Food Coin spends** - premium currency that can also be earned for free
+ *     (quests, achievements, crates, ads). Same benefits, just a matter of time.
+ *  3. **Cosmetics** - purely visual, zero gameplay effect.
  *
- * NINCS multiplayer és nincs semmilyen játékos-játékos összehasonlítás,
- * ezért pay-to-win sem tud kialakulni.
+ * There is NO multiplayer and no player-vs-player comparison of any kind, so
+ * pay-to-win cannot even form.
  *
- * A SKU-kat pontosan ugyanígy kell felvenni a Google Play Console-ban és az
- * App Store Connectben. Lásd docs/ADS_AND_IAP.md
+ * The SKUs must be created exactly like this in the Google Play Console and in
+ * App Store Connect. See docs/ADS_AND_IAP.md
  */
 
 export const IAP_PRODUCTS: readonly ShopIapDef[] = [
   {
     sku: 'sfe.remove_ads',
     type: 'nonConsumable',
-    name: 'Reklámmentes',
+    name: 'Remove Ads',
     description:
-      'Eltávolítja az összes automatikus (interstitial) reklámot. A jutalomvideók megmaradnak — és a jutalmuk reklám nélkül is jár.',
-    fallbackPrice: '1 990 Ft',
+      'Removes every automatic (interstitial) ad. Rewarded videos stay - and you get their reward without watching anything.',
+    fallbackPrice: '$4.99',
     entitlement: 'removeAds',
-    badge: 'Népszerű',
+    badge: 'Popular',
   },
   {
     sku: 'sfe.starter_pack',
     type: 'nonConsumable',
-    name: 'Kezdőcsomag',
-    description: '250 Food Coin + 4 óra bevétel + azonnali menedzser az első 3 termékre.',
-    fallbackPrice: '990 Ft',
+    name: 'Starter Pack',
+    description: '250 Food Coins + 4h of income + an instant manager on your first 3 products.',
+    fallbackPrice: '$2.99',
     entitlement: 'starterPack',
     coins: 250,
-    badge: 'Egyszeri',
+    badge: 'One-time',
   },
   {
     sku: 'sfe.golden_counter',
     type: 'nonConsumable',
-    name: 'Aranypult',
-    description: 'Végleg: ×1,25 bevétel, dupla offline sapka és arany pult-kinézet.',
-    fallbackPrice: '3 990 Ft',
+    name: 'Golden Counter',
+    description: 'Permanent: x1.25 income, double offline cap and a gold counter look.',
+    fallbackPrice: '$9.99',
     entitlement: 'goldenCounter',
   },
   {
     sku: 'sfe.coins_small',
     type: 'consumable',
-    name: 'Marék érme',
-    description: '120 Food Coin',
-    fallbackPrice: '590 Ft',
+    name: 'Handful of Coins',
+    description: '120 Food Coins',
+    fallbackPrice: '$1.99',
     coins: 120,
   },
   {
     sku: 'sfe.coins_medium',
     type: 'consumable',
-    name: 'Erszény',
-    description: '400 Food Coin',
-    fallbackPrice: '1 790 Ft',
+    name: 'Coin Pouch',
+    description: '400 Food Coins',
+    fallbackPrice: '$4.99',
     coins: 400,
     badge: '+13%',
   },
   {
     sku: 'sfe.coins_large',
     type: 'consumable',
-    name: 'Pénzesláda',
-    description: '1 100 Food Coin',
-    fallbackPrice: '4 490 Ft',
+    name: 'Cash Crate',
+    description: '1,100 Food Coins',
+    fallbackPrice: '$9.99',
     coins: 1_100,
     badge: '+24%',
   },
   {
     sku: 'sfe.coins_mega',
     type: 'consumable',
-    name: 'Széf',
-    description: '3 000 Food Coin',
-    fallbackPrice: '10 990 Ft',
+    name: 'Vault',
+    description: '3,000 Food Coins',
+    fallbackPrice: '$19.99',
     coins: 3_000,
-    badge: 'Legjobb ár',
+    badge: 'Best value',
   },
 ];
 
-/** A `nonConsumable` SKU-k listája – ezeket kell visszaállítani `restorePurchases`-kor. */
+/** List of `nonConsumable` SKUs - these are what `restorePurchases` restores. */
 export const NON_CONSUMABLE_SKUS: readonly string[] = IAP_PRODUCTS.filter(
   (p) => p.type === 'nonConsumable',
 ).map((p) => p.sku);
@@ -93,32 +92,32 @@ export const NON_CONSUMABLE_SKUS: readonly string[] = IAP_PRODUCTS.filter(
 export const COIN_SPENDS: readonly CoinSpendDef[] = [
   {
     id: 'spend.time2',
-    name: '2 óra bevétel',
-    description: 'Azonnal megkapod 2 óra offline termelésed értékét.',
+    name: '2 Hours of Income',
+    description: 'Instantly collect the value of 2 hours of offline production.',
     coinCost: GAME_CONFIG.coins.timeSkipHourCost * 2,
     icon: 'clock',
     kind: { type: 'timeSkipHours', hours: 2 },
   },
   {
     id: 'spend.time8',
-    name: '8 óra bevétel',
-    description: 'Egy teljes műszak bevétele egy koppintással.',
+    name: '8 Hours of Income',
+    description: 'A full shift of income with one tap.',
     coinCost: Math.round(GAME_CONFIG.coins.timeSkipHourCost * 8 * 0.85),
     icon: 'clock',
     kind: { type: 'timeSkipHours', hours: 8 },
   },
   {
     id: 'spend.rush',
-    name: 'Csúcsforgalom',
-    description: '30 percig ×4 bevétel.',
+    name: 'Rush Hour',
+    description: 'x4 income for 30 minutes.',
     coinCost: GAME_CONFIG.boosters.premiumRush.coinCost,
     icon: 'flame',
     kind: { type: 'booster', booster: 'premiumRush' },
   },
   {
     id: 'spend.manager',
-    name: 'Azonnali menedzser',
-    description: 'A legolcsóbb menedzser nélküli termékedre azonnal menedzser kerül.',
+    name: 'Instant Manager',
+    description: 'Puts a manager on your cheapest product that has none.',
     coinCost: 75,
     icon: 'chef',
     kind: { type: 'instantManager' },
@@ -128,29 +127,29 @@ export const COIN_SPENDS: readonly CoinSpendDef[] = [
 export const COSMETICS: readonly CosmeticDef[] = [
   {
     id: 'cosmetic.classic',
-    name: 'Klasszikus',
-    description: 'Az eredeti, meleg utcai hangulat.',
+    name: 'Classic',
+    description: 'The original warm street-side mood.',
     palette: { primary: '#F2994A', secondary: '#EB5757', accent: '#F2C94C' },
     coinCost: 0,
   },
   {
     id: 'cosmetic.neon',
-    name: 'Neonpiac',
-    description: 'Éjszakai piac lilában és ciánban.',
+    name: 'Neon Market',
+    description: 'A night market in purple and cyan.',
     palette: { primary: '#BB6BD9', secondary: '#56CCF2', accent: '#F2C94C' },
     coinCost: 150,
   },
   {
     id: 'cosmetic.mint',
-    name: 'Menta',
-    description: 'Friss, világos, nyugodt pult.',
+    name: 'Mint',
+    description: 'Fresh, bright, calm counter.',
     palette: { primary: '#6FCF97', secondary: '#56CCF2', accent: '#F2F2F2' },
     coinCost: 150,
   },
   {
     id: 'cosmetic.gold',
-    name: 'Aranypult',
-    description: 'Csak Aranypult-vásárlóknak.',
+    name: 'Golden Counter',
+    description: 'Golden Counter owners only.',
     palette: { primary: '#F2C94C', secondary: '#BB8B2E', accent: '#FFF3C4' },
     coinCost: 0,
   },

@@ -59,20 +59,20 @@ export function buyProductLevels(
 ): ActionResult<{ amount: number; cost: number }> {
   const def = getProduct(productId);
   const productState = state.products[productId];
-  if (!productState) return fail('Ismeretlen termék.');
+  if (!productState) return fail('Unknown product.');
 
   if (!state.unlockedCityIds.includes(def.cityId)) {
-    return fail('Ez a város még nincs feloldva.');
+    return fail('This city is not unlocked yet.');
   }
 
   const cityEarned = state.cityEarnings[def.cityId] ?? 0;
   if (productState.level === 0 && cityEarned < def.unlockAtCityEarnings) {
-    return fail('Még nem oldottad fel ezt a terméket.');
+    return fail('You have not unlocked this product yet.');
   }
 
   const { amount, cost } = resolveBuy(def, productState.level, state.cash, quantity);
-  if (amount <= 0) return fail('Nincs elég pénzed.');
-  if (cost > state.cash) return fail('Nincs elég pénzed.');
+  if (amount <= 0) return fail('Not enough cash.');
+  if (cost > state.cash) return fail('Not enough cash.');
 
   state.cash -= cost;
   productState.level += amount;
@@ -84,10 +84,10 @@ export function buyProductLevels(
 export function hireManager(state: GameState, productId: ProductId): ActionResult {
   const def = getProduct(productId);
   const productState = state.products[productId];
-  if (!productState) return fail('Ismeretlen termék.');
-  if (productState.hasManager) return fail('Már van menedzsere.');
-  if (productState.level <= 0) return fail('Előbb vedd meg a terméket.');
-  if (state.cash < def.managerCost) return fail('Nincs elég pénzed a menedzserre.');
+  if (!productState) return fail('Unknown product.');
+  if (productState.hasManager) return fail('It already has a manager.');
+  if (productState.level <= 0) return fail('Buy the product first.');
+  if (state.cash < def.managerCost) return fail('Not enough cash for the manager.');
 
   state.cash -= def.managerCost;
   productState.hasManager = true;
@@ -107,10 +107,10 @@ export function grantCheapestManager(state: GameState): ActionResult<string> {
     }
   }
 
-  if (!best) return fail('Minden termékednek van már menedzsere.');
+  if (!best) return fail('All of your products already have a manager.');
 
   const productState = state.products[best.id];
-  if (!productState) return fail('Ismeretlen termék.');
+  if (!productState) return fail('Unknown product.');
   productState.hasManager = true;
   state.stats.managersHired += 1;
   return done(getProduct(best.id).name);
@@ -124,8 +124,8 @@ export function buyEquipmentTier(state: GameState, equipmentId: string): ActionR
   const def = getEquipment(equipmentId);
   const owned = state.equipment[equipmentId] ?? 0;
   const tier = nextTier(def, owned);
-  if (!tier) return fail('Ez a gép már a legmagasabb szinten van.');
-  if (state.cash < tier.cost) return fail('Nincs elég pénzed.');
+  if (!tier) return fail('This machine is already at its highest tier.');
+  if (state.cash < tier.cost) return fail('Not enough cash.');
 
   state.cash -= tier.cost;
   state.equipment[equipmentId] = tier.tier;
@@ -135,10 +135,10 @@ export function buyEquipmentTier(state: GameState, equipmentId: string): ActionR
 export function hireStaffLevel(state: GameState, staffId: string): ActionResult {
   const def = getStaff(staffId);
   const level = state.staff[staffId] ?? 0;
-  if (level >= def.maxLevel) return fail('Elérted a maximális szintet.');
+  if (level >= def.maxLevel) return fail('You have reached the maximum level.');
 
   const cost = staffLevelCost(def, level);
-  if (state.cash < cost) return fail('Nincs elég pénzed.');
+  if (state.cash < cost) return fail('Not enough cash.');
 
   state.cash -= cost;
   state.staff[staffId] = level + 1;
@@ -150,22 +150,22 @@ export function hireStaffLevel(state: GameState, staffId: string): ActionResult 
 // ---------------------------------------------------------------------------
 
 export function unlockCity(state: GameState, cityId: string): ActionResult {
-  if (state.unlockedCityIds.includes(cityId)) return fail('Ez a város már a tiéd.');
+  if (state.unlockedCityIds.includes(cityId)) return fail('You already own this city.');
 
   const city = getCity(cityId);
 
-  // A jelenlegi helyet ki kell maxolni – ez a költözés fő kapuja.
+  // The current spot must be maxed out - this is the main gate on relocating.
   const mastery = cityMastery(state, state.activeCityId);
   if (!mastery.ready) {
     return fail(
-      `Előbb maxold ki a jelenlegi helyet: minden termék ${mastery.requiredLevel}. szint és menedzser.`,
+      `Max out your current spot first: every product at level ${mastery.requiredLevel} with a manager.`,
     );
   }
 
   if (state.stats.lifetimeEarnings < city.unlockRequiresLifetime) {
-    return fail('Még nem kerestél eleget ehhez a helyhez.');
+    return fail('You have not earned enough for this spot yet.');
   }
-  if (state.cash < city.unlockCost) return fail('Nincs elég pénzed a nyitáshoz.');
+  if (state.cash < city.unlockCost) return fail('Not enough cash to open it.');
 
   state.cash -= city.unlockCost;
   state.unlockedCityIds.push(cityId);
@@ -184,7 +184,7 @@ export function unlockCity(state: GameState, cityId: string): ActionResult {
 }
 
 export function setActiveCity(state: GameState, cityId: string): ActionResult {
-  if (!state.unlockedCityIds.includes(cityId)) return fail('Ez a város még nincs feloldva.');
+  if (!state.unlockedCityIds.includes(cityId)) return fail('This city is not unlocked yet.');
   state.activeCityId = cityId;
   return ok;
 }
@@ -199,11 +199,11 @@ export function claimQuest(
   coinFind: number,
 ): ActionResult<number> {
   const quest = state.daily.quests.find((q) => q.questId === questId);
-  if (!quest) return fail('Nincs ilyen küldetés.');
-  if (quest.claimed) return fail('Ezt már felvetted.');
+  if (!quest) return fail('No such quest.');
+  if (quest.claimed) return fail('You already claimed this.');
 
   const progress = questProgress(state, quest);
-  if (!progress || !progress.complete) return fail('Ez a küldetés még nincs kész.');
+  if (!progress || !progress.complete) return fail('This quest is not complete yet.');
 
   const def = getQuest(questId);
   const reward = Math.max(1, Math.round((def?.coinReward ?? 0) * coinFind));
@@ -216,8 +216,8 @@ export function claimQuest(
 }
 
 export function claimDailyBonus(state: GameState): ActionResult<number> {
-  if (state.daily.allClaimedBonusTaken) return fail('A napi bónuszt már felvetted.');
-  if (!allQuestsClaimed(state)) return fail('Előbb teljesítsd az összes küldetést.');
+  if (state.daily.allClaimedBonusTaken) return fail('You already claimed the daily bonus.');
+  if (!allQuestsClaimed(state)) return fail('Complete all quests first.');
 
   const reward = GAME_CONFIG.coins.dailyAllCompleteBonus;
   state.daily.allClaimedBonusTaken = true;
@@ -261,12 +261,12 @@ export function openCrate(
       state.daily.cratesOpened += 1;
       return done(reward);
     default:
-      return fail('Ismeretlen ládatartalom.');
+      return fail('Unknown crate reward.');
   }
 }
 
 // ---------------------------------------------------------------------------
-// Boosterek
+// Boosters
 // ---------------------------------------------------------------------------
 
 const BOOSTER_SPECS: Record<
@@ -329,48 +329,48 @@ export function spendCoins(
   wallMs: number,
 ): ActionResult<string> {
   const def = COIN_SPENDS.find((s) => s.id === spendId);
-  if (!def) return fail('Ismeretlen ajánlat.');
-  if (state.coins < def.coinCost) return fail('Nincs elég Food Coinod.');
+  if (!def) return fail('Unknown offer.');
+  if (state.coins < def.coinCost) return fail('Not enough Food Coins.');
 
   switch (def.kind.type) {
     case 'timeSkipHours': {
       const amount = timeSkipEarnings(state, def.kind.hours, wallMs);
       if (amount <= 0) {
-        return fail('Előbb vegyél fel menedzsert – enélkül nincs mit felgyorsítani.');
+        return fail('Hire a manager first - there is nothing to fast-forward without one.');
       }
       state.coins -= def.coinCost;
       creditEarnings(state, amount);
       state.cityEarnings[state.activeCityId] =
         (state.cityEarnings[state.activeCityId] ?? 0) + amount;
-      return done(`${def.kind.hours} óra bevétele jóváírva.`);
+      return done(`${def.kind.hours}h of income credited.`);
     }
     case 'booster':
       state.coins -= def.coinCost;
       activateBooster(state, def.kind.booster, wallMs);
-      return done('Csúcsforgalom elindítva!');
+      return done('Rush hour started!');
     case 'instantManager': {
       const result = grantCheapestManager(state);
       if (!result.ok) return result;
       state.coins -= def.coinCost;
-      return done(`${result.value} mostantól automatikus.`);
+      return done(`${result.value} is automated from now on.`);
     }
     case 'cosmetic': {
       const cosmeticId = def.kind.cosmeticId;
-      if (state.ownedCosmeticIds.includes(cosmeticId)) return fail('Ez már a tiéd.');
+      if (state.ownedCosmeticIds.includes(cosmeticId)) return fail('You already own this.');
       state.coins -= def.coinCost;
       state.ownedCosmeticIds.push(cosmeticId);
-      return done('Új kinézet feloldva!');
+      return done('New look unlocked!');
     }
     default:
-      return fail('Ismeretlen ajánlat.');
+      return fail('Unknown offer.');
   }
 }
 
 export function buyCosmetic(state: GameState, cosmeticId: string): ActionResult {
   const def = getCosmetic(cosmeticId);
-  if (!def) return fail('Ismeretlen kinézet.');
-  if (state.ownedCosmeticIds.includes(cosmeticId)) return fail('Ez már a tiéd.');
-  if (state.coins < def.coinCost) return fail('Nincs elég Food Coinod.');
+  if (!def) return fail('Unknown look.');
+  if (state.ownedCosmeticIds.includes(cosmeticId)) return fail('You already own this.');
+  if (state.coins < def.coinCost) return fail('Not enough Food Coins.');
 
   state.coins -= def.coinCost;
   state.ownedCosmeticIds.push(cosmeticId);
@@ -378,7 +378,7 @@ export function buyCosmetic(state: GameState, cosmeticId: string): ActionResult 
 }
 
 export function equipCosmetic(state: GameState, cosmeticId: string): ActionResult {
-  if (!state.ownedCosmeticIds.includes(cosmeticId)) return fail('Ez a kinézet nincs meg.');
+  if (!state.ownedCosmeticIds.includes(cosmeticId)) return fail('You do not own that look.');
   state.settings.activeCosmetic = cosmeticId;
   return ok;
 }
@@ -397,7 +397,7 @@ export function applyEntitlement(
   entitlement: Entitlement,
   wallMs: number,
 ): ActionResult {
-  if (state.entitlements.includes(entitlement)) return fail('Ez a vásárlás már aktív.');
+  if (state.entitlements.includes(entitlement)) return fail('This purchase is already active.');
 
   state.entitlements.push(entitlement);
 
@@ -423,7 +423,7 @@ export function applyEntitlement(
 
 /** Fogyó termék (érmecsomag) jóváírása. */
 export function grantCoins(state: GameState, amount: number): ActionResult {
-  if (!Number.isFinite(amount) || amount <= 0) return fail('Érvénytelen mennyiség.');
+  if (!Number.isFinite(amount) || amount <= 0) return fail('Invalid amount.');
   state.coins += amount;
   return ok;
 }
@@ -441,18 +441,18 @@ export function franchisePreview(state: GameState): { stars: number; canFranchis
 }
 
 /**
- * Franchise: a birodalom újraindul, de a csillagok, achievementek, perkek,
- * kozmetikák, Food Coinok és IAP-jogosultságok megmaradnak.
+ * Franchise: the empire restarts, but stars, achievements, perks, cosmetics,
+ * Food Coins and IAP entitlements are kept.
  */
 export function doFranchise(state: GameState, wallMs: number): ActionResult<number> {
   const preview = franchisePreview(state);
   if (!preview.canFranchise) {
-    return fail('Még nem gyűjtöttél eleget a franchise-hoz.');
+    return fail('You have not earned enough to franchise yet.');
   }
 
   const fresh = createInitialState(wallMs);
 
-  // --- Amit megtartunk ---
+  // --- What we keep ---
   fresh.stars = state.stars + preview.stars;
   fresh.coins = state.coins;
   fresh.unlockedAchievementIds = [...state.unlockedAchievementIds];
@@ -465,7 +465,7 @@ export function doFranchise(state: GameState, wallMs: number): ActionResult<numb
   fresh.rngState = state.rngState;
   fresh.franchiseCount = state.franchiseCount + 1;
 
-  // A statisztikák közül a "lifetime" jellegűek átmennek, a futásspecifikusak nem.
+  // Lifetime-style stats carry over, run-specific ones do not.
   fresh.stats = {
     ...emptyStats(),
     lifetimeEarnings: state.stats.lifetimeEarnings,
@@ -480,7 +480,7 @@ export function doFranchise(state: GameState, wallMs: number): ActionResult<numb
     runEarnings: 0,
   };
 
-  // --- Indulótőke perk ---
+  // --- Seed Money perk ---
   if (fresh.ownedPerkIds.includes('perk.head-start')) {
     fresh.cash += 25_000;
     const starter = fresh.products[Object.keys(fresh.products)[0] ?? ''];
@@ -488,23 +488,23 @@ export function doFranchise(state: GameState, wallMs: number): ActionResult<numb
   }
 
   Object.assign(state, fresh);
-  log.info('Franchise végrehajtva', { stars: preview.stars });
+  log.info('Franchise completed', { stars: preview.stars });
 
   return done(preview.stars);
 }
 
 export function buyPerk(state: GameState, perkId: string): ActionResult {
   const perk = getPerk(perkId);
-  if (!perk) return fail('Ismeretlen fejlesztés.');
+  if (!perk) return fail('Unknown perk.');
 
   const check = canBuyPerk(perk, state.stars, state.ownedPerkIds);
-  if (!check.ok) return fail(check.reason ?? 'Most nem elérhető.');
+  if (!check.ok) return fail(check.reason ?? 'Not available right now.');
 
   state.ownedPerkIds.push(perkId);
   return ok;
 }
 
-/** Az összes perk állapota a UI-nak. */
+/** State of every perk, for the UI. */
 export function perkStatuses(state: GameState) {
   return FRANCHISE_PERKS.map((perk) => ({
     perk,

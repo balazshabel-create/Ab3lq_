@@ -24,14 +24,14 @@ export const Hud = React.memo(function Hud({ onSettings }: { onSettings: () => v
   return (
     <View style={styles.hud} pointerEvents="box-none">
       {/*
-        A képernyőolvasónak a "1,2 M Ft" formátum félreérthető, ezért a
-        pontos értéket külön címkén adjuk meg. Ez egyben stabil fogódzót ad a
-        böngészős füstteszt számára is.
+        The "1.2 M" format is ambiguous for a screen reader, so we expose the
+        exact value on a separate label. It also gives the browser smoke test a
+        stable hook.
       */}
       <View
         style={styles.wallet}
         accessible
-        accessibilityLabel={`Készpénz ${Math.floor(cash)} dollár, bevétel ${Math.floor(incomePerSecond)} dollár másodpercenként`}
+        accessibilityLabel={`Cash ${Math.floor(cash)} dollars, income ${Math.floor(incomePerSecond)} dollars per second`}
       >
         <Text variant="title" color={palette.text} numberOfLines={1}>
           {formatMoney(cash)}
@@ -57,7 +57,7 @@ export const Hud = React.memo(function Hud({ onSettings }: { onSettings: () => v
           onPress={onSettings}
           hitSlop={10}
           accessibilityRole="button"
-          accessibilityLabel="Beállítások"
+          accessibilityLabel="Settings"
           style={styles.settings}
         >
           <Icon name="settings" size={18} color={palette.textMuted} />
@@ -83,7 +83,7 @@ function Pill({ icon, color, value }: { icon: 'coin' | 'star'; color: string; va
  * finoman lüktet, hogy a játékos érezze: most jobb a termelés.
  */
 export const BoosterStrip = React.memo(function BoosterStrip() {
-  useGameStore((s) => s.tick); // a visszaszámláló frissítéséhez
+  useGameStore((s) => s.tick); // keeps the countdown ticking
   const boosters = useGameStore((s) => s.state.boosters);
   const pulse = useLoop(1100);
 
@@ -109,7 +109,7 @@ export const BoosterStrip = React.memo(function BoosterStrip() {
               color={isSpeed ? palette.info : palette.primary}
             />
             <Text variant="caption" color={palette.text} style={{ marginLeft: 4 }}>
-              {isSpeed ? 'Turbó' : `×${booster.incomeMultiplier}`} ·{' '}
+              {isSpeed ? 'Turbo' : `×${booster.incomeMultiplier}`} ·{' '}
               {formatCountdown((booster.expiresAt - now) / 1000)}
             </Text>
           </Animated.View>

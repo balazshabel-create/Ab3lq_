@@ -259,7 +259,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     if (unlocked.length > 0) milestoneFeedback();
   };
 
-  /** Akció-eredmény egységes kezelése: hiba esetén toast + rezgés. */
+  /** Uniform handling of action results: toast + haptics on failure. */
   const handle = <T>(result: actions.ActionResult<T>, onSuccess?: (value: T) => void): boolean => {
     if (!result.ok) {
       get().showToast(result.error, 'error');
@@ -321,7 +321,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         const state = outcome.state;
 
         if (outcome.kind === 'restoredBackup') {
-          log.warn('Biztonsági mentésről indultunk', outcome.reason);
+          log.warn('Restored from the backup save', outcome.reason);
         }
 
         // Napi küldetések frissítése, lejárt boosterek takarítása.
@@ -360,11 +360,11 @@ export const useGameStore = create<GameStore>((set, get) => {
         startLoop(get, mutate);
         attachAppStateListener(get);
 
-        if (outcome.kind === 'fresh' && outcome.reason !== 'Nincs korábbi mentés.') {
-          get().showToast('A mentés sérült volt, új játék indult.', 'error');
+        if (outcome.kind === 'fresh' && outcome.reason !== 'No previous save.') {
+          get().showToast('The save was corrupted, a new game was started.', 'error');
         }
       } catch (err) {
-        log.error('Indítási hiba', err);
+        log.error('Startup error', err);
         set({ status: 'error', bootError: String(err) });
       }
     },
@@ -409,7 +409,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
       // Egyszerre egy rendelést készít a szakács.
       if (cooking) {
-        get().showToast('Épp főzöl — várd meg, míg elkészül!', 'info');
+        get().showToast('You are cooking - wait until it is ready!', 'info');
         return;
       }
 
@@ -462,7 +462,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         handle(actions.hireManager(state, productId), () => {
           noteSignificantEvent(state);
           milestoneFeedback();
-          get().showToast('Menedzser felvéve – mostantól magától termel!', 'success');
+          get().showToast('Manager hired - it earns on its own from now on!', 'success');
         });
       });
     },
@@ -491,7 +491,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       if (unlocked) {
         resetCustomerWorld(customerWorld, systemClock.read().wall);
         set({ cooking: null });
-        get().showToast('Új hely megnyitva! Hajrá!', 'success');
+        get().showToast('New spot opened! Go!', 'success');
         // Városnyitás = természetes szünet, itt jöhet interstitial.
         await maybeShowInterstitial();
       }
@@ -526,7 +526,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       mutate((state) => {
         handle(actions.claimDailyBonus(state), (reward) => {
           milestoneFeedback();
-          get().showToast(`Napi bónusz: +${reward} Food Coin!`, 'success');
+          get().showToast(`Daily bonus: +${reward} Food Coins!`, 'success');
         });
       });
     },
@@ -535,7 +535,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       mutate((state) => {
         handle(actions.buyPerk(state, perkId), () => {
           milestoneFeedback();
-          get().showToast('Franchise fejlesztés aktiválva!', 'success');
+          get().showToast('Franchise perk activated!', 'success');
         });
       });
     },
@@ -558,7 +558,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         resetCustomerWorld(customerWorld, systemClock.read().wall);
         set({ cooking: null });
         milestoneFeedback();
-        get().showToast(`+${stars} Arany Merőkanál!`, 'success');
+        get().showToast(`+${stars} Golden Ladle!`, 'success');
         // Azonnali mentés: a franchise a legdrágább visszafordíthatatlan lépés.
         await saveScheduler?.flush();
         await maybeShowInterstitial();
@@ -578,7 +578,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       mutate((state) => {
         handle(actions.buyCosmetic(state, cosmeticId), () => {
           successFeedback();
-          get().showToast('Új kinézet feloldva!', 'success');
+          get().showToast('New look unlocked!', 'success');
         });
       });
     },
@@ -602,7 +602,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     hardReset: async () => {
       mutate((state) => actions.hardReset(state, systemClock.read().wall));
       await saveScheduler?.flush();
-      get().showToast('A játék újraindult.', 'info');
+      get().showToast('The game has restarted.', 'info');
     },
 
     // -----------------------------------------------------------------------
@@ -622,7 +622,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
       const gate = canShowRewarded(state, placement, wallMs);
       if (!gate.allowed) {
-        get().showToast(gate.reason ?? 'Most nem elérhető.', 'error');
+        get().showToast(gate.reason ?? 'Not available right now.', 'error');
         return false;
       }
 
@@ -630,7 +630,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
       if (!free) {
         if (!adService.rewardedReady(placement)) {
-          get().showToast('A videó még töltődik, próbáld pár másodperc múlva.', 'error');
+          get().showToast('The video is still loading, try again in a few seconds.', 'error');
           adService.preloadAll();
           return false;
         }
@@ -641,7 +641,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
         if (result.status !== 'earned') {
           if (result.status === 'error' || result.status === 'unavailable') {
-            get().showToast('A videó nem indult el. Próbáld újra!', 'error');
+            get().showToast('The video did not start. Please try again!', 'error');
           }
           return false;
         }
@@ -678,8 +678,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         set({
           rewardPopup: {
             kind: 'booster',
-            title: 'Dupla bevétel!',
-            body: '15 percig minden termék kétszer annyit hoz.',
+            title: 'Double income!',
+            body: 'Every product pays twice as much for 15 minutes.',
           },
         });
       }
@@ -687,8 +687,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         set({
           rewardPopup: {
             kind: 'booster',
-            title: 'Turbó műszak!',
-            body: '10 percig feleannyi idő alatt készül el minden.',
+            title: 'Turbo shift!',
+            body: 'Everything cooks in half the time for 10 minutes.',
           },
         });
       }
@@ -704,7 +704,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
       const gate = canOpenFreeCrate(state, wallMs);
       if (!gate.allowed) {
-        get().showToast(gate.reason ?? 'Most nem elérhető.', 'error');
+        get().showToast(gate.reason ?? 'Not available right now.', 'error');
         return;
       }
 
@@ -728,11 +728,11 @@ export const useGameStore = create<GameStore>((set, get) => {
         const gate = canShowRewarded(state, 'offlineBoost', wallMs);
 
         if (!free && !gate.allowed) {
-          get().showToast(gate.reason ?? 'Most nem elérhető.', 'error');
+          get().showToast(gate.reason ?? 'Not available right now.', 'error');
         } else if (free) {
           multiplier = GAME_CONFIG.offline.adMultiplier;
         } else if (!adService.rewardedReady('offlineBoost')) {
-          get().showToast('A videó még töltődik – a sima jutalom jár.', 'error');
+          get().showToast('The video is still loading - you get the plain reward.', 'error');
         } else {
           set({ busy: true });
           const result = await adService.showRewarded('offlineBoost');
@@ -780,7 +780,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     purchase: async (sku) => {
       const def = getIapProduct(sku);
       if (!def) {
-        get().showToast('Ismeretlen termék.', 'error');
+        get().showToast('Unknown product.', 'error');
         return;
       }
 
@@ -793,7 +793,7 @@ export const useGameStore = create<GameStore>((set, get) => {
           return;
 
         case 'pending':
-          get().showToast('A vásárlás feldolgozás alatt van.', 'info');
+          get().showToast('The purchase is being processed.', 'info');
           return;
 
         case 'alreadyOwned':
@@ -828,7 +828,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       }
 
       milestoneFeedback();
-      get().showToast('Köszönjük a támogatást!', 'success');
+      get().showToast('Thanks for the support!', 'success');
     },
 
     restorePurchases: async () => {
@@ -856,8 +856,8 @@ export const useGameStore = create<GameStore>((set, get) => {
 
       get().showToast(
         restored.length > 0
-          ? 'A vásárlásaid visszaállítva.'
-          : 'Nem találtunk visszaállítható vásárlást.',
+          ? 'Your purchases have been restored.'
+          : 'No restorable purchases were found.',
         restored.length > 0 ? 'success' : 'info',
       );
     },
@@ -965,7 +965,7 @@ function startLoop(
       // Napváltás ellenőrzése (éjfélkor új küldetések).
       if (refreshDailyIfNeeded(state, now.wall)) {
         mutate(() => undefined);
-        get().showToast('Új napi küldetések érkeztek!', 'info');
+        get().showToast('New daily quests have arrived!', 'info');
       }
     } else {
       useGameStore.setState((prev) => ({ customers, tick: prev.tick + 1 }));
@@ -1002,7 +1002,7 @@ function attachAppStateListener(get: () => GameStore): void {
       state.lastSeenWallClock = now.wall;
       state.maxSeenWallClock = Math.max(state.maxSeenWallClock, now.wall);
       void saveScheduler?.flush();
-      log.debug('Háttérbe váltás – mentve');
+      log.debug('Moved to background - saved');
     }
 
     if (returning) {

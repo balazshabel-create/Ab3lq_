@@ -52,30 +52,30 @@ export interface AdProvider {
   showRewarded(placement: RewardedPlacement): Promise<RewardedResult>;
   showInterstitial(): Promise<InterstitialResult>;
 
-  /** GDPR / ATT hozzájárulás frissítése futás közben. */
+  /** Update GDPR / ATT consent at runtime. */
   setPersonalizedAds(enabled: boolean): void;
 }
 
-/** A jutalomhelyekhez tartozó, játékosnak szóló szövegek. */
+/** Player-facing copy for each rewarded placement. */
 export const REWARDED_LABELS: Record<RewardedPlacement, { title: string; body: string }> = {
   doubleIncome: {
-    title: 'Dupla bevétel',
-    body: '15 percig minden termék kétszer annyit hoz.',
+    title: 'Double Income',
+    body: 'Every product pays twice as much for 15 minutes.',
   },
   turbo: {
-    title: 'Turbó műszak',
-    body: '10 percig feleannyi idő alatt készül el minden.',
+    title: 'Turbo Shift',
+    body: 'Everything cooks in half the time for 10 minutes.',
   },
   freeCrate: {
-    title: 'Ingyen láda',
-    body: 'Food Coin, pénz vagy egy véletlen booster.',
+    title: 'Free Crate',
+    body: 'Food Coins, cash or a random booster.',
   },
   offlineBoost: {
-    title: 'Dupla offline bevétel',
-    body: 'A most kapott offline összeg megduplázódik.',
+    title: 'Double Offline Income',
+    body: 'Doubles the offline amount you just collected.',
   },
   questReroll: {
-    title: 'Új küldetés',
-    body: 'Cseréld le a mai küldetéseid egyikét.',
+    title: 'New Quest',
+    body: 'Swap out one of today\'s quests.',
   },
 };

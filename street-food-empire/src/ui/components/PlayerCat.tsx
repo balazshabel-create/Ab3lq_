@@ -82,7 +82,7 @@ export const PlayerCat = React.memo(function PlayerCat({
 
   return (
     <View style={styles.wrap} pointerEvents="none">
-      {/* --- Amit épp készít: a feje fölött, töltődő karikában --- */}
+      {/* --- What is cooking: above the head, in a filling ring --- */}
       {state === 'cooking' && cookingIcon ? (
         <View style={styles.cookBadge}>
           <View style={styles.cookIcon}>
@@ -97,7 +97,7 @@ export const PlayerCat = React.memo(function PlayerCat({
             />
           </View>
           <Text variant="caption" color={palette.accent}>
-            készül…
+            cooking…
           </Text>
         </View>
       ) : null}
@@ -115,12 +115,12 @@ export const PlayerCat = React.memo(function PlayerCat({
             fill="none"
           />
 
-          {/* Test + kötény */}
+          {/* Body + apron */}
           <Path d="M30 92c0-14 8-23 18-23s18 9 18 23H30Z" fill={ORANGE.fur} />
           <Path d="M36 92c0-11 5.4-18 12-18s12 7 12 18H36Z" fill="#F3EFE6" />
           <Path d="M42 74h12v5H42z" fill="#E4DED0" />
 
-          {/* Mancsok – főzésnél előrenyújtva */}
+          {/* Paws - stretched forward while cooking */}
           {state === 'cooking' ? (
             <G fill={ORANGE.fur}>
               <Ellipse cx={30} cy={74} rx={6} ry={5} />
@@ -133,7 +133,7 @@ export const PlayerCat = React.memo(function PlayerCat({
             </G>
           )}
 
-          {/* Fül */}
+          {/* Ears */}
           <Path d="M28 40 25 20l18 9-15 11Z" fill={ORANGE.fur} />
           <Path d="M68 40 71 20l-18 9 15 11Z" fill={ORANGE.fur} />
           <Path d="M31.5 36 30 26l9 4.5-7.5 5.5Z" fill={ORANGE.ear} />
@@ -141,7 +141,7 @@ export const PlayerCat = React.memo(function PlayerCat({
 
           {/* Fej */}
           <Ellipse cx={48} cy={46} rx={23} ry={20} fill={ORANGE.fur} />
-          {/* Cirmos csíkok */}
+          {/* Tabby stripes */}
           <G stroke={ORANGE.patch} strokeWidth={2.6} strokeLinecap="round" opacity={0.85}>
             <Path d="M41 29v5M48 28v5.5M55 29v5" />
           </G>
@@ -162,7 +162,7 @@ export const PlayerCat = React.memo(function PlayerCat({
             </G>
           )}
 
-          {/* Orr, száj, bajusz */}
+          {/* Nose, mouth, whiskers */}
           <Path d="M48 51.5l-2.6 2.2h5.2L48 51.5Z" fill={ORANGE.ear} />
           <Path
             d={state === 'serve' ? 'M43 57c3 3.4 7 3.4 10 0' : 'M45 56h6'}
@@ -175,7 +175,7 @@ export const PlayerCat = React.memo(function PlayerCat({
             <Path d="M24 48h9M24 53h9M63 48h9M63 53h9" />
           </G>
 
-          {/* Szakácssapka */}
+          {/* Chef hat */}
           <G>
             <Path
               d="M28 28c-1-9 8-15 20-15s21 6 20 15H28Z"
@@ -187,7 +187,7 @@ export const PlayerCat = React.memo(function PlayerCat({
             <Rect x={27} y={26} width={42} height={6} rx={3} fill="#E8E3D8" />
           </G>
 
-          {/* Nyakkendő-szerű sál a márkaszínben */}
+          {/* Tie-like scarf in the brand colour */}
           <Path d="M40 66h16l-8 9-8-9Z" fill={cityColors[1]} />
         </Svg>
       </Animated.View>

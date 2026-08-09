@@ -17,12 +17,12 @@ import {
 import { palette, radius, spacing } from '@/ui/theme';
 
 /**
- * CSAPAT KÉPERNYŐ
+ * CREW SCREEN
  *
- * Két blokk:
- *  1. **Menedzserek** – az automatizálás állapota városonként. Ez a
- *     legfontosabb információ a képernyőn, mert az offline bevétel ettől függ.
- *  2. **Szerepkörök** – szintezhető alkalmazottak globális bónuszokkal.
+ * Two blocks:
+ *  1. **Managers** - automation status per city. This is the most important
+ *     information on the screen, because offline income depends on it.
+ *  2. **Roles** - levellable employees with global bonuses.
  */
 export function StaffScreen() {
   const tick = useGameStore((s) => s.tick);
@@ -40,10 +40,10 @@ export function StaffScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} removeClippedSubviews>
-      {/* --- Automatizálás --- */}
+      {/* --- Automation --- */}
       <SectionTitle
-        title="Automatizálás"
-        hint={`${automated}/${managerRows.length} termék`}
+        title="Automation"
+        hint={`${automated}/${managerRows.length} products`}
       />
       <Card style={styles.summaryCard}>
         <ProgressBar
@@ -52,7 +52,7 @@ export function StaffScreen() {
           height={10}
         />
         <Text variant="caption" color={palette.textDim} style={{ marginTop: spacing.sm }}>
-          Csak a menedzserrel ellátott termékek termelnek, amíg zárva vagy.
+          Only products with a manager keep earning while you are away.
         </Text>
       </Card>
 
@@ -65,11 +65,11 @@ export function StaffScreen() {
                 {row.def.name}
               </Text>
               <Text variant="caption" color={palette.textDim}>
-                Kézi kiszolgálás — nincs offline bevétel
+                Served by hand — no offline income
               </Text>
             </View>
             <Button
-              label="Felvesz"
+              label="Hire"
               sublabel={formatMoney(row.def.managerCost)}
               compact
               tone={state.cash >= row.def.managerCost ? 'success' : 'secondary'}
@@ -79,8 +79,8 @@ export function StaffScreen() {
           </Card>
         ))}
 
-      {/* --- Szerepkörök --- */}
-      <SectionTitle title="Alkalmazottak" hint="globális bónuszok" />
+      {/* --- Roles --- */}
+      <SectionTitle title="Employees" hint="global bonuses" />
 
       {STAFF.map((def) => {
         const level = state.staff[def.id] ?? 0;
@@ -120,12 +120,12 @@ export function StaffScreen() {
                 Jelenleg: {level > 0 ? formatPercent(totalEffect) : '—'}
               </Text>
               <Text variant="caption" color={palette.success}>
-                Következő szint: {formatPercent(def.effectPerLevel.value)}
+                Next level: {formatPercent(def.effectPerLevel.value)}
               </Text>
             </View>
 
             <Button
-              label={maxed ? 'Kimaxolva' : 'Szintlépés'}
+              label={maxed ? 'Maxed out' : 'Level up'}
               sublabel={maxed ? undefined : formatMoney(cost)}
               tone={maxed ? 'ghost' : 'primary'}
               disabled={maxed || !affordable}

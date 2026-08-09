@@ -1,21 +1,21 @@
 import type { Effect, EquipmentDef, EquipmentTierDef, ProductCategory } from '@/game/types';
 
 /**
- * GÉPEK / FEJLESZTÉSEK
+ * MACHINES / UPGRADES
  *
- * Egy gépnek több szintje (tier) van. A megvett szint effektjei **abszolút**
- * értékek, nem halmozódnak: ha a 4. szinten állsz, csak a 4. szint effektje
- * él. Így a UI-ban egyetlen szám látszik ("×3,84"), és nincs félreértés.
+ * A machine has several tiers. The effects of the owned tier are **absolute**
+ * values, they do not stack: at tier 4 only the tier-4 effect applies. That way
+ * the UI shows a single number ("x3.84") and there is nothing to misread.
  *
- * Ár: baseCost * costStep^(tier-1)  – meredek, hogy a gépek végigkísérjék a
- * teljes játékot, ne legyenek 20 perc alatt kimaxolva.
+ * Price: baseCost * costStep^(tier-1) - steep on purpose, so machines stay
+ * relevant for the whole game instead of maxing out in 20 minutes.
  */
 
 type TierSpec = {
   count: number;
   baseCost: number;
   costStep: number;
-  /** A `tier`-edik szint effektjeit adja vissza (abszolút értékek). */
+  /** Returns the effects of the given tier (absolute values). */
   effectsAt: (tier: number) => readonly Effect[];
   labelAt: (tier: number) => string;
   descriptionAt: (tier: number) => string;
@@ -40,7 +40,7 @@ function mult(value: number): string {
   return `×${rounded.toString().replace(/\.?0+$/, '')}`;
 }
 
-/** Kategória-erősítő gép (grill, fritőz, kemence, hűtő, vitrin). */
+/** Category booster machine (grill, fryer, oven, cooler, display case). */
 function categoryMachine(args: {
   id: string;
   name: string;
@@ -69,132 +69,132 @@ function categoryMachine(args: {
       ],
       labelAt: (tier) => args.tierNames[tier - 1] ?? `${args.name} ${tier}`,
       descriptionAt: (tier) =>
-        `${mult(Math.pow(growth, tier))} bevétel minden ${CATEGORY_LABEL[args.category]} termékre`,
+        `${mult(Math.pow(growth, tier))} income on every ${CATEGORY_LABEL[args.category]} product`,
     }),
   };
 }
 
 const CATEGORY_LABEL: Record<ProductCategory, string> = {
-  grill: 'grillezett',
-  fryer: 'olajban sült',
-  dough: 'tésztás',
-  cold: 'hideg',
-  drink: 'ital',
-  sweet: 'édes',
+  grill: 'grilled',
+  fryer: 'deep-fried',
+  dough: 'dough',
+  cold: 'cold',
+  drink: 'drink',
+  sweet: 'sweet',
 };
 
 export const EQUIPMENT: readonly EquipmentDef[] = [
   categoryMachine({
     id: 'grill',
-    name: 'Grillfelület',
+    name: 'Grill Top',
     icon: 'flame',
     category: 'grill',
     baseCost: 300,
     tierNames: [
-      'Egylapos rezsó',
-      'Öntöttvas lap',
-      'Duplalapos grill',
-      'Szénkosaras rács',
-      'Infra grill',
-      'Kontakt grill',
-      'Forgónyárs',
-      'Ipari lávaköves',
-      'Zónás profigrill',
-      'Automata sütősor',
-      'Robotkaros grillsor',
-      'Fúziós hőkamra',
+      'Single Hotplate',
+      'Cast Iron Slab',
+      'Twin Plate Grill',
+      'Charcoal Basket',
+      'Infrared Grill',
+      'Contact Griddle',
+      'Rotating Spit',
+      'Industrial Lava Rock',
+      'Zoned Pro Grill',
+      'Automated Grill Line',
+      'Robot Arm Broiler',
+      'Fusion Heat Chamber',
     ],
   }),
   categoryMachine({
     id: 'fryer',
-    name: 'Fritőz',
+    name: 'Fryer',
     icon: 'droplet',
     category: 'fryer',
     baseCost: 2_400,
     tierNames: [
-      'Asztali fritőz',
-      'Duplakosaras',
-      'Nyomásos fritőz',
-      'Olajszűrős rendszer',
-      'Gyorsfelfűtő',
-      'Négykosaras sor',
-      'Automata kosáremelő',
-      'Hőcserélős ipari',
-      'Vákuumfritőz',
-      'Zéró-olaj rendszer',
-      'Ciklonos szárító',
-      'Kvantumkosár',
+      'Countertop Fryer',
+      'Twin Basket',
+      'Pressure Fryer',
+      'Oil Filter System',
+      'Rapid Heater',
+      'Four Basket Line',
+      'Auto Basket Lift',
+      'Heat Exchange Industrial',
+      'Vacuum Fryer',
+      'Zero Oil System',
+      'Cyclone Dryer',
+      'Quantum Basket',
     ],
   }),
   categoryMachine({
     id: 'oven',
-    name: 'Kemence',
+    name: 'Oven',
     icon: 'bread',
     category: 'dough',
     baseCost: 18_000,
     tierNames: [
-      'Sámlis kemence',
-      'Kőlapos sütő',
-      'Gőzinjektoros',
-      'Forgókocsis',
-      'Alagútkemence',
-      'Kétkamrás profi',
-      'Faalapú hibrid',
-      'Programozható sor',
-      'Hőtárolós masszív',
-      'Automata dagasztó-sütő',
-      'Folyamatos szalagsütő',
-      'Termikus mátrix',
+      'Backyard Oven',
+      'Stone Deck Oven',
+      'Steam Injection',
+      'Rotating Rack',
+      'Tunnel Oven',
+      'Twin Chamber Pro',
+      'Wood Fired Hybrid',
+      'Programmable Line',
+      'Heat Storage Beast',
+      'Auto Knead & Bake',
+      'Continuous Belt Oven',
+      'Thermal Matrix',
     ],
   }),
   categoryMachine({
     id: 'cooler',
-    name: 'Hűtőpult',
+    name: 'Cooler Counter',
     icon: 'snow',
     category: 'drink',
     baseCost: 140_000,
     tierNames: [
-      'Jeges láda',
-      'Kompresszoros hűtő',
-      'Üvegajtós vitrin',
-      'Gyorshűtő torony',
-      'Csapos rendszer',
-      'Szénsavas keverő',
-      'Több zónás pult',
-      'Nitro-hűtés',
-      'Önkiszolgáló fal',
-      'Okos adagoló',
-      'Kriogén torony',
-      'Örökjég rendszer',
+      'Ice Chest',
+      'Compressor Fridge',
+      'Glass Door Case',
+      'Blast Chiller Tower',
+      'Tap System',
+      'Carbonation Mixer',
+      'Multi Zone Counter',
+      'Nitro Cooling',
+      'Self Serve Wall',
+      'Smart Dispenser',
+      'Cryogenic Tower',
+      'Everfrost System',
     ],
   }),
   categoryMachine({
     id: 'showcase',
-    name: 'Cukrászvitrin',
+    name: 'Pastry Case',
     icon: 'star',
     category: 'sweet',
     baseCost: 2_000_000,
     tierNames: [
-      'Papírtálcás pult',
-      'Üvegbura',
-      'Hűtött vitrin',
-      'Forgó emeletes',
-      'Világító sziget',
-      'Páraszabályzós',
-      'Kétoldalas vitrin',
-      'Temperáló egység',
-      'Csokiszökőkút-sor',
-      'Design tortafal',
-      'Lebegő vitrin',
-      'Aranyfüst szekció',
+      'Paper Tray Counter',
+      'Glass Cloche',
+      'Chilled Display',
+      'Rotating Tiers',
+      'Lit Island',
+      'Humidity Control',
+      'Double Sided Case',
+      'Tempering Unit',
+      'Chocolate Fountain Row',
+      'Designer Cake Wall',
+      'Floating Display',
+      'Gold Leaf Section',
     ],
   }),
 
-  // --- Nem kategóriához kötött gépek ---
+  // --- Machines that are not tied to a category ---
   {
     id: 'register',
     cityId: 'all',
-    name: 'Pénztárgép',
+    name: 'Register',
     icon: 'coin',
     tiers: buildTiers({
       count: 10,
@@ -205,24 +205,24 @@ export const EQUIPMENT: readonly EquipmentDef[] = [
       ],
       labelAt: (tier) =>
         [
-          'Fémkassza',
-          'Mechanikus gép',
-          'Digitális kassza',
-          'Kártyaolvasó',
-          'Érintőképernyős',
-          'Felhő-kassza',
-          'Önkiszolgáló kioszk',
-          'Arcfelismerős fizetés',
-          'Duplasoros kioszk',
-          'Aranypult-terminál',
-        ][tier - 1] ?? `Pénztárgép ${tier}`,
-      descriptionAt: (tier) => `${mult(Math.pow(1.22, tier))} bevétel MINDEN termékre`,
+          'Metal Cash Box',
+          'Mechanical Register',
+          'Digital Register',
+          'Card Reader',
+          'Touchscreen POS',
+          'Cloud Register',
+          'Self Serve Kiosk',
+          'Face Pay Terminal',
+          'Twin Lane Kiosk',
+          'Gold Counter Terminal',
+        ][tier - 1] ?? `Register ${tier}`,
+      descriptionAt: (tier) => `${mult(Math.pow(1.22, tier))} income on EVERY product`,
     }),
   },
   {
     id: 'storage',
     cityId: 'all',
-    name: 'Raktár',
+    name: 'Storage',
     icon: 'box',
     tiers: buildTiers({
       count: 8,
@@ -231,22 +231,22 @@ export const EQUIPMENT: readonly EquipmentDef[] = [
       effectsAt: (tier) => [{ type: 'offlineCapHours', value: tier * 1.5 }],
       labelAt: (tier) =>
         [
-          'Polcos sarok',
-          'Fémállvány',
-          'Hűtőkamra',
-          'Konténer',
-          'Automata polcsor',
-          'Központi raktár',
-          'Regionális depó',
-          'Logisztikai központ',
-        ][tier - 1] ?? `Raktár ${tier}`,
-      descriptionAt: (tier) => `+${tier * 1.5} óra offline bevétel-sapka`,
+          'Shelf Corner',
+          'Metal Racking',
+          'Cold Room',
+          'Shipping Container',
+          'Automated Racks',
+          'Central Warehouse',
+          'Regional Depot',
+          'Logistics Hub',
+        ][tier - 1] ?? `Storage ${tier}`,
+      descriptionAt: (tier) => `+${tier * 1.5}h offline income cap`,
     }),
   },
   {
     id: 'nightshift',
     cityId: 'all',
-    name: 'Éjszakai műszak',
+    name: 'Night Shift',
     icon: 'moon',
     tiers: buildTiers({
       count: 6,
@@ -255,25 +255,25 @@ export const EQUIPMENT: readonly EquipmentDef[] = [
       effectsAt: (tier) => [{ type: 'offlineRate', value: tier * 0.06 }],
       labelAt: (tier) =>
         [
-          'Kései zárás',
-          'Éjfélig nyitva',
-          'Hajnali műszak',
-          'Két műszak',
-          'Non-stop pult',
-          '24/7 birodalom',
-        ][tier - 1] ?? `Éjszakai műszak ${tier}`,
-      descriptionAt: (tier) => `+${Math.round(tier * 6)}% offline bevételi arány`,
+          'Late Close',
+          'Open Till Midnight',
+          'Dawn Shift',
+          'Double Shift',
+          'Non-Stop Counter',
+          '24/7 Empire',
+        ][tier - 1] ?? `Night Shift ${tier}`,
+      descriptionAt: (tier) => `+${Math.round(tier * 6)}% offline income rate`,
     }),
   },
   {
-    // FONTOS BALANCE-KORLÁT: a koppintás-szorzó szándékosan kicsi.
-    // Egy kézi kiszolgálás egy teljes ciklust ad el, de a termék utána egy
-    // ciklusidőn át nem szolgálható ki újra – így a kézi bevétel felső
-    // korlátja: automatizált bevétel × tapMultiplier. Ha ez a szorzó nagyra
-    // nőne, az aktív koppintgatás megkerülné az egész gazdaságot.
+    // IMPORTANT BALANCE LIMIT: the tap multiplier is small on purpose.
+    // A hand-served customer pays one full cycle, but the product then cannot
+    // be served again for one cycle time - so the ceiling on manual income is
+    // automated income x tapMultiplier. If this multiplier grew large, active
+    // tapping would bypass the entire economy.
     id: 'counter',
     cityId: 'all',
-    name: 'Kiszolgálópult',
+    name: 'Service Counter',
     icon: 'hand',
     tiers: buildTiers({
       count: 8,
@@ -282,16 +282,16 @@ export const EQUIPMENT: readonly EquipmentDef[] = [
       effectsAt: (tier) => [{ type: 'tapMultiplier', value: Math.pow(1.12, tier) }],
       labelAt: (tier) =>
         [
-          'Faláda pult',
-          'Rozsdamentes pult',
-          'Széles pult',
-          'Két kiadóablak',
-          'Sorvezetős pult',
-          'Három ablak',
-          'Gyorskiadó sziget',
-          'Villámpult',
-        ][tier - 1] ?? `Pult ${tier}`,
-      descriptionAt: (tier) => `${mult(Math.pow(1.12, tier))} érték minden kézi kiszolgálásra`,
+          'Crate Counter',
+          'Stainless Counter',
+          'Wide Counter',
+          'Two Serving Windows',
+          'Queue Rail Counter',
+          'Three Windows',
+          'Express Island',
+          'Lightning Counter',
+        ][tier - 1] ?? `Counter ${tier}`,
+      descriptionAt: (tier) => `${mult(Math.pow(1.12, tier))} value on every hand-served order`,
     }),
   },
 ];
@@ -300,11 +300,11 @@ const EQUIPMENT_BY_ID = new Map(EQUIPMENT.map((e) => [e.id, e]));
 
 export function getEquipment(id: string): EquipmentDef {
   const equipment = EQUIPMENT_BY_ID.get(id);
-  if (!equipment) throw new Error(`Ismeretlen gép: ${id}`);
+  if (!equipment) throw new Error(`Unknown equipment: ${id}`);
   return equipment;
 }
 
-/** A következő megvehető szint, vagy null ha kimaxolt. */
+/** The next purchasable tier, or null when maxed out. */
 export function nextTier(def: EquipmentDef, ownedTier: number): EquipmentTierDef | null {
   return def.tiers.find((t) => t.tier === ownedTier + 1) ?? null;
 }

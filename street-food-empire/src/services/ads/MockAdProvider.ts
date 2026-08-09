@@ -41,7 +41,7 @@ export class MockAdProvider implements AdProvider {
 
   async initialize(options: { personalizedAds: boolean }): Promise<boolean> {
     this.personalized = options.personalizedAds;
-    log.info('MockAdProvider inicializálva (nincs valódi reklám)');
+    log.info('MockAdProvider initialised (no real ads)');
     return true;
   }
 
@@ -74,7 +74,7 @@ export class MockAdProvider implements AdProvider {
 
   async showRewarded(placement: RewardedPlacement): Promise<RewardedResult> {
     if (this.rewarded.get(placement) !== 'ready') {
-      return { status: 'unavailable', reason: 'A videó még nem töltődött be.' };
+      return { status: 'unavailable', reason: 'The video has not loaded yet.' };
     }
 
     this.rewarded.set(placement, 'idle');
@@ -92,7 +92,7 @@ export class MockAdProvider implements AdProvider {
 
   async showInterstitial(): Promise<InterstitialResult> {
     if (this.interstitial !== 'ready') {
-      return { status: 'skipped', reason: 'Nincs betöltött reklám.' };
+      return { status: 'skipped', reason: 'No ad is loaded.' };
     }
     this.interstitial = 'idle';
     await delay(this.options.watchMs ?? 400);
@@ -102,7 +102,7 @@ export class MockAdProvider implements AdProvider {
 
   setPersonalizedAds(enabled: boolean): void {
     this.personalized = enabled;
-    log.debug('Mock: személyre szabott reklám', enabled);
+    log.debug('Mock: personalised ads', enabled);
   }
 
   /** Csak teszthez. */

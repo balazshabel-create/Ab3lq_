@@ -45,13 +45,13 @@ class AdServiceImpl {
       const ready = await admob.initialize({ personalizedAds });
       if (ready) {
         this.provider = admob;
-        log.info('Reklámszolgáltató: AdMob');
+        log.info('Ad provider: AdMob');
       } else {
-        log.warn('AdMob nem indult el, marad a mock.');
+        log.warn('AdMob did not start, staying on the mock.');
       }
     } else {
       await this.provider.initialize({ personalizedAds });
-      log.info('Reklámszolgáltató: mock (natív SDK nélkül)');
+      log.info('Ad provider: mock (no native SDK)');
     }
 
     this.initialized = true;
@@ -97,7 +97,7 @@ class AdServiceImpl {
 
   async showRewarded(placement: RewardedPlacement) {
     if (this.showing) {
-      return { status: 'unavailable' as const, reason: 'Már fut egy reklám.' };
+      return { status: 'unavailable' as const, reason: 'An ad is already running.' };
     }
     this.showing = true;
     try {
@@ -109,7 +109,7 @@ class AdServiceImpl {
 
   async showInterstitial() {
     if (this.showing) {
-      return { status: 'skipped' as const, reason: 'Már fut egy reklám.' };
+      return { status: 'skipped' as const, reason: 'An ad is already running.' };
     }
     this.showing = true;
     try {
@@ -171,28 +171,28 @@ export function canShowInterstitial(
   wallMs: number,
   sessionAgeSeconds: number,
 ): AdGate {
-  if (hasRemoveAds(state)) return { allowed: false, reason: 'Reklámmentes verzió.' };
+  if (hasRemoveAds(state)) return { allowed: false, reason: 'Ad-free version.' };
 
   const rules = GAME_CONFIG.ads.interstitial;
 
   if (sessionAgeSeconds < rules.sessionGraceSeconds) {
-    return { allowed: false, reason: 'Túl korán van a munkamenetben.' };
+    return { allowed: false, reason: 'Too early in the session.' };
   }
   if (state.daily.interstitialsShown >= rules.dailyCap) {
-    return { allowed: false, reason: 'Elérted a napi limitet.' };
+    return { allowed: false, reason: 'Daily limit reached.' };
   }
   const sinceLast = secondsSince(state.ads.lastInterstitialAt, wallMs);
   if (sinceLast < rules.cooldownSeconds) {
-    return { allowed: false, reason: 'Még tart a szünet két reklám között.' };
+    return { allowed: false, reason: 'The break between two ads is still running.' };
   }
   // A jutalomvideó után sem jöhet azonnal interstitial – ez a legidegesítőbb
   // minta, amit egy idle játék csinálhat.
   const sinceRewarded = secondsSince(state.ads.lastRewardedAt, wallMs);
   if (sinceRewarded < rules.cooldownSeconds) {
-    return { allowed: false, reason: 'Nemrég nézett jutalomvideót.' };
+    return { allowed: false, reason: 'A rewarded video was watched recently.' };
   }
   if (state.ads.eventsSinceInterstitial < rules.everyNthEvent) {
-    return { allowed: false, reason: 'Még nem történt elég esemény.' };
+    return { allowed: false, reason: 'Not enough has happened yet.' };
   }
 
   return { allowed: true };
@@ -207,13 +207,13 @@ export function canShowRewarded(
 
   const usedToday = state.daily.rewardedByPlacement[placement] ?? 0;
   if (usedToday >= rules.dailyCapPerPlacement) {
-    return { allowed: false, reason: 'Ma már nem elérhető, holnap újra!' };
+    return { allowed: false, reason: 'Not available today, come back tomorrow!' };
   }
 
   const sinceLast = secondsSince(state.ads.lastRewardedAt, wallMs);
   if (sinceLast < rules.cooldownSeconds) {
     const wait = Math.ceil(rules.cooldownSeconds - sinceLast);
-    return { allowed: false, reason: `Még ${wait} mp.` };
+    return { allowed: false, reason: `${wait}s left.` };
   }
 
   return { allowed: true };
@@ -222,10 +222,10 @@ export function canShowRewarded(
 /** Elérhető-e az ingyen láda? */
 export function canOpenFreeCrate(state: GameState, wallMs: number): AdGate {
   if (state.daily.cratesOpened >= GAME_CONFIG.ads.freeCrateDailyCap) {
-    return { allowed: false, reason: 'Ma már nincs több láda.' };
+    return { allowed: false, reason: 'No more crates today.' };
   }
   if (wallMs < state.ads.nextFreeCrateAt) {
-    return { allowed: false, reason: 'Még töltődik.' };
+    return { allowed: false, reason: 'Still loading.' };
   }
   return { allowed: true };
 }

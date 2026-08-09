@@ -1,21 +1,21 @@
 import type { CityDef, CityId } from '@/game/types';
 
 /**
- * VÁROSOK
+ * CITIES
  *
- * Minden város egy teljes, önálló termékkészletet hoz (6 termék), és amíg
- * birtokolod, +100% globális bevételt ad (globalMultiplier: 2). A városok
- * jelentik a "nagy ugrást": egy új város termékei nagyságrendekkel drágábbak,
- * de a bevétel/ár arányuk `ratioBoost`-szor jobb, ezért mindig megéri nyitni.
+ * Every city brings a complete, standalone product set (6 products), and while
+ * owned it grants +100% global income (globalMultiplier: 2). Cities are the
+ * "big jump": a new city's products are orders of magnitude more expensive, but
+ * their income/price ratio is far better, so opening one is always worth it.
  *
- * Skálázás (lásd docs/ECONOMY.md):
- *   költség × 5e4 városonként, bevétel × 1.5e5 városonként  → 3× jobb arány
+ * Scaling (see docs/ECONOMY.md):
+ *   cost x 5e4 per city, income x 1.5e5 per city  -> 3x better ratio
  */
 
 export type CityScaling = {
-  /** A termékek alapárának szorzója az 1. városhoz képest. */
+  /** Multiplier on product base cost relative to city 1. */
   costScale: number;
-  /** A termékek alapbevételének szorzója az 1. városhoz képest. */
+  /** Multiplier on product base revenue relative to city 1. */
   revenueScale: number;
 };
 
@@ -23,13 +23,13 @@ const COST_STEP = 5e4;
 const REVENUE_STEP = 1.5e5;
 
 /**
- * A város-feloldási ár lépése. KRITIKUS, hogy ez NAGYOBB legyen, mint a
- * bevétel lépése (REVENUE_STEP × a városonkénti ×2 globális szorzó = 3e5),
- * különben minden újabb város *gyorsabban* nyílna meg, mint az előző, és az
- * egész térkép percek alatt elfogyna.
+ * Step of the city unlock price. It is CRITICAL that this is LARGER than the
+ * income step (REVENUE_STEP x the per-city x2 global multiplier = 3e5),
+ * otherwise every new city would open *faster* than the previous one and the
+ * whole map would be consumed in minutes.
  *
- * 1,5e6 / 3e5 = 5 → minden város nagyjából ötször annyi ideig tart, mint az
- * előző. Ez adja az „első hét” ívét: 15 perc → 1 óra → 6 óra → 1,5 nap → 1 hét.
+ * 1.5e6 / 3e5 = 5 -> each city takes roughly five times as long as the one
+ * before. That is the "first week" arc: 15 min -> 1h -> 6h -> 1.5 days -> 1 week.
  */
 const UNLOCK_STEP = 1.5e6;
 
@@ -40,7 +40,7 @@ function scalingFor(index: number): CityScaling {
   };
 }
 
-/** Város-feloldási ár: az előző város legdrágább termékének nagyságrendje. */
+/** City unlock price: the magnitude of the previous city's priciest product. */
 function unlockCostFor(index: number): number {
   if (index === 0) return 0;
   return 2.5e6 * Math.pow(UNLOCK_STEP, index - 1);
@@ -57,37 +57,37 @@ const CITY_SEEDS: readonly CitySeed[] = [
   {
     id: 'budapest',
     name: 'Budapest',
-    tagline: 'Egy kocsi, egy rezsó, egy álom.',
+    tagline: 'One cart, one hotplate, one dream.',
     colors: ['#F2994A', '#EB5757'],
   },
   {
     id: 'prague',
-    name: 'Prága',
-    tagline: 'Kürtős illat a macskaköveken.',
+    name: 'Prague',
+    tagline: 'Sweet smoke over the cobblestones.',
     colors: ['#56CCF2', '#2F80ED'],
   },
   {
     id: 'berlin',
     name: 'Berlin',
-    tagline: 'Éjjel-nappal nyitva, mindig sor áll.',
+    tagline: 'Open all night, the line never ends.',
     colors: ['#BB6BD9', '#5B2C6F'],
   },
   {
     id: 'istanbul',
-    name: 'Isztambul',
-    tagline: 'Fűszerpiac és parázs a Boszporusznál.',
+    name: 'Istanbul',
+    tagline: 'Spice market embers by the strait.',
     colors: ['#F2C94C', '#F2994A'],
   },
   {
     id: 'bangkok',
     name: 'Bangkok',
-    tagline: 'Wok-tűz és neonfény éjfél után.',
+    tagline: 'Wok fire and neon after midnight.',
     colors: ['#6FCF97', '#219653'],
   },
   {
     id: 'newyork',
     name: 'New York',
-    tagline: 'A sarki kocsiból lett birodalom.',
+    tagline: 'From corner cart to empire.',
     colors: ['#EB5757', '#9B51E0'],
   },
 ];
@@ -99,7 +99,7 @@ export const CITIES: readonly CityDef[] = CITY_SEEDS.map((seed, index) => ({
   colors: seed.colors,
   unlockCost: unlockCostFor(index),
   unlockRequiresLifetime: index === 0 ? 0 : unlockCostFor(index) * 2,
-  // A kezdőváros nem ad bónuszt (az a 100%-os alap); minden további város ×2.
+  // The starting city gives no bonus (it is the 100% baseline); each further city x2.
   globalMultiplier: index === 0 ? 1 : 2,
 }));
 
@@ -114,7 +114,7 @@ const CITY_INDEX = new Map(CITIES.map((c, i) => [c.id, i]));
 
 export function getCity(id: CityId): CityDef {
   const city = CITY_BY_ID.get(id);
-  if (!city) throw new Error(`Ismeretlen város: ${id}`);
+  if (!city) throw new Error(`Unknown city: ${id}`);
   return city;
 }
 
@@ -122,7 +122,7 @@ export function getCityIndex(id: CityId): number {
   return CITY_INDEX.get(id) ?? 0;
 }
 
-/** A soron következő, még nem birtokolt város (vagy null, ha mind megvan). */
+/** The next city not yet owned (or null when all are owned). */
 export function nextLockedCity(unlockedIds: readonly CityId[]): CityDef | null {
   return CITIES.find((c) => !unlockedIds.includes(c.id)) ?? null;
 }

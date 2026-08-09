@@ -57,44 +57,44 @@ function deserialize(text: string, wallMs: number): ParseResult {
   try {
     envelope = JSON.parse(text);
   } catch {
-    return { ok: false, reason: 'A mentés nem érvényes JSON.' };
+    return { ok: false, reason: 'The save is not valid JSON.' };
   }
 
   if (!envelope || typeof envelope !== 'object') {
-    return { ok: false, reason: 'A mentés üres vagy hibás.' };
+    return { ok: false, reason: 'The save is empty or malformed.' };
   }
 
   const { d, c } = envelope as Partial<SaveEnvelope>;
   if (typeof d !== 'string' || typeof c !== 'string') {
-    return { ok: false, reason: 'Hiányzó mezők a mentésben.' };
+    return { ok: false, reason: 'Missing fields in the save.' };
   }
 
   if (!verifyChecksum(d, GAME_CONFIG.save.checksumSalt, c)) {
-    return { ok: false, reason: 'Az ellenőrzőösszeg nem egyezik (sérült mentés).' };
+    return { ok: false, reason: 'Checksum mismatch (corrupted save).' };
   }
 
   let raw: unknown;
   try {
     raw = JSON.parse(d);
   } catch {
-    return { ok: false, reason: 'A játékállapot nem olvasható.' };
+    return { ok: false, reason: 'The game state cannot be read.' };
   }
 
   if (!raw || typeof raw !== 'object') {
-    return { ok: false, reason: 'A játékállapot nem objektum.' };
+    return { ok: false, reason: 'The game state is not an object.' };
   }
 
   try {
     return { ok: true, state: migrateAndCoerce(raw as Record<string, unknown>, wallMs) };
   } catch (err) {
-    return { ok: false, reason: `Migráció sikertelen: ${String(err)}` };
+    return { ok: false, reason: `Migration failed: ${String(err)}` };
   }
 }
 
 /** Betöltés a fő kulcsról, szükség esetén a backupról, végső esetben új játék. */
 export async function loadGame(wallMs: number = Date.now()): Promise<LoadOutcome> {
   const primary = await safeAsync(
-    'Mentés olvasása',
+    'Reading save',
     () => AsyncStorage.getItem(GAME_CONFIG.save.storageKey),
     null,
   );
@@ -102,10 +102,10 @@ export async function loadGame(wallMs: number = Date.now()): Promise<LoadOutcome
   if (primary) {
     const parsed = deserialize(primary, wallMs);
     if (parsed.ok) return { kind: 'loaded', state: parsed.state };
-    log.warn('A fő mentés nem használható, próbáljuk a biztonsági másolatot', parsed.reason);
+    log.warn('The main save is unusable, trying the backup', parsed.reason);
 
     const backup = await safeAsync(
-      'Biztonsági mentés olvasása',
+      'Reading backup save',
       () => AsyncStorage.getItem(GAME_CONFIG.save.backupKey),
       null,
     );
@@ -115,7 +115,7 @@ export async function loadGame(wallMs: number = Date.now()): Promise<LoadOutcome
       if (backupParsed.ok) {
         return { kind: 'restoredBackup', state: backupParsed.state, reason: parsed.reason };
       }
-      log.error('A biztonsági mentés is sérült', backupParsed.reason);
+      log.error('The backup save is corrupted too', backupParsed.reason);
     }
 
     return {
@@ -126,13 +126,13 @@ export async function loadGame(wallMs: number = Date.now()): Promise<LoadOutcome
   }
 
   // Nincs mentés: első indítás.
-  return { kind: 'fresh', state: createInitialState(wallMs), reason: 'Nincs korábbi mentés.' };
+  return { kind: 'fresh', state: createInitialState(wallMs), reason: 'No previous save.' };
 }
 
 /** Mentés. A korábbi jó mentés előbb átkerül a backup kulcsra. */
 export async function saveGame(state: GameState): Promise<boolean> {
   return safeAsync(
-    'Mentés írása',
+    'Writing save',
     async () => {
       const previous = await AsyncStorage.getItem(GAME_CONFIG.save.storageKey);
       if (previous) {
@@ -147,7 +147,7 @@ export async function saveGame(state: GameState): Promise<boolean> {
 
 export async function clearSave(): Promise<void> {
   await safeAsync(
-    'Mentés törlése',
+    'Deleting save',
     async () => {
       await AsyncStorage.removeItem(GAME_CONFIG.save.storageKey);
       await AsyncStorage.removeItem(GAME_CONFIG.save.backupKey);

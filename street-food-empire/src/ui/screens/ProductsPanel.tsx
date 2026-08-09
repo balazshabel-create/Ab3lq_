@@ -56,14 +56,14 @@ export function ProductsPanel() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      {/* --- Hely + vásárlási mennyiség --- */}
+      {/* --- Location + buy quantity --- */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text variant="caption" color={palette.textDim}>
             {city.name.toUpperCase()}
           </Text>
           <Text variant="label" color={palette.textMuted}>
-            {ownedCount}/{views.length} termék · {automated} automata
+            {ownedCount}/{views.length} products · {automated} automated
           </Text>
         </View>
 
@@ -94,13 +94,13 @@ export function ProductsPanel() {
           Tipp
         </Text>
         <Text variant="caption" color={palette.textDim} style={{ marginTop: 4 }}>
-          Menedzser nélkül a termék offline nem termel, és a macskáknak kézzel
-          kell kiadnod az adagot. Ha csak egy dologra van pénzed, szinte mindig
-          a menedzser a jobb választás.
+          Without a manager a product earns nothing offline, and you have to
+          hand every order to the cats yourself. If you can only afford one
+          thing, the manager is almost always the better pick.
         </Text>
       </Card>
 
-      <SectionTitle title="Következő lépés" />
+      <SectionTitle title="Next step" />
       <NextStepHint />
     </ScrollView>
   );
@@ -136,7 +136,7 @@ const QuantityChip = React.memo(function QuantityChip({
         onPressIn={() => press(0.92)}
         onPressOut={() => press(1)}
         accessibilityRole="button"
-        accessibilityLabel={`Vásárlás ${quantity === 'max' ? 'maximum' : quantity} egységenként`}
+        accessibilityLabel={`Buy ${quantity === 'max' ? 'maximum' : quantity} at a time`}
         accessibilityState={{ selected: active }}
         style={[styles.quantityChip, active && styles.quantityChipActive]}
       >
@@ -167,12 +167,12 @@ const NextStepHint = React.memo(function NextStepHint() {
   const locked = views.find((view) => !view.unlocked);
 
   const message = affordableManager
-    ? `Vedd fel a menedzsert a(z) ${affordableManager.def.name} mellé — innentől magától termel, offline is.`
+    ? `Hire the manager for ${affordableManager.def.name} — from then on it earns on its own, even offline.`
     : manager
-      ? `Gyűjts ${formatMoney(manager.def.managerCost)}-ot a(z) ${manager.def.name} menedzserére.`
+      ? `Save up ${formatMoney(manager.def.managerCost)} for the ${manager.def.name} manager.`
       : locked
-        ? `Keress ${formatMoney(locked.def.unlockAtCityEarnings)}-ot itt, és új termék nyílik.`
-        : 'Minden terméked automata. Nézd meg a Gépek és a Helyszínek panelt!';
+        ? `Earn ${formatMoney(locked.def.unlockAtCityEarnings)} here to unlock a new product.`
+        : 'Every product is automated. Check the Machines and Locations panels!';
 
   return (
     <Card style={styles.hintCard}>

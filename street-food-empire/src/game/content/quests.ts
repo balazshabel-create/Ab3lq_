@@ -1,88 +1,87 @@
 import type { QuestDef } from '@/game/types';
 
 /**
- * NAPI KÜLDETÉSEK
+ * DAILY QUESTS
  *
- * Naponta 3 küldetés a poolból, determinisztikusan a nap kulcsából sorsolva
- * (nem a szerverről) – így offline is működik, és ugyanazon a napon
- * újratelepítés után is ugyanazt kapod.
+ * 3 quests a day drawn from the pool, deterministically seeded from the day key
+ * (not from a server) - so it works offline, and a reinstall on the same day
+ * gives you the same set.
  *
- * A `scaleWithIncome: true` küldetéseknél a cél a játékos aktuális
- * bevétel/mp-jéhez igazodik, hogy késői játékban se legyen triviális, korán
- * pedig ne legyen teljesíthetetlen.
+ * For quests with `scaleWithIncome: true` the target follows the player's
+ * current income/s, so it is neither trivial late nor impossible early.
  */
 
 export const QUEST_POOL: readonly QuestDef[] = [
   {
     id: 'q.taps',
-    text: 'Szolgálj ki {target} vevőt kézzel',
+    text: 'Serve {target} customers by hand',
     metric: 'totalTaps',
     target: 60,
     coinReward: 10,
   },
   {
     id: 'q.taps-big',
-    text: 'Szolgálj ki {target} vevőt kézzel',
+    text: 'Serve {target} customers by hand',
     metric: 'totalTaps',
     target: 200,
     coinReward: 14,
   },
   {
     id: 'q.levels',
-    text: 'Vegyél {target} termékszintet',
+    text: 'Buy {target} product levels',
     metric: 'totalLevelsBought',
     target: 40,
     coinReward: 10,
   },
   {
     id: 'q.levels-big',
-    text: 'Vegyél {target} termékszintet',
+    text: 'Buy {target} product levels',
     metric: 'totalLevelsBought',
     target: 150,
     coinReward: 14,
   },
   {
     id: 'q.earn-short',
-    text: 'Keress {target} dollárt',
+    text: 'Earn ${target}',
     metric: 'runEarnings',
-    // 10 perc bevételének megfelelő cél
+    // Target worth about 10 minutes of income
     target: 600,
     scaleWithIncome: true,
     coinReward: 10,
   },
   {
     id: 'q.earn-long',
-    text: 'Keress {target} dollárt',
+    text: 'Earn ${target}',
     metric: 'runEarnings',
-    // 45 perc bevétele
+    // 45 minutes of income
     target: 2_700,
     scaleWithIncome: true,
     coinReward: 15,
   },
   {
     id: 'q.crates',
-    text: 'Nyiss ki {target} ládát',
+    text: 'Open {target} crates',
     metric: 'cratesOpened',
     target: 3,
     coinReward: 12,
   },
   {
     id: 'q.ads',
-    text: 'Nézz meg {target} jutalomvideót',
+    text: 'Watch {target} rewarded videos',
     metric: 'adsWatched',
     target: 2,
     coinReward: 12,
   },
   {
     id: 'q.managers',
-    text: 'Vegyél fel {target} menedzsert',
+    text: 'Hire {target} managers',
     metric: 'managersHired',
     target: 1,
     coinReward: 15,
   },
   {
     id: 'q.lifetime',
-    text: 'Keress {target} dollárt összesen',
+    text: 'Earn ${target} in total',
     metric: 'lifetimeEarnings',
     target: 1_800,
     scaleWithIncome: true,
@@ -96,12 +95,12 @@ export function getQuest(id: string): QuestDef | null {
   return BY_ID.get(id) ?? null;
 }
 
-/** Hány küldetés fut egyszerre. */
+/** How many quests run at the same time. */
 export const DAILY_QUEST_COUNT = 3;
 
 /**
- * A nap kulcsából (`2026-08-09`) egy stabil 32 bites szám – így a napi
- * küldetéskiosztás determinisztikus, de naponta más.
+ * Turns a day key (`2026-08-09`) into a stable 32-bit number - so the daily
+ * quest draw is deterministic, but different every day.
  */
 export function dayKeySeed(dayKey: string): number {
   let hash = 2166136261;

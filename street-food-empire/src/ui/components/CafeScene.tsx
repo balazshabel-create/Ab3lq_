@@ -75,14 +75,14 @@ export const CafeScene = React.memo(function CafeScene({
     <View style={styles.scene}>
       <Backdrop colors={city.colors} />
 
-      {/* Járda: pontosan a pult alsó élénél kezdődik, itt áll sorba a nép. */}
+      {/* Pavement: starts exactly at the counter's lower edge, the queue stands here. */}
       <View style={styles.sidewalk} pointerEvents="none">
         <View style={styles.curb} />
       </View>
 
       <Awning colors={city.colors} />
 
-      {/* --- A szakács: TE vagy az, a pult mögött --- */}
+      {/* --- The chef: that is YOU, behind the counter --- */}
       <View style={styles.playerSlot} pointerEvents="none">
         <PlayerCat
           state={cookState}
@@ -148,7 +148,7 @@ const Backdrop = React.memo(function Backdrop({
         <Circle cx="322" cy="74" r="26" fill="#FFF4D8" opacity={0.14} />
         <Circle cx="314" cy="68" r="22" fill="#FFF4D8" opacity={0.2} />
 
-        {/* Városi sziluett */}
+        {/* City skyline */}
         <G opacity={0.35} fill="#0C0A14">
           <Rect x="-4" y="180" width="58" height="240" rx="3" />
           <Rect x="62" y="132" width="44" height="288" rx="3" />
@@ -160,7 +160,7 @@ const Backdrop = React.memo(function Backdrop({
         </G>
       </Svg>
 
-      {/* Az ablakok külön rétegen, hogy animálni lehessen az opacitásukat */}
+      {/* Windows on their own layer so their opacity can be animated */}
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: windowOpacity }]}>
         <Svg style={StyleSheet.absoluteFill} viewBox="0 0 400 640" preserveAspectRatio="xMidYMid slice">
           <G fill={colors[0]}>
@@ -206,7 +206,7 @@ const Awning = React.memo(function Awning({
             fill={index % 2 === 0 ? colors[0] : colors[1]}
           />
         ))}
-        {/* Fodros alsó él */}
+        {/* Scalloped lower edge */}
         <Path
           d={Array.from({ length: stripes })
             .map((_, i) => {
@@ -238,15 +238,15 @@ const Counter = React.memo(function Counter({
       {/* Test */}
       <Rect x="0" y="12" width="400" height="138" fill="#2A2540" />
       <Rect x="0" y="12" width="400" height="5" fill="#3B3457" />
-      {/* Függőleges lécek */}
+      {/* Vertical slats */}
       <G opacity={0.22} stroke="#0F0D18" strokeWidth={1.5}>
         {Array.from({ length: 13 }).map((_, index) => (
           <Path key={index} d={`M${index * 32 + 16} 18 V150`} />
         ))}
       </G>
-      {/* Kiadóablak melegsárga fénye */}
+      {/* Warm yellow glow of the serving window */}
       <Rect x="128" y="26" width="144" height="34" rx="8" fill="#F2C94C" opacity={0.16} />
-      {/* Menütábla */}
+      {/* Menu board */}
       <G opacity={0.6}>
         <Rect x="300" y="34" width="62" height="42" rx="4" fill="#1A1626" />
         <G stroke="#7E7699" strokeWidth={2} strokeLinecap="round">
@@ -473,8 +473,8 @@ const QueueCat = React.memo(function QueueCat({
         onPress={() => onServe(customer.id)}
         disabled={customer.phase !== 'waiting'}
         accessibilityRole="button"
-        accessibilityLabel={`${def.name} elkészítése a vendégnek`}
-        accessibilityHint="Koppints, és a szakácsod elkészíti a rendelést"
+        accessibilityLabel={`Cook ${def.name} for the customer`}
+        accessibilityHint="Tap and your chef will cook the order"
         hitSlop={14}
       >
         {needsMe ? (
@@ -550,7 +550,7 @@ const EmptyHint = React.memo(function EmptyHint() {
   return (
     <Animated.View style={[styles.emptyHint, { opacity }]} pointerEvents="none">
       <Text variant="caption" color="#FFFFFF">
-        Nyiss ki egy terméket, és jönnek a vendégek…
+        Unlock a product and the customers will come…
       </Text>
     </Animated.View>
   );
