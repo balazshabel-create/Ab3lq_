@@ -26,6 +26,7 @@ import {
 import { refreshDailyIfNeeded } from '@/game/progression';
 import { computeMultipliers, totalIncomePerSecond } from '@/game/selectors';
 import { serveByHand, simulateTick } from '@/game/simulate';
+import { cycleSeconds } from '@/game/economy';
 import type {
   AchievementDef,
   BuyQuantity,
@@ -86,6 +87,16 @@ export type RewardPopup =
 
 export type BootStatus = 'booting' | 'ready' | 'error';
 
+/** Egy folyamatban lévő kézi elkészítés. */
+export type CookingJob = {
+  customerId: number;
+  productId: ProductId;
+  /** Fali óra, ms. */
+  startedAt: number;
+  /** Teljes hossz ms-ban. */
+  duration: number;
+};
+
 type GameStore = {
   status: BootStatus;
   bootError: string | null;
@@ -100,7 +111,19 @@ type GameStore = {
    * látványbeli állapot, ami visszatéréskor magától újratelik.
    */
   customers: Customer[];
-  /** Aktuális bevétel/mp, a fejlécnek. */
+  /**
+   * Amit a szakács macska (a játékos) épp készít. `null`, ha nem főz.
+   * Nem mentjük: ha közben bezárod az appot, a rendelés egyszerűen elveszik.
+   */
+  cooking: CookingJob | null;
+  /**
+   * A fejlécben mutatott bevétel/mp.
+   *
+   * NEM csak az automatizált termelés: tartalmazza a kézi kiszolgálásból
+   * származó, utolsó 10 másodpercre simított bevételt is. Enélkül a játék
+   * eleje — amikor még nincs egyetlen menedzser sem — végig „0 Ft/mp”-et
+   * mutatna, miközben a játékos épp keresi a pénzt.
+   */
   incomePerSecond: number;
 
   toast: Toast | null;
@@ -116,7 +139,10 @@ type GameStore = {
 
   // --- Játékakciók ---
   tapProduct: (productId: ProductId) => void;
-  /** Egy konkrét, sorban álló macska kiszolgálása. */
+  /**
+   * Egy sorban álló macska rendelésének elkészítése.
+   * Elindítja a főzést; a pénz a ciklus végén érkezik.
+   */
   serveCustomer: (customerId: number) => void;
   buyProduct: (productId: ProductId) => void;
   hireManager: (productId: ProductId) => void;
@@ -159,6 +185,38 @@ let lastTickAt = 0;
 let saveScheduler: SaveScheduler | null = null;
 let customerWorld: CustomerWorld = createCustomerWorld(1, Date.now());
 
+/**
+ * A kézi kiszolgálásból származó bevétel csúszóablaka.
+ *
+ * A fejléc bevétel/mp értéke enélkül a játék elején végig nulla lenne (mert
+ * az automatikus bevétel tényleg nulla, amíg nincs menedzser), miközben a
+ * játékos épp aktívan keresi a pénzt. 10 másodpercre simítunk: elég rövid,
+ * hogy reagáljon, és elég hosszú, hogy ne ugráljon.
+ */
+const MANUAL_WINDOW_SECONDS = 10;
+let manualEarnings: { at: number; amount: number }[] = [];
+
+function noteManualEarning(amount: number, wallMs: number): void {
+  if (amount > 0) manualEarnings.push({ at: wallMs, amount });
+}
+
+function manualRatePerSecond(wallMs: number): number {
+  const cutoff = wallMs - MANUAL_WINDOW_SECONDS * 1000;
+  manualEarnings = manualEarnings.filter((entry) => entry.at >= cutoff);
+  if (manualEarnings.length === 0) return 0;
+  const total = manualEarnings.reduce((sum, entry) => sum + entry.amount, 0);
+  return total / MANUAL_WINDOW_SECONDS;
+}
+
+/** A fejlécben mutatott bevétel: automatikus + a friss kézi kiszolgálás. */
+function displayIncome(
+  state: GameState,
+  multipliers: Multipliers,
+  wallMs: number,
+): number {
+  return totalIncomePerSecond(state, multipliers) + manualRatePerSecond(wallMs);
+}
+
 export const useGameStore = create<GameStore>((set, get) => {
   /**
    * A központi mutáló segédfüggvény. A `fn` helyben módosítja az állapotot;
@@ -189,7 +247,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       // terhelés ticknként.
       state: { ...state },
       multipliers,
-      incomePerSecond: totalIncomePerSecond(state, multipliers),
+      incomePerSecond: displayIncome(state, multipliers, wallMs),
       tick: prev.tick + 1,
       achievementQueue:
         unlocked.length > 0 ? [...prev.achievementQueue, ...unlocked] : prev.achievementQueue,
@@ -243,6 +301,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     tick: 0,
     customers: [],
+    cooking: null,
     incomePerSecond: 0,
 
     toast: null,
@@ -286,7 +345,7 @@ export const useGameStore = create<GameStore>((set, get) => {
           status: 'ready',
           state,
           multipliers,
-          incomePerSecond: totalIncomePerSecond(state, multipliers),
+          incomePerSecond: displayIncome(state, multipliers, now.wall),
           offlineReport: showModal ? report : null,
         });
 
@@ -346,24 +405,49 @@ export const useGameStore = create<GameStore>((set, get) => {
      * akkor kerül „kiszolgálva” állapotba, ha tényleg volt fizetés.
      */
     serveCustomer: (customerId) => {
-      const { state, multipliers } = get();
+      const { state, multipliers, cooking } = get();
+
+      // Egyszerre egy rendelést készít a szakács.
+      if (cooking) {
+        get().showToast('Épp főzöl — várd meg, míg elkészül!', 'info');
+        return;
+      }
+
       const customer = customerWorld.customers.find((c) => c.id === customerId);
       if (!customer || customer.phase !== 'waiting') return;
 
+      const productState = state.products[customer.productId];
+      if (!productState || productState.hasManager) return;
+
       const wallMs = systemClock.read().wall;
       const def = getProduct(customer.productId);
-      const payout = serveByHand(state, multipliers, def, wallMs);
-      if (payout <= 0) return;
+      const seconds = cycleSeconds(
+        def,
+        productState.level,
+        multipliers.productCycle[def.id] ?? 1,
+      );
 
-      markServed(customerWorld, customerId, payout, wallMs);
+      /**
+       * A főzés hossza PONTOSAN egy ciklusidő — se több, se kevesebb.
+       *
+       * Ez nem esztétikai döntés: a `serveByHand` a ciklusidőnkénti egy adag
+       * korlátot érvényesíti, és ha rövidebbre vágnánk a főzést, a kifizetés
+       * a végén elbukna, a vendég pedig örökre a sorban ragadna. Így viszont
+       * a főzés végére a várakozás mindig letelt.
+       *
+       * A kiszolgálási várakozást szándékosan NEM ellenőrizzük itt: a főzés
+       * maga a várakozás, tehát a következő rendelést azonnal el lehet kezdeni.
+       */
       tapFeedback();
-
       set((prev) => ({
-        state: { ...state },
-        customers: customerWorld.customers,
+        cooking: {
+          customerId,
+          productId: def.id,
+          startedAt: wallMs,
+          duration: Math.max(350, seconds * 1000),
+        },
         tick: prev.tick + 1,
       }));
-      saveScheduler?.request();
     },
 
     buyProduct: (productId) => {
@@ -406,6 +490,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
       if (unlocked) {
         resetCustomerWorld(customerWorld, systemClock.read().wall);
+        set({ cooking: null });
         get().showToast('Új hely megnyitva! Hajrá!', 'success');
         // Városnyitás = természetes szünet, itt jöhet interstitial.
         await maybeShowInterstitial();
@@ -416,6 +501,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       mutate((state) => {
         handle(actions.setActiveCity(state, cityId), () => {
           resetCustomerWorld(customerWorld, systemClock.read().wall);
+          set({ cooking: null });
         });
       });
     },
@@ -470,6 +556,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
       if (didFranchise) {
         resetCustomerWorld(customerWorld, systemClock.read().wall);
+        set({ cooking: null });
         milestoneFeedback();
         get().showToast(`+${stars} Arany Merőkanál!`, 'success');
         // Azonnali mentés: a franchise a legdrágább visszafordíthatatlan lépés.
@@ -830,10 +917,36 @@ function startLoop(
     const state = store.state;
     simulateTick(state, dt, store.multipliers);
 
-    // A vendégsor léptetése. Ez csak látvány (a pénzt a simulateTick írja
-    // jóvá), de a listát minden ticknél átadjuk a UI-nak, mert a macskák
-    // fázisváltásai indítják a natív animációkat.
-    tickCustomers(customerWorld, state, store.multipliers, now.wall, dt);
+    // --- Elkészült-e, amit a szakács macska (a játékos) főz? ---
+    let cooking = store.cooking;
+    if (cooking && now.wall >= cooking.startedAt + cooking.duration) {
+      const def = getProduct(cooking.productId);
+      const payout = serveByHand(state, store.multipliers, def, now.wall);
+
+      if (payout > 0) {
+        markServed(customerWorld, cooking.customerId, payout, now.wall);
+        // A fejléc bevétel/mp értéke ebből számol – enélkül a játék eleje
+        // végig „0 Ft/mp”-et mutatna.
+        noteManualEarning(payout, now.wall);
+        successFeedback();
+      }
+
+      cooking = null;
+      useGameStore.setState({ cooking: null });
+      saveScheduler?.request();
+    }
+
+    // A vendégsor léptetése. Ez csak látvány (a pénzt a simulateTick és a
+    // fenti kiszolgálás írja jóvá), de a listát minden ticknél átadjuk a
+    // UI-nak, mert a macskák fázisváltásai indítják a natív animációkat.
+    tickCustomers(
+      customerWorld,
+      state,
+      store.multipliers,
+      now.wall,
+      dt,
+      cooking?.customerId ?? null,
+    );
     const customers = customerWorld.customers;
 
     secondsSinceMultiplierRefresh += dt;
@@ -844,7 +957,7 @@ function startLoop(
       const multipliers = computeMultipliers(state, now.wall);
       useGameStore.setState((prev) => ({
         multipliers,
-        incomePerSecond: totalIncomePerSecond(state, multipliers),
+        incomePerSecond: displayIncome(state, multipliers, now.wall),
         customers,
         tick: prev.tick + 1,
       }));
@@ -901,6 +1014,7 @@ function attachAppStateListener(get: () => GameStore): void {
       // A háttérben eltelt idő alatt a sor "megállt"; tiszta lappal indulunk,
       // különben a régi vendégek azonnal lejárt türelemmel tűnnének fel.
       resetCustomerWorld(customerWorld, now.wall);
+      useGameStore.setState({ cooking: null });
 
       const report = computeOfflineReport(state, now);
       if (shouldShowOfflineModal(report)) {
@@ -913,7 +1027,7 @@ function attachAppStateListener(get: () => GameStore): void {
       useGameStore.setState((prev) => ({
         state: { ...state },
         multipliers,
-        incomePerSecond: totalIncomePerSecond(state, multipliers),
+        incomePerSecond: displayIncome(state, multipliers, now.wall),
         tick: prev.tick + 1,
       }));
 

@@ -33,6 +33,16 @@ type ProductSeed = {
 };
 
 /** Minden városban ugyanaz a 6 "szerep", de saját névvel és ikonnal. */
+/**
+ * A ciklusidők szándékosan RÖVIDEK (1–12 mp).
+ *
+ * Egy fél percig készülő adag menü-szinten még elfogadható, de a látható
+ * konyhában elviselhetetlen: a játékos csak néz egy alig mozduló csíkot.
+ * A bevétel/mp arányok viszont változatlanok — a `baseRevenue` értékeket
+ * együtt csökkentettük a ciklusidőkkel, tehát a gazdaság hangolása áll.
+ *
+ *   bevétel/mp = 1 · 3,5 · 13 · 47 · 170 · 610   (mint korábban)
+ */
 const PRODUCT_SLOTS: readonly {
   slug: string;
   category: ProductCategory;
@@ -43,10 +53,10 @@ const PRODUCT_SLOTS: readonly {
 }[] = [
   { slug: 'snack', category: 'grill', icon: 'sausage', baseCost: 5, baseRevenue: 1, baseCycleSeconds: 1 },
   { slug: 'fried', category: 'fryer', icon: 'fries', baseCost: 70, baseRevenue: 7, baseCycleSeconds: 2 },
-  { slug: 'dough', category: 'dough', icon: 'flatbread', baseCost: 980, baseRevenue: 52, baseCycleSeconds: 4 },
-  { slug: 'wrap', category: 'grill', icon: 'wrap', baseCost: 13_700, baseRevenue: 375, baseCycleSeconds: 8 },
-  { slug: 'drink', category: 'drink', icon: 'cup', baseCost: 192_000, baseRevenue: 2_550, baseCycleSeconds: 15 },
-  { slug: 'dessert', category: 'sweet', icon: 'swirl', baseCost: 2_690_000, baseRevenue: 18_300, baseCycleSeconds: 30 },
+  { slug: 'dough', category: 'dough', icon: 'flatbread', baseCost: 980, baseRevenue: 39, baseCycleSeconds: 3 },
+  { slug: 'wrap', category: 'grill', icon: 'wrap', baseCost: 13_700, baseRevenue: 235, baseCycleSeconds: 5 },
+  { slug: 'drink', category: 'drink', icon: 'cup', baseCost: 192_000, baseRevenue: 1_360, baseCycleSeconds: 8 },
+  { slug: 'dessert', category: 'sweet', icon: 'swirl', baseCost: 2_690_000, baseRevenue: 7_320, baseCycleSeconds: 12 },
 ];
 
 /** Városonkénti nevek – a 6 szerep sorrendjében. */
@@ -67,9 +77,15 @@ function unlockThreshold(baseCost: number, slotIndex: number): number {
   return slotIndex === 0 ? 0 : baseCost * 0.6;
 }
 
-/** A menedzser ára ≈ a termék 22. szintjének ára – érezhető, de elérhető cél. */
+/**
+ * A menedzser ára ≈ a termék 14. szintjének hatszorosa.
+ *
+ * Korábban ennek a négyszerese volt, és az első menedzserre percekig kellett
+ * gyűjteni — miközben a játékos épp az automatizálást tanulja meg. Az első
+ * menedzser most nagyjából 60 Ft, ami néhány kiszolgálás.
+ */
 function managerCostFor(baseCost: number): number {
-  return Math.round(baseCost * Math.pow(COST_GROWTH, 22) * 12);
+  return Math.round(baseCost * Math.pow(COST_GROWTH, 14) * 5);
 }
 
 function buildCityProducts(cityId: CityId): ProductDef[] {

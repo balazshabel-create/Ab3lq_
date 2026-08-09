@@ -165,6 +165,8 @@ export function tickCustomers(
   multipliers: Multipliers,
   wallMs: number,
   dt: number,
+  /** Akinek a rendelése épp készül – az ő türelme nem fogy. */
+  busyCustomerId: number | null = null,
 ): CustomerTickResult {
   const rng = createRng(world.rngState);
   let autoServed = 0;
@@ -227,6 +229,9 @@ export function tickCustomers(
             });
             autoServed += 1;
           }
+        } else if (customer.id === busyCustomerId) {
+          // Épp az ő rendelése készül – igazságtalan lenne, ha közben
+          // elfogyna a türelme.
         } else {
           // Kézi: fogy a türelem, a játékosra vár.
           const patience = customer.patience - dt;

@@ -23,7 +23,16 @@ export const Hud = React.memo(function Hud({ onSettings }: { onSettings: () => v
 
   return (
     <View style={styles.hud} pointerEvents="box-none">
-      <View style={styles.wallet}>
+      {/*
+        A képernyőolvasónak a "1,2 M Ft" formátum félreérthető, ezért a
+        pontos értéket külön címkén adjuk meg. Ez egyben stabil fogódzót ad a
+        böngészős füstteszt számára is.
+      */}
+      <View
+        style={styles.wallet}
+        accessible
+        accessibilityLabel={`Készpénz ${Math.floor(cash)} dollár, bevétel ${Math.floor(incomePerSecond)} dollár másodpercenként`}
+      >
         <Text variant="title" color={palette.text} numberOfLines={1}>
           {formatMoney(cash)}
         </Text>

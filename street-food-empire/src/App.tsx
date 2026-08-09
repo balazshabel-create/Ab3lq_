@@ -80,6 +80,7 @@ function GameShell() {
   const state = useGameStore((s) => s.state);
   const multipliers = useGameStore((s) => s.multipliers);
   const customers = useGameStore((s) => s.customers);
+  const cooking = useGameStore((s) => s.cooking);
   const tick = useGameStore((s) => s.tick);
   const serveCustomer = useGameStore((s) => s.serveCustomer);
 
@@ -98,6 +99,7 @@ function GameShell() {
         customers={customers}
         views={views}
         cityId={state.activeCityId}
+        cooking={cooking}
         onServe={serveCustomer}
       />
 

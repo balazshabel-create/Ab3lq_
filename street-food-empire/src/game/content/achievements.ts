@@ -14,12 +14,12 @@ type Seed = Omit<AchievementDef, 'id'> & { id: string };
 
 const SEEDS: readonly Seed[] = [
   // --- Bevétel ---
-  { id: 'earn-1k', name: 'Első ezres', description: 'Keress összesen 1 000 Ft-ot.', metric: 'lifetimeEarnings', threshold: 1e3, coinReward: 10, incomeBonus: 0.02 },
-  { id: 'earn-100k', name: 'Törzsvendégek', description: 'Keress összesen 100 E Ft-ot.', metric: 'lifetimeEarnings', threshold: 1e5, coinReward: 15, incomeBonus: 0.03 },
-  { id: 'earn-10m', name: 'Sorban állnak', description: 'Keress összesen 10 M Ft-ot.', metric: 'lifetimeEarnings', threshold: 1e7, coinReward: 20, incomeBonus: 0.04 },
-  { id: 'earn-1b', name: 'Városi legenda', description: 'Keress összesen 1 Mrd Ft-ot.', metric: 'lifetimeEarnings', threshold: 1e9, coinReward: 30, incomeBonus: 0.06 },
-  { id: 'earn-1t', name: 'Étteremmágnás', description: 'Keress összesen 1 B Ft-ot.', metric: 'lifetimeEarnings', threshold: 1e12, coinReward: 45, incomeBonus: 0.08 },
-  { id: 'earn-1qa', name: 'Gasztrobirodalom', description: 'Keress összesen 1 T Ft-ot.', metric: 'lifetimeEarnings', threshold: 1e18, coinReward: 80, incomeBonus: 0.15 },
+  { id: 'earn-1k', name: 'Első ezres', description: 'Keress összesen $1 000-t.', metric: 'lifetimeEarnings', threshold: 1e3, coinReward: 10, incomeBonus: 0.02 },
+  { id: 'earn-100k', name: 'Törzsvendégek', description: 'Keress összesen $100 E-t.', metric: 'lifetimeEarnings', threshold: 1e5, coinReward: 15, incomeBonus: 0.03 },
+  { id: 'earn-10m', name: 'Sorban állnak', description: 'Keress összesen $10 M-t.', metric: 'lifetimeEarnings', threshold: 1e7, coinReward: 20, incomeBonus: 0.04 },
+  { id: 'earn-1b', name: 'Városi legenda', description: 'Keress összesen $1 Mrd-t.', metric: 'lifetimeEarnings', threshold: 1e9, coinReward: 30, incomeBonus: 0.06 },
+  { id: 'earn-1t', name: 'Étteremmágnás', description: 'Keress összesen $1 B-t.', metric: 'lifetimeEarnings', threshold: 1e12, coinReward: 45, incomeBonus: 0.08 },
+  { id: 'earn-1qa', name: 'Gasztrobirodalom', description: 'Keress összesen $1 T-t.', metric: 'lifetimeEarnings', threshold: 1e18, coinReward: 80, incomeBonus: 0.15 },
 
   // --- Kézi kiszolgálás ---
   { id: 'tap-100', name: 'Kezdő kezek', description: 'Szolgálj ki 100 vevőt kézzel.', metric: 'totalTaps', threshold: 100, coinReward: 10, incomeBonus: 0.02 },

@@ -58,14 +58,20 @@ function trimZeros(s: string): string {
   return s.replace(/\.?0+$/, '');
 }
 
-/** Pénz formázása pénznem-jelöléssel. */
+/**
+ * Pénz formázása pénznem-jelöléssel.
+ *
+ * A dollár a nemzetközi kiadáshoz igazodik, és a `$` előtag rövidebb is, mint
+ * bármilyen utótag — idle játékban ez számít, mert a szám mellett még
+ * mérföldkő-utótag is áll (pl. `$1,2 M`).
+ */
 export function formatMoney(value: number): string {
-  return `${formatNumber(value)} Ft`;
+  return `$${formatNumber(value)}`;
 }
 
 /** Bevétel/másodperc formázása. */
 export function formatRate(value: number): string {
-  return `${formatNumber(value)} Ft/mp`;
+  return `$${formatNumber(value)}/mp`;
 }
 
 /** Szorzó formázása: `×2`, `×1,5`, `×12,4 E`. */

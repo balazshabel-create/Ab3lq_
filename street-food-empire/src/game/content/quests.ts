@@ -43,7 +43,7 @@ export const QUEST_POOL: readonly QuestDef[] = [
   },
   {
     id: 'q.earn-short',
-    text: 'Keress {target} Ft-ot',
+    text: 'Keress {target} dollárt',
     metric: 'runEarnings',
     // 10 perc bevételének megfelelő cél
     target: 600,
@@ -52,7 +52,7 @@ export const QUEST_POOL: readonly QuestDef[] = [
   },
   {
     id: 'q.earn-long',
-    text: 'Keress {target} Ft-ot',
+    text: 'Keress {target} dollárt',
     metric: 'runEarnings',
     // 45 perc bevétele
     target: 2_700,
@@ -82,7 +82,7 @@ export const QUEST_POOL: readonly QuestDef[] = [
   },
   {
     id: 'q.lifetime',
-    text: 'Keress {target} Ft-ot összesen',
+    text: 'Keress {target} dollárt összesen',
     metric: 'lifetimeEarnings',
     target: 1_800,
     scaleWithIncome: true,

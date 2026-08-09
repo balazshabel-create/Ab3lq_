@@ -9,6 +9,8 @@ import { MAX_QUEUE, PATIENCE_SECONDS, type Customer } from '@/game/customers';
 import type { ProductView } from '@/game/types';
 import { CatSprite, WantBubble } from '@/ui/components/CatSprite';
 import { FoodIcon } from '@/ui/components/FoodIcon';
+import { PlayerCat, type CookState } from '@/ui/components/PlayerCat';
+import type { CookingJob } from '@/game/store';
 import { Text } from '@/ui/components/primitives';
 import { DURATION, EASE, useJitter, useLoop, useReducedMotion } from '@/ui/motion';
 import { palette, radius, spacing } from '@/ui/theme';
@@ -43,6 +45,8 @@ type Props = {
   customers: readonly Customer[];
   views: readonly ProductView[];
   cityId: string;
+  /** Amit a játékos macskája épp készít (null, ha nem főz). */
+  cooking: CookingJob | null;
   onServe: (customerId: number) => void;
 };
 
@@ -50,16 +54,44 @@ export const CafeScene = React.memo(function CafeScene({
   customers,
   views,
   cityId,
+  cooking,
   onServe,
 }: Props) {
   const { width } = useWindowDimensions();
   const city = getCity(cityId);
   const owned = views.filter((view) => view.state.level > 0);
 
+  // A főzés haladása – a jelenet 5 Hz-en frissül, ez épp elég simának látszik.
+  const now = Date.now();
+  const cookProgress = cooking
+    ? Math.max(0, Math.min(1, (now - cooking.startedAt) / cooking.duration))
+    : 0;
+  const cookState: CookState = cooking ? 'cooking' : 'idle';
+  const cookingIcon = cooking
+    ? views.find((view) => view.def.id === cooking.productId)?.def.icon
+    : undefined;
+
   return (
     <View style={styles.scene}>
       <Backdrop colors={city.colors} />
+
+      {/* Járda: pontosan a pult alsó élénél kezdődik, itt áll sorba a nép. */}
+      <View style={styles.sidewalk} pointerEvents="none">
+        <View style={styles.curb} />
+      </View>
+
       <Awning colors={city.colors} />
+
+      {/* --- A szakács: TE vagy az, a pult mögött --- */}
+      <View style={styles.playerSlot} pointerEvents="none">
+        <PlayerCat
+          state={cookState}
+          progress={cookProgress}
+          cookingIcon={cookingIcon}
+          cityColors={city.colors}
+          size={104}
+        />
+      </View>
 
       <View style={styles.stations} pointerEvents="none">
         {owned.slice(0, 6).map((view, index) => (
@@ -75,6 +107,7 @@ export const CafeScene = React.memo(function CafeScene({
             key={customer.id}
             customer={customer}
             laneWidth={width}
+            busy={cooking?.customerId === customer.id}
             onServe={onServe}
           />
         ))}
@@ -312,10 +345,13 @@ function slotOffset(slot: number, laneWidth: number): number {
 const QueueCat = React.memo(function QueueCat({
   customer,
   laneWidth,
+  busy,
   onServe,
 }: {
   customer: Customer;
   laneWidth: number;
+  /** Igaz, ha épp az ő rendelése készül. */
+  busy: boolean;
   onServe: (customerId: number) => void;
 }) {
   const reduced = useReducedMotion();
@@ -405,6 +441,12 @@ const QueueCat = React.memo(function QueueCat({
         ? 'sad'
         : 'neutral';
 
+  // A koppintható vendég körül lüktető gyűrű: ez mondja meg, hol a dolgod.
+  const needsMe = customer.phase === 'waiting' && !busy;
+  const ring = useLoop(900);
+  const ringScale = ring.interpolate({ inputRange: [0, 1], outputRange: [1, 1.14] });
+  const ringOpacity = ring.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0.12] });
+
   const showBubble = customer.phase === 'waiting' || customer.phase === 'arriving';
   const patienceRatio = Math.max(0, Math.min(1, customer.patience / PATIENCE_SECONDS));
   const waitingForTap = customer.phase === 'waiting' && patienceRatio < 1;
@@ -431,9 +473,20 @@ const QueueCat = React.memo(function QueueCat({
         onPress={() => onServe(customer.id)}
         disabled={customer.phase !== 'waiting'}
         accessibilityRole="button"
-        accessibilityLabel={`${def.name} kiszolgálása`}
-        hitSlop={10}
+        accessibilityLabel={`${def.name} elkészítése a vendégnek`}
+        accessibilityHint="Koppints, és a szakácsod elkészíti a rendelést"
+        hitSlop={14}
       >
+        {needsMe ? (
+          <Animated.View
+            style={[
+              styles.tapRing,
+              { opacity: ringOpacity, transform: [{ scale: ringScale }] },
+            ]}
+            pointerEvents="none"
+          />
+        ) : null}
+
         <Animated.View style={{ transform: [{ translateY: bob }, { rotate: lean }] }}>
           <CatSprite look={customer.look} size={62} mood={mood} />
         </Animated.View>
@@ -506,25 +559,66 @@ const EmptyHint = React.memo(function EmptyHint() {
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
+  /**
+   * ELRENDEZÉS: minden réteg a jelenet ALJÁHOZ van igazítva, nem
+   * százalékhoz.
+   *
+   * Százalékos pozíciókkal a bódé és a járda különböző képernyőmagasságoknál
+   * elcsúszott egymástól, és üres sávok maradtak közöttük. Alsó igazítással a
+   * kompozíció együtt marad: járda → pult → sütők → ponyva egymásra épül, és
+   * csak a fölöttük lévő égbolt nyúlik meg magasabb kijelzőn.
+   */
   scene: {
     flex: 1,
     overflow: 'hidden',
     backgroundColor: '#15131F',
   },
+  sidewalk: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 240,
+    backgroundColor: '#221D30',
+  },
+  curb: {
+    height: 3,
+    backgroundColor: '#3A3350',
+  },
+  counter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 240,
+    height: 140,
+  },
   awning: {
     position: 'absolute',
     left: -8,
     right: -8,
-    top: '30%',
+    bottom: 470,
     height: 58,
+  },
+  playerSlot: {
+    position: 'absolute',
+    left: '4%',
+    /**
+     * A pult felső éle 380 px-re van a jelenet aljától. A macska 104 px
+     * magas, és a feje a sprite felső ~45%-án ül, ezért 352-nél a fej és a
+     * mellkas a pult fölé kerül, a dereka mögé — pont, mint egy valódi
+     * kiszolgálónál. Feljebb lebegne, lejjebb csak a sapkája látszana.
+     */
+    bottom: 352,
   },
   stations: {
     position: 'absolute',
-    left: 0,
+    // A bal oldalt a szakács foglalja – a sütők mellé sorakoznak.
+    left: '36%',
     right: 0,
-    top: '43%',
+    // A sütők a pult lapján állnak (a pult teteje 380).
+    bottom: 384,
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
   },
@@ -568,18 +662,16 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#FFFFFF',
   },
-  counter: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: '57%',
-    height: '22%',
-  },
   queue: {
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 10,
+    /**
+     * KRITIKUS: az alsó dokk a jelenet fölött lebeg. Ha a sor alá kerülne,
+     * a macskákra egyszerűen nem lehetne koppintani — pontosan ez tette
+     * korábban játszhatatlanná a játékot.
+     */
+    bottom: 108,
     height: 104,
   },
   cat: {
@@ -587,6 +679,17 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     alignItems: 'center',
+  },
+  /** Lüktető gyűrű a koppintható vendég körül – ez mutatja, hol a dolgod. */
+  tapRing: {
+    position: 'absolute',
+    left: -6,
+    right: -6,
+    top: -6,
+    bottom: -6,
+    borderRadius: 40,
+    borderWidth: 3,
+    borderColor: palette.accent,
   },
   bubbleWrap: {
     position: 'absolute',

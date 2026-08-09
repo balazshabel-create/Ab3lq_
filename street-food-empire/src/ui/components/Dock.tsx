@@ -304,7 +304,9 @@ const styles = StyleSheet.create({
   rail: {
     position: 'absolute',
     right: spacing.md,
-    top: '30%',
+    // A dokk fölött ül, a járda jobb szélén: mindig kéznél van, de nem
+    // takarja sem a pultot, sem a sorban álló macskákat.
+    bottom: 118,
     gap: spacing.sm,
   },
   reward: {

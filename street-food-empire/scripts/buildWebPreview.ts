@@ -71,6 +71,13 @@ const styles = `
     -webkit-font-smoothing: antialiased;
   }
 
+  /*
+   * A magasság-lánc VÉGIG folytonos kell legyen: html > body > stage > frame >
+   * root. Ha bármelyik láncszem magassága "auto" marad, a React Native Web
+   * gyökere nulla magasságúra lapul, és a teljes jelenet eltűnik — csak a
+   * lebegő elemek (dokk, gombok) maradnak, összevissza. Ezért kap MINDEN
+   * köztes elem explicit flexet.
+   */
   #sfe-stage {
     position: fixed;
     inset: 0;
@@ -84,26 +91,38 @@ const styles = `
       #0A0810;
   }
 
+  #sfe-frame {
+    display: flex;
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
   #root {
     display: flex;
-    flex: 1;
+    flex: 1 1 auto;
     width: 100%;
-    height: 100%;
+    min-height: 0;
     background: #12101A;
   }
 
   #sfe-caption {
     display: none;
+    margin: 0;
   }
 
   /* --- Asztali nézet: telefon-arányú keret --- */
   @media (min-width: 900px) and (min-height: 820px) {
+    #sfe-stage {
+      padding: 24px 0;
+    }
+
     #sfe-frame {
+      flex: 0 0 auto;
       width: 390px;
       height: 844px;
       border-radius: 34px;
-      overflow: hidden;
-      display: flex;
       border: 1px solid #2E2740;
       /* Meleg peremfény: a kijelző mintha kivilágítaná a környezetét. */
       box-shadow:
@@ -113,7 +132,7 @@ const styles = `
     }
 
     #root {
-      flex: 1;
+      flex: 1 1 auto;
       width: 390px;
       height: 844px;
     }
