@@ -134,6 +134,20 @@ export const GAME_CONFIG = {
     timeSkipMaxHours: 8,
   },
 
+  /**
+   * Költözés a következő helyszínre.
+   *
+   * Nem elég a pénz: a jelenlegi helyet ki kell maxolni. Ez adja a
+   * „kinőttem ezt a helyet” érzést, és megakadályozza, hogy a játékos
+   * átugorja a tartalmat, majd egy üres, fejletlen helyen ragadjon.
+   */
+  cityUnlock: {
+    /** Minden terméknek el kell érnie ezt a szintet a jelenlegi helyen. */
+    requiredProductLevel: 25,
+    /** Minden terméknek automatizáltnak kell lennie. */
+    requireAllManagers: true,
+  },
+
   /** Franchise (presztízs) rendszer. */
   franchise: {
     /**

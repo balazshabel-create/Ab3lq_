@@ -76,10 +76,20 @@ describe('menedzser', () => {
   });
 });
 
+/** A jelenlegi helyet kimaxolja: minden termék szintre hozva + menedzser. */
+function masterCurrentCity(state: GameState): void {
+  for (const def of productsOfCity(state.activeCityId)) {
+    const product = state.products[def.id]!;
+    product.level = GAME_CONFIG.cityUnlock.requiredProductLevel;
+    product.hasManager = true;
+  }
+}
+
 describe('városok', () => {
-  it('elég pénz és bevétel esetén megnyílik', () => {
+  it('kimaxolt hely, elég pénz és bevétel esetén megnyílik', () => {
     const state = starter();
     const city = CITIES[1]!;
+    masterCurrentCity(state);
     state.cash = city.unlockCost;
     state.stats.lifetimeEarnings = city.unlockRequiresLifetime;
 
@@ -93,8 +103,34 @@ describe('városok', () => {
   it('elégtelen összbevételnél nem nyílik meg', () => {
     const state = starter();
     const city = CITIES[1]!;
+    masterCurrentCity(state);
     state.cash = city.unlockCost * 10;
     state.stats.lifetimeEarnings = 0;
+
+    expect(actions.unlockCity(state, city.id).ok).toBe(false);
+  });
+
+  it('kimaxolatlan helyről nem lehet továbbköltözni', () => {
+    // Ez a fő kapu: hiába van pénz, előbb ki kell építeni a jelenlegi helyet.
+    const state = starter();
+    const city = CITIES[1]!;
+    state.cash = city.unlockCost * 100;
+    state.stats.lifetimeEarnings = city.unlockRequiresLifetime * 100;
+
+    const result = actions.unlockCity(state, city.id);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain('maxold');
+  });
+
+  it('a menedzserek hiánya önmagában is megakasztja a költözést', () => {
+    const state = starter();
+    const city = CITIES[1]!;
+    for (const def of productsOfCity(state.activeCityId)) {
+      state.products[def.id]!.level = GAME_CONFIG.cityUnlock.requiredProductLevel;
+      // ...de menedzser nélkül
+    }
+    state.cash = city.unlockCost * 100;
+    state.stats.lifetimeEarnings = city.unlockRequiresLifetime * 100;
 
     expect(actions.unlockCity(state, city.id).ok).toBe(false);
   });

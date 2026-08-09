@@ -15,6 +15,14 @@ import {
   shouldShowOfflineModal,
   type OfflineReport,
 } from '@/game/offline';
+import {
+  createCustomerWorld,
+  markServed,
+  resetCustomerWorld,
+  tickCustomers,
+  type Customer,
+  type CustomerWorld,
+} from '@/game/customers';
 import { refreshDailyIfNeeded } from '@/game/progression';
 import { computeMultipliers, totalIncomePerSecond } from '@/game/selectors';
 import { serveByHand, simulateTick } from '@/game/simulate';
@@ -87,6 +95,11 @@ type GameStore = {
 
   /** UI frissítési számláló – a komponensek erre iratkoznak fel. */
   tick: number;
+  /**
+   * A pult előtt álló macskavendégek. Nem része a mentésnek: pillanatnyi,
+   * látványbeli állapot, ami visszatéréskor magától újratelik.
+   */
+  customers: Customer[];
   /** Aktuális bevétel/mp, a fejlécnek. */
   incomePerSecond: number;
 
@@ -103,6 +116,8 @@ type GameStore = {
 
   // --- Játékakciók ---
   tapProduct: (productId: ProductId) => void;
+  /** Egy konkrét, sorban álló macska kiszolgálása. */
+  serveCustomer: (customerId: number) => void;
   buyProduct: (productId: ProductId) => void;
   hireManager: (productId: ProductId) => void;
   buyEquipment: (equipmentId: string) => void;
@@ -142,6 +157,7 @@ let loopTimer: ReturnType<typeof setInterval> | null = null;
 let appStateSub: { remove: () => void } | null = null;
 let lastTickAt = 0;
 let saveScheduler: SaveScheduler | null = null;
+let customerWorld: CustomerWorld = createCustomerWorld(1, Date.now());
 
 export const useGameStore = create<GameStore>((set, get) => {
   /**
@@ -226,6 +242,7 @@ export const useGameStore = create<GameStore>((set, get) => {
     multipliers: computeMultipliers(createInitialState(), Date.now()),
 
     tick: 0,
+    customers: [],
     incomePerSecond: 0,
 
     toast: null,
@@ -263,6 +280,7 @@ export const useGameStore = create<GameStore>((set, get) => {
 
         const multipliers = computeMultipliers(state, now.wall);
         setHapticsEnabled(state.settings.haptics);
+        customerWorld = createCustomerWorld(state.rngState, now.wall);
 
         set({
           status: 'ready',
@@ -320,6 +338,34 @@ export const useGameStore = create<GameStore>((set, get) => {
       saveScheduler?.request();
     },
 
+    /**
+     * Egy sorban álló macska kiszolgálása koppintásra.
+     *
+     * Ugyanaz a `serveByHand` fut, mint korábban – tehát a ciklusidőnkénti
+     * korlát és a koppintás-szorzó változatlanul érvényes. A vendég csak
+     * akkor kerül „kiszolgálva” állapotba, ha tényleg volt fizetés.
+     */
+    serveCustomer: (customerId) => {
+      const { state, multipliers } = get();
+      const customer = customerWorld.customers.find((c) => c.id === customerId);
+      if (!customer || customer.phase !== 'waiting') return;
+
+      const wallMs = systemClock.read().wall;
+      const def = getProduct(customer.productId);
+      const payout = serveByHand(state, multipliers, def, wallMs);
+      if (payout <= 0) return;
+
+      markServed(customerWorld, customerId, payout, wallMs);
+      tapFeedback();
+
+      set((prev) => ({
+        state: { ...state },
+        customers: customerWorld.customers,
+        tick: prev.tick + 1,
+      }));
+      saveScheduler?.request();
+    },
+
     buyProduct: (productId) => {
       const quantity = get().state.settings.buyQuantity;
       mutate((state) => {
@@ -359,7 +405,8 @@ export const useGameStore = create<GameStore>((set, get) => {
       });
 
       if (unlocked) {
-        get().showToast('Új város megnyitva! Hajrá!', 'success');
+        resetCustomerWorld(customerWorld, systemClock.read().wall);
+        get().showToast('Új hely megnyitva! Hajrá!', 'success');
         // Városnyitás = természetes szünet, itt jöhet interstitial.
         await maybeShowInterstitial();
       }
@@ -367,7 +414,9 @@ export const useGameStore = create<GameStore>((set, get) => {
 
     selectCity: (cityId) => {
       mutate((state) => {
-        handle(actions.setActiveCity(state, cityId));
+        handle(actions.setActiveCity(state, cityId), () => {
+          resetCustomerWorld(customerWorld, systemClock.read().wall);
+        });
       });
     },
 
@@ -420,6 +469,7 @@ export const useGameStore = create<GameStore>((set, get) => {
       });
 
       if (didFranchise) {
+        resetCustomerWorld(customerWorld, systemClock.read().wall);
         milestoneFeedback();
         get().showToast(`+${stars} Arany Merőkanál!`, 'success');
         // Azonnali mentés: a franchise a legdrágább visszafordíthatatlan lépés.
@@ -780,6 +830,12 @@ function startLoop(
     const state = store.state;
     simulateTick(state, dt, store.multipliers);
 
+    // A vendégsor léptetése. Ez csak látvány (a pénzt a simulateTick írja
+    // jóvá), de a listát minden ticknél átadjuk a UI-nak, mert a macskák
+    // fázisváltásai indítják a natív animációkat.
+    tickCustomers(customerWorld, state, store.multipliers, now.wall, dt);
+    const customers = customerWorld.customers;
+
     secondsSinceMultiplierRefresh += dt;
     const needsRefresh = secondsSinceMultiplierRefresh >= 1;
 
@@ -789,6 +845,7 @@ function startLoop(
       useGameStore.setState((prev) => ({
         multipliers,
         incomePerSecond: totalIncomePerSecond(state, multipliers),
+        customers,
         tick: prev.tick + 1,
       }));
 
@@ -798,7 +855,7 @@ function startLoop(
         get().showToast('Új napi küldetések érkeztek!', 'info');
       }
     } else {
-      useGameStore.setState((prev) => ({ tick: prev.tick + 1 }));
+      useGameStore.setState((prev) => ({ customers, tick: prev.tick + 1 }));
     }
   }, intervalMs);
 }
@@ -841,6 +898,9 @@ function attachAppStateListener(get: () => GameStore): void {
 
       refreshDailyIfNeeded(state, now.wall);
       actions.pruneBoosters(state, now.wall);
+      // A háttérben eltelt idő alatt a sor "megállt"; tiszta lappal indulunk,
+      // különben a régi vendégek azonnal lejárt türelemmel tűnnének fel.
+      resetCustomerWorld(customerWorld, now.wall);
 
       const report = computeOfflineReport(state, now);
       if (shouldShowOfflineModal(report)) {

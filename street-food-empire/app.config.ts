@@ -89,7 +89,8 @@ const config: ExpoConfig = {
           enableShrinkResourcesInReleaseBuilds: true,
         },
         ios: {
-          deploymentTarget: '15.1',
+          // Az Expo SDK 57 minimuma. Ez alatt a build hibával leáll.
+          deploymentTarget: '16.4',
           useFrameworks: 'static', // a Google Mobile Ads SDK ezt igényli
         },
       },
@@ -114,6 +115,22 @@ const config: ExpoConfig = {
     eas: {
       projectId: process.env.EAS_PROJECT_ID ?? '00000000-0000-0000-0000-000000000000',
     },
+  },
+
+  /**
+   * Web célplatform.
+   *
+   * NEM ez a kiadási cél (a játék mobilra készül), de két dologra nagyon jó:
+   *  - gyors megosztható előnézet buildelés nélkül,
+   *  - a játéklogika kipróbálása böngészőben, natív eszköz nélkül.
+   *
+   * A natív modulok (haptics, reklám, IAP) webre no-opként vagy mock
+   * providerként esnek vissza – a játékmenet teljes.
+   */
+  web: {
+    bundler: 'metro',
+    output: 'single',
+    favicon: './assets/favicon.png',
   },
 
   experiments: {

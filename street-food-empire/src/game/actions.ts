@@ -17,7 +17,7 @@ import {
   rollCrate,
   type CrateReward,
 } from '@/game/progression';
-import { computeMultipliers } from '@/game/selectors';
+import { cityMastery, computeMultipliers } from '@/game/selectors';
 import { creditEarnings } from '@/game/simulate';
 import type {
   AchievementDef,
@@ -153,8 +153,17 @@ export function unlockCity(state: GameState, cityId: string): ActionResult {
   if (state.unlockedCityIds.includes(cityId)) return fail('Ez a város már a tiéd.');
 
   const city = getCity(cityId);
+
+  // A jelenlegi helyet ki kell maxolni – ez a költözés fő kapuja.
+  const mastery = cityMastery(state, state.activeCityId);
+  if (!mastery.ready) {
+    return fail(
+      `Előbb maxold ki a jelenlegi helyet: minden termék ${mastery.requiredLevel}. szint és menedzser.`,
+    );
+  }
+
   if (state.stats.lifetimeEarnings < city.unlockRequiresLifetime) {
-    return fail('Még nem kerestél eleget ehhez a városhoz.');
+    return fail('Még nem kerestél eleget ehhez a helyhez.');
   }
   if (state.cash < city.unlockCost) return fail('Nincs elég pénzed a nyitáshoz.');
 

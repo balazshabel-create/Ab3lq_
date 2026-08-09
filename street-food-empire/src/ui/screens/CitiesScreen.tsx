@@ -106,6 +106,23 @@ export function CitiesScreen() {
                     </Text>
                   ) : null}
 
+                  {/* A költözés fő kapuja: a jelenlegi helyet ki kell maxolni. */}
+                  <View style={styles.masteryBox}>
+                    <Text variant="caption" color={palette.textMuted}>
+                      Költözés feltétele — a jelenlegi hely kimaxolása
+                    </Text>
+                    <Requirement
+                      met={status.mastery.atLevel === status.mastery.totalProducts}
+                      label={`Minden termék ${status.mastery.requiredLevel}. szint`}
+                      progress={`${status.mastery.atLevel}/${status.mastery.totalProducts}`}
+                    />
+                    <Requirement
+                      met={status.mastery.automated === status.mastery.totalProducts}
+                      label="Minden termék automatizált"
+                      progress={`${status.mastery.automated}/${status.mastery.totalProducts}`}
+                    />
+                  </View>
+
                   <Button
                     label="Megnyitom"
                     tone="primary"
@@ -256,7 +273,49 @@ export function CitiesScreen() {
   );
 }
 
+/** Egy teljesítendő feltétel sora, pipával vagy hiányzó darabszámmal. */
+function Requirement({
+  met,
+  label,
+  progress,
+}: {
+  met: boolean;
+  label: string;
+  progress: string;
+}) {
+  return (
+    <View style={styles.requirement}>
+      <Icon
+        name={met ? 'check' : 'lock'}
+        size={13}
+        color={met ? palette.success : palette.textDim}
+      />
+      <Text
+        variant="caption"
+        color={met ? palette.success : palette.textMuted}
+        style={{ flex: 1, marginLeft: 6 }}
+      >
+        {label}
+      </Text>
+      <Text variant="caption" color={met ? palette.success : palette.textDim}>
+        {progress}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  masteryBox: {
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radius.sm,
+    backgroundColor: palette.surfaceSunken,
+    gap: 4,
+  },
+  requirement: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   container: { flex: 1 },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   cityCard: { marginBottom: spacing.md, padding: spacing.md },

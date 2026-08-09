@@ -378,19 +378,70 @@ export function tapValue(
   );
 }
 
-/** Feloldható-e a következő város? */
-export function cityUnlockStatus(
+/**
+ * Ki van-e maxolva egy helyszín?
+ *
+ * „Kimaxolt” = minden termék megvan, mindegyik elérte a megkövetelt szintet,
+ * és mindegyiknek van menedzsere. Ez a költözés feltétele.
+ */
+export function cityMastery(
   state: GameState,
   cityId: string,
-): { unlocked: boolean; affordable: boolean; missingCash: number; missingLifetime: number } {
+): {
+  ready: boolean;
+  totalProducts: number;
+  atLevel: number;
+  automated: number;
+  requiredLevel: number;
+} {
+  const products = productsOfCity(cityId);
+  const requiredLevel = GAME_CONFIG.cityUnlock.requiredProductLevel;
+
+  let atLevel = 0;
+  let automated = 0;
+
+  for (const def of products) {
+    const productState = state.products[def.id];
+    if (!productState) continue;
+    if (productState.level >= requiredLevel) atLevel += 1;
+    if (productState.hasManager) automated += 1;
+  }
+
+  const ready =
+    atLevel === products.length &&
+    (!GAME_CONFIG.cityUnlock.requireAllManagers || automated === products.length);
+
+  return { ready, totalProducts: products.length, atLevel, automated, requiredLevel };
+}
+
+export type CityUnlockStatus = {
+  unlocked: boolean;
+  /** Minden feltétel teljesül – most megnyitható. */
+  affordable: boolean;
+  missingCash: number;
+  missingLifetime: number;
+  /** A JELENLEGI hely kimaxoltsága (ez a költözés kapuja). */
+  mastery: ReturnType<typeof cityMastery>;
+};
+
+/** Feloldható-e a következő helyszín? */
+export function cityUnlockStatus(state: GameState, cityId: string): CityUnlockStatus {
   const city = getCity(cityId);
   const unlocked = state.unlockedCityIds.includes(cityId);
   const lifetime = state.stats.lifetimeEarnings;
+
+  // A költözéshez az AKTUÁLIS helyet kell kimaxolni, nem a célállomást.
+  const mastery = cityMastery(state, state.activeCityId);
+
   return {
     unlocked,
     affordable:
-      !unlocked && state.cash >= city.unlockCost && lifetime >= city.unlockRequiresLifetime,
+      !unlocked &&
+      mastery.ready &&
+      state.cash >= city.unlockCost &&
+      lifetime >= city.unlockRequiresLifetime,
     missingCash: Math.max(0, city.unlockCost - state.cash),
     missingLifetime: Math.max(0, city.unlockRequiresLifetime - lifetime),
+    mastery,
   };
 }
