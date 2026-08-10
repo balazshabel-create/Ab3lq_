@@ -49,6 +49,8 @@ export interface HudState {
   underwater: boolean;
   /** Set when a food source or carcass is in reach. */
   interactPrompt: string | null;
+  /** False when the mouse is not captured, so the HUD can explain how to look. */
+  pointerLocked: boolean;
 }
 
 export class Hud {
@@ -87,6 +89,7 @@ export class Hud {
   private deathSub: HTMLElement;
   private debugOverlay: HTMLElement;
   private toastStack: HTMLElement;
+  private pointerHint: HTMLElement;
 
   private damageTimer = 0;
   private eventTimer = 0;
@@ -166,6 +169,13 @@ export class Hud {
     this.debugOverlay = el('div', { class: 'debug-overlay' });
     this.toastStack = el('div', { class: 'toast-stack' });
 
+    // Shown only while the mouse is not captured — see the look fallback in
+    // InputManager. Without this the player has no way to discover that they can
+    // still turn the camera by dragging.
+    this.pointerHint = el('div', { class: 'pointer-hint' });
+    this.pointerHint.innerHTML =
+      'Click to capture the mouse · or hold <span class="key-cap">right-click</span> and drag to look around';
+
     this.deathOverlay = el('div', { class: 'death-overlay' });
     const deathTitle = el('div', { class: 'death-title' }, 'YOU DIED');
     this.deathSub = el('div', { class: 'death-sub' }, '');
@@ -181,6 +191,7 @@ export class Hud {
       this.deathOverlay,
       this.debugOverlay,
       this.toastStack,
+      this.pointerHint,
     );
   }
 
@@ -273,6 +284,7 @@ export class Hud {
     }
 
     this.deathOverlay.classList.toggle('visible', state.dead);
+    this.pointerHint.classList.toggle('visible', !state.pointerLocked && !state.dead);
 
     // --- Timers ----------------------------------------------------------
     if (this.damageTimer > 0) {

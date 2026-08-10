@@ -131,7 +131,21 @@ export class InputManager {
     }) as EventListener);
 
     add(window, 'mousemove', ((e: MouseEvent) => {
-      if (!this.enabled || !this.locked) return;
+      if (!this.enabled) return;
+      /*
+       * Two look modes.
+       *
+       * Normally the pointer is locked and every mouse movement turns the
+       * camera. But pointer lock can be unavailable — most often because the
+       * game is embedded in an iframe that was not granted the permission — and
+       * without a fallback the player can walk but never turn, which is
+       * unplayable. So when the pointer is not locked, holding the right button
+       * drags the view instead. Right button is used rather than left because
+       * left is the attack, and a drag-to-look that also mauled everything in
+       * front of you would be worse than no fallback at all.
+       */
+      const dragLooking = !this.locked && this.mouseButtons.has(2);
+      if (!this.locked && !dragLooking) return;
       this.lookX += e.movementX * this.sensitivity;
       this.lookY -= e.movementY * this.sensitivity;
     }) as EventListener);
