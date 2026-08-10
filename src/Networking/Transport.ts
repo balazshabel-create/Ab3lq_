@@ -17,12 +17,14 @@
 import { GameHost, type HostConnection } from './GameHost';
 import {
   ClientMsg,
+  InputAction,
   PROTOCOL_VERSION,
   decodeSnapshot,
   type ClientPacket,
   type ServerPacket,
   type Snapshot,
 } from './Protocol';
+import { CLIENT_INPUT_RATE, SIM_TICK_RATE } from '../Systems/Config';
 
 export interface TransportHandlers {
   onPacket: (packet: ServerPacket) => void;
@@ -66,6 +68,10 @@ export class LocalTransport implements Transport {
   private clientId = 'local-player';
   private connection: HostConnection;
   private botIds: string[] = [];
+  private botState: BotState[] = [];
+  /** Fixed-rate clock for the in-process authority. */
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private lastStep = 0;
 
   constructor(options: LocalTransportOptions = {}) {
     this.host = new GameHost({
@@ -95,11 +101,22 @@ export class LocalTransport implements Transport {
       },
     };
 
-    // Practice bots: extra players so a solo player can see the deduction
-    // dynamic at work. They never send input, so they behave like players who
-    // have frozen — which is itself a useful thing to be able to spot.
+    // Practice bots: extra players so a solo player gets a real lobby, roles get
+    // dealt meaningfully, and the hunter has somebody to actually hunt.
     const bots = options.practiceBots ?? 0;
-    for (let i = 0; i < bots; i++) this.botIds.push(`bot-${i + 1}`);
+    for (let i = 0; i < bots; i++) {
+      this.botIds.push(`bot-${i + 1}`);
+      this.botState.push({
+        id: `bot-${i + 1}`,
+        dirX: 0,
+        dirZ: 0,
+        yaw: Math.random() * Math.PI * 2,
+        actionTimer: Math.random() * 2,
+        whistleTimer: 10 + Math.random() * 30,
+        seq: 0,
+        sendAccumulator: 0,
+      });
+    }
   }
 
   async connect(handlers: TransportHandlers): Promise<void> {
@@ -124,21 +141,128 @@ export class LocalTransport implements Transport {
     }
 
     handlers.onOpen();
+    this.startClock();
   }
 
   send(packet: ClientPacket): void {
     this.host.handlePacket(this.clientId, packet);
   }
 
-  update(dt: number): void {
-    this.host.update(dt);
+  /**
+   * Nothing to do here: a timer owns the stepping (see `startClock`).
+   *
+   * The obvious design is to step the local authority from the render loop, and
+   * that is what this did originally — but it couples game time to frame rate.
+   * On a slow machine the whole simulation then runs in slow motion: the eight
+   * second intro took closer to thirty, hunger and the round clock crawled, and
+   * it looked like the game had hung. A remote server keeps its own time, so the
+   * local host must too, or single-player and multiplayer would not behave alike.
+   */
+  update(): void {}
+
+  /** Step the authority on a fixed timer, independent of rendering. */
+  private startClock(): void {
+    if (this.timer !== null) return;
+    this.lastStep = performance.now();
+    this.timer = setInterval(() => {
+      const now = performance.now();
+      // Clamp: after a long stall (a background tab, a GC pause) catch up a
+      // little rather than simulating minutes in one step.
+      const dt = Math.min(0.25, (now - this.lastStep) / 1000);
+      this.lastStep = now;
+      if (dt <= 0) return;
+      try {
+        this.driveBots(dt);
+        this.host.update(dt);
+      } catch (err) {
+        // A throw here would silently kill the interval and freeze the world,
+        // which is far harder to diagnose than a logged error.
+        console.error('local authority step failed', err);
+      }
+    }, 1000 / SIM_TICK_RATE);
+  }
+
+  /**
+   * Give the practice bots something to do.
+   *
+   * This is not decoration. Two things go wrong if bots send no input at all:
+   * the authority times them out after CLIENT_TIMEOUT and stops counting them as
+   * survivors (the round then shows "SURVIVORS 0/0" and the hunter has nothing
+   * to hunt), and a player animal standing perfectly still among wandering AI is
+   * trivially identifiable, which removes the deduction entirely.
+   *
+   * The behaviour intentionally mimics the AI's grammar — walk a few metres,
+   * stop, look around, and whistle roughly on time — so a solo hunter has to do
+   * the real work of telling them apart from the ambient animals.
+   */
+  private driveBots(dt: number): void {
+    for (const bot of this.botState) {
+      bot.actionTimer -= dt;
+      bot.whistleTimer -= dt;
+
+      if (bot.actionTimer <= 0) {
+        // Alternate between strolling and pausing, like the AI does.
+        if (bot.dirX === 0 && bot.dirZ === 0) {
+          bot.yaw += (Math.random() - 0.5) * 2.4;
+          bot.dirX = Math.cos(bot.yaw);
+          bot.dirZ = Math.sin(bot.yaw);
+          bot.actionTimer = 1.5 + Math.random() * 3.5;
+        } else {
+          bot.dirX = 0;
+          bot.dirZ = 0;
+          bot.actionTimer = 0.8 + Math.random() * 2.6;
+        }
+      }
+
+      let actions = 0;
+      if (bot.whistleTimer <= 0) {
+        // Whistle a little before the deadline, as a competent player would.
+        actions |= InputAction.Whistle;
+        bot.whistleTimer = 44 + Math.random() * 10;
+      }
+
+      // Match the human client's send rate rather than flooding the authority.
+      bot.sendAccumulator += dt;
+      const interval = 1 / CLIENT_INPUT_RATE;
+      if (bot.sendAccumulator < interval && actions === 0) continue;
+      bot.sendAccumulator = 0;
+
+      this.host.handlePacket(bot.id, {
+        t: ClientMsg.Input,
+        input: {
+          seq: ++bot.seq,
+          moveX: bot.dirX,
+          moveZ: bot.dirZ,
+          yaw: bot.yaw,
+          pitch: 0,
+          actions,
+        },
+      });
+    }
   }
 
   disconnect(): void {
+    if (this.timer !== null) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
     this.host.removeConnection(this.clientId);
     for (const id of this.botIds) this.host.removeConnection(id);
     this.handlers = null;
   }
+}
+
+/** Per-bot wander state. */
+interface BotState {
+  id: string;
+  dirX: number;
+  dirZ: number;
+  yaw: number;
+  /** Seconds until it changes between walking and pausing. */
+  actionTimer: number;
+  whistleTimer: number;
+  seq: number;
+  sendAccumulator: number;
 }
 
 const BOT_NAMES = [

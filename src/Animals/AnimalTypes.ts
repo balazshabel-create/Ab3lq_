@@ -167,6 +167,15 @@ export interface AnimalDef {
   playable: boolean;
   /** Eligible to be assigned the hunter role. */
   canBeHunter: boolean;
+  /**
+   * Set to false to withdraw a species from the game without deleting it.
+   *
+   * Disabled species are never spawned, never dealt to a player and never
+   * offered in the lobby, but their definition stays in the table so that the
+   * snapshot format's species indices — and any prey lists that mention them —
+   * remain valid. Defaults to enabled when omitted.
+   */
+  enabled?: boolean;
   /** Ability descriptions shown on the select screen. */
   pros: string[];
   cons: string[];
@@ -581,6 +590,8 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Eagle]: {
     species: Species.Eagle,
     name: 'Harpy Eagle',
+    // Withdrawn: the flying body plan reads poorly in play.
+    enabled: false,
     emoji: '🦅',
     tagline: 'Death from directly above.',
     diet: Diet.Carnivore,
@@ -619,6 +630,8 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Parrot]: {
     species: Species.Parrot,
     name: 'Scarlet Macaw',
+    // Withdrawn: the flying body plan reads poorly in play.
+    enabled: false,
     emoji: '🦜',
     tagline: 'Loud, gorgeous, terrible at hiding.',
     diet: Diet.Herbivore,
@@ -875,6 +888,8 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Heron]: {
     species: Species.Heron,
     name: 'Cocoi Heron',
+    // Withdrawn: the flying body plan reads poorly in play.
+    enabled: false,
     emoji: '🪶',
     tagline: 'Standing perfectly still, judging you.',
     diet: Diet.Piscivore,
@@ -1019,6 +1034,8 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Bat]: {
     species: Species.Bat,
     name: 'Fruit Bat',
+    // Withdrawn: the flying body plan reads poorly in play.
+    enabled: false,
     emoji: '🦇',
     tagline: 'Comes out when the light goes.',
     diet: Diet.Herbivore,
@@ -1075,17 +1092,34 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   },
 };
 
-/** All species as an array, in table order. */
+/**
+ * All species as an array, in table order.
+ *
+ * Includes withdrawn ones. The snapshot format encodes a species as its index
+ * here, so this list must stay stable even when a species is disabled.
+ */
 export const ALL_SPECIES: Species[] = Object.keys(ANIMALS) as Species[];
 
+/** True unless the species has been explicitly withdrawn. */
+export function isEnabled(species: Species): boolean {
+  return ANIMALS[species].enabled !== false;
+}
+
+/** Species that may appear in the world at all. */
+export const SPAWNABLE_SPECIES: Species[] = ALL_SPECIES.filter(isEnabled);
+
 /** Species a survivor may choose. */
-export const PLAYABLE_SPECIES: Species[] = ALL_SPECIES.filter((s) => ANIMALS[s].playable);
+export const PLAYABLE_SPECIES: Species[] = ALL_SPECIES.filter(
+  (s) => ANIMALS[s].playable && isEnabled(s),
+);
 
 /** Species that may be dealt the hunter role. */
-export const HUNTER_SPECIES: Species[] = ALL_SPECIES.filter((s) => ANIMALS[s].canBeHunter);
+export const HUNTER_SPECIES: Species[] = ALL_SPECIES.filter(
+  (s) => ANIMALS[s].canBeHunter && isEnabled(s),
+);
 
 /** Species that only exist as ambient AI. */
-export const AMBIENT_SPECIES: Species[] = ALL_SPECIES.filter((s) => !ANIMALS[s].playable);
+export const AMBIENT_SPECIES: Species[] = SPAWNABLE_SPECIES.filter((s) => !ANIMALS[s].playable);
 
 export function getAnimal(species: Species): AnimalDef {
   return ANIMALS[species];

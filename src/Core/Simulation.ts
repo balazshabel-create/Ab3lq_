@@ -63,13 +63,14 @@ import { Terrain } from '../World/Terrain';
 import { generateWorld, type FoodSource, type WorldContent } from '../World/WorldGen';
 import {
   ANIMALS,
-  ALL_SPECIES,
   AbilityId,
   Diet,
+  SPAWNABLE_SPECIES,
   Species,
   SizeClass,
+  isEnabled,
 } from '../Animals/AnimalTypes';
-import { canEat, tierOfSource } from '../Animals/FoodChain';
+import { canEat, canPrey, tierOfSource } from '../Animals/FoodChain';
 import {
   ActorFlags,
   ActorKind,
@@ -444,7 +445,9 @@ export class Simulation implements AiContext {
 
     // 2. Fill the rest with a believable spread of the whole ecosystem.
     // Weight towards common, harmless species so predators stay special.
-    const fillers = ALL_SPECIES.filter((s) => !unique.includes(s));
+    // SPAWNABLE_SPECIES rather than ALL_SPECIES: withdrawn species keep their
+    // table entry (the wire format indexes into it) but must never be spawned.
+    const fillers = SPAWNABLE_SPECIES.filter((s) => !unique.includes(s));
     const weights = fillers.map((s) => {
       const def = ANIMALS[s];
       let w = 10;
@@ -1282,11 +1285,31 @@ export class Simulation implements AiContext {
     }
 
     const victim = target as Actor;
-    const damage =
-      player.role === Role.Hunter ? HUNTER_DAMAGE : HUNTER_DAMAGE * 0.55;
-    // Armoured animals shrug off part of the hit — this is what the armadillo's
-    // curl-up ability is for.
     const armoured = (victim.flags & ActorFlags.Curled) !== 0;
+
+    /*
+     * Damage depends on what was bitten, and the difference is deliberate.
+     *
+     * Against another *player* the bite is intentionally survivable: at
+     * HUNTER_DAMAGE it takes three of them, on a slow cooldown, so being found
+     * is not the same as being dead and a chase is a real contest.
+     *
+     * Against an *AI animal* that would be nonsense. A fleeing capybara at 100
+     * HP would need three connected bites across seven seconds, so predators
+     * could never actually feed — which broke the food chain the whole design
+     * rests on, and made the attack feel like it did nothing at all. A predator
+     * taking natural prey therefore kills outright, exactly as it does when the
+     * AI hunts. Anything else it can reach still takes a heavy hit.
+     */
+    let damage: number;
+    if (victim.kind === ActorKind.Player) {
+      damage = player.role === Role.Hunter ? HUNTER_DAMAGE : HUNTER_DAMAGE * 0.55;
+    } else if (canPrey(player.species, victim.species)) {
+      damage = victim.maxHealth;
+    } else {
+      damage = HUNTER_DAMAGE * 1.8;
+    }
+
     this.damageActor(victim.id, armoured ? damage * 0.3 : damage, player.id);
   }
 
@@ -1375,7 +1398,8 @@ export class Simulation implements AiContext {
   // =========================================================================
 
   private applyEventOneShot(def: EventDef): void {
-    if (def.spawnBurst) {
+    // An event must never resurrect a withdrawn species.
+    if (def.spawnBurst && isEnabled(def.spawnBurst.species)) {
       const rng = this.rng.fork(`burst:${def.id}:${this.tick}`);
       this.spawnGroup(def.spawnBurst.species, def.spawnBurst.count, rng);
       this.rebuildGrid();

@@ -56,9 +56,10 @@ and writes screenshots to `screenshots/`.
 | **Eat** | Hold `E` |
 | **Attack** | Left click (predators only) |
 | **Ability** | `X` (species signature move) |
-| **Climb / fly** | `R` up, `F` down, `V` to take off |
+| **Climb** | `R` up, `F` down |
 | **Submerge** | `C` (crocodiles, caimans) |
 | **Listen** | `G` (hunter only) |
+| **Look** | Move the mouse (click to capture the cursor) |
 | **Debug overlay** | `F3` |
 
 ### The whistle
@@ -79,8 +80,8 @@ arriving while it is still there?
 
 ### The hunter is an animal
 
-The hunter is never a human with a rifle. It is a crocodile, a jaguar, an
-anaconda, an eagle — and the spawner guarantees a healthy population of AI
+The hunter is never a human with a rifle. It is a black caiman, a jaguar, an
+anaconda, an ocelot — and the spawner guarantees a healthy population of AI
 animals of that same species to hide among. It has no whistle obligation, no
 weakness, a slight speed edge, and a slow, narrow, unforgiving bite.
 
@@ -154,6 +155,13 @@ this.
 are pure functions of the seed, so the server and every client agree on the world
 without shipping it over the wire.
 
+One consequence worth naming: the local authority runs on its own fixed-rate
+timer, not on the render loop. Stepping it from `requestAnimationFrame` couples
+game time to frame rate, and on a slow machine the entire simulation runs in slow
+motion — the eight second intro took nearly thirty, and it read as a hang. A
+remote server keeps its own clock, so the local host has to as well, or the two
+modes would not behave alike.
+
 ### Performance notes
 
 - **Foliage** (~15k props) is chunked into a 10×10 grid with one `InstancedMesh`
@@ -182,9 +190,11 @@ weights. Rebalancing does not require touching any system.
 - Procedural Amazon map: heightfield terrain, a meandering main river with
   tributaries, sunlit clearings, canopy, undergrowth, rocks, fallen logs,
   abandoned huts, rope bridges, cave mouths, lily pads, hanging vines
-- 23 species, 21 of them playable, each with its own speed, diet, hunger rate,
-  locomotion (swim / climb / jump / fly), silhouette, temperament and signature
-  ability — all data in one table
+- 23 species defined, 19 active and 17 of those playable, each with its own
+  speed, diet, hunger rate, locomotion (swim / climb / jump), silhouette,
+  temperament and signature ability — all data in one table. The four flying
+  species are withdrawn via an `enabled` flag rather than deleted, so the
+  snapshot format's species indices stay stable
 - Procedural animal models: ten body plans built from primitives, with gait,
   head, tail, wing and serpent-undulation animation driven only from snapshot
   fields
@@ -226,9 +236,12 @@ Honest list of what a prototype this size does not have:
   currently no-ops.
 - **No client-side reconciliation of the hunter's attack**, so a bite's visual
   and its result arrive one round trip apart.
-- Practice bots in single-player occupy player slots but do not act — they stand
-  still, which makes them easy to identify. They exist so roles get dealt
-  meaningfully solo, not to simulate opponents.
+- Practice bots in single-player wander and whistle roughly on time, which is
+  enough to make solo hunting a real exercise, but they do not flee, feed, or
+  react to being hunted. They are a target, not an opponent.
+- The four flying species (macaw, harpy eagle, heron, fruit bat) are withdrawn.
+  The flight model works but the body plan reads poorly in play, so they are
+  disabled rather than shipped half-finished.
 - Mouse sensitivity in the settings panel is displayed but not yet persisted.
 
 ## Licence

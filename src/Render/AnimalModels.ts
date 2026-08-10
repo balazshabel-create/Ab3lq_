@@ -320,10 +320,20 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
   model.root.add(bodyGroup);
   model.body = bodyGroup;
 
-  // Flattened torso.
+  /*
+   * Flattened torso.
+   *
+   * Careful with the scale axis. A capsule is built along its local Y, and
+   * rotating it by 90° about Z maps local Y onto world X (the body's length) and
+   * local X onto world Y (its height). Three.js composes transforms as T·R·S, so
+   * the scale is applied in *local* space, before the rotation — scaling local Y
+   * therefore shortens the body rather than flattening it, which detaches the
+   * head and tail and leaves the animal visibly in three pieces. Flattening
+   * vertically means scaling local X.
+   */
   const torso = mesh(capsule(W * 0.44, L * 0.4), c.body, bodyGroup);
   torso.rotation.z = Math.PI / 2;
-  torso.scale.set(1, 0.62, 1);
+  torso.scale.set(0.62, 1, 1);
 
   if (detail > 0.4) {
     const belly = mesh(box(L * 0.5, H * 0.18, W * 0.7), c.belly, bodyGroup, 0, -H * 0.28, 0);
@@ -562,7 +572,9 @@ function buildBird(model: AnimalModel, def: AnimalDef, detail: number): void {
 
   const torso = mesh(capsule(W * 0.44, L * 0.42), c.body, bodyGroup);
   torso.rotation.z = Math.PI / 2;
-  torso.scale.set(1, 0.9, 0.85);
+  // Local X is the vertical axis after the rotation — see the note in
+  // buildReptile. Scaling local Y here would shorten the bird instead.
+  torso.scale.set(0.9, 1, 0.85);
 
   // Neck and head. Herons get a long neck, which is their whole silhouette.
   const neckLen = def.species === Species.Heron ? H * 0.55 : H * 0.16;

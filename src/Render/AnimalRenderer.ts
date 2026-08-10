@@ -47,6 +47,14 @@ interface RenderActor {
   /** Blend-in factor, so animals fade in rather than popping. */
   fade: number;
   distance: number;
+  /**
+   * Whether this animal is in water, recomputed each frame.
+   *
+   * Deliberately derived on the client from the terrain rather than sent in the
+   * snapshot: the client already knows the heightfield, so spending wire bytes
+   * on something it can work out for itself would be waste.
+   */
+  inWater: boolean;
 }
 
 const MODEL_DETAIL_NEAR = 1;
@@ -61,6 +69,8 @@ export class AnimalRenderer {
   /** Actor id of the local player, which is always drawn. */
   private localId = 0;
   private tmpVec = new THREE.Vector3();
+  /** Supplied by the Renderer, which owns the terrain heightfield. */
+  private waterTest: ((x: number, z: number, y: number) => boolean) | null = null;
 
   constructor(scene: THREE.Scene, settings: GraphicsSettings) {
     this.settings = settings;
@@ -74,6 +84,11 @@ export class AnimalRenderer {
 
   setLocalActor(id: number): void {
     this.localId = id;
+  }
+
+  /** Give the renderer a way to ask whether a position is in water. */
+  setWaterTest(test: (x: number, z: number, y: number) => boolean): void {
+    this.waterTest = test;
   }
 
   /** The Object3D for an actor, if it is currently drawn. */
@@ -125,6 +140,7 @@ export class AnimalRenderer {
           stale: 0,
           fade: 0,
           distance: 0,
+          inWater: false,
         };
         this.actors.set(s.id, actor);
       }
@@ -168,6 +184,9 @@ export class AnimalRenderer {
         actor.target.x - cameraPos.x,
         actor.target.z - cameraPos.z,
       );
+      actor.inWater = this.waterTest
+        ? this.waterTest(actor.target.x, actor.target.z, actor.target.y)
+        : false;
       visible.push(actor);
     }
     visible.sort((a, b) => a.distance - b.distance);
@@ -247,7 +266,14 @@ export class AnimalRenderer {
     const root = model.root;
 
     root.position.copy(actor.pos);
-    root.rotation.y = -actor.yaw + Math.PI / 2;
+    /*
+     * Every model is built head-first along +X (see AnimalModels), and `yaw` is
+     * atan2(dz, dx) — the same convention. A rotation of θ about Y sends +X to
+     * (cos θ, -sin θ) in XZ, so matching the heading (cos yaw, sin yaw) requires
+     * exactly θ = -yaw. Any offset here makes every animal in the game walk at
+     * an angle to the way it is facing.
+     */
+    root.rotation.y = -actor.yaw;
     root.visible = true;
 
     const dead = (actor.flags & ActorFlags.Dead) !== 0;
@@ -328,8 +354,16 @@ export class AnimalRenderer {
     }
 
     // --- Legs ------------------------------------------------------------
+    /*
+     * A pendulum swing alone does not read as walking — it reads as a toy
+     * rocking. Three things sell a gait: the leg swings fore/aft, it *lifts*
+     * off the ground during the forward half of the stride, and the whole body
+     * rises slightly as each diagonal pair pushes off. All three are driven from
+     * the same phase so they stay in sync at any speed.
+     */
     if (model.legs.length > 0) {
-      const amplitude = 0.7 * actor.gait;
+      const swimming = actor.inWater;
+      const amplitude = (swimming ? 0.5 : 0.75) * Math.max(actor.gait, swimming ? 0.35 : 0);
       for (let i = 0; i < model.legs.length; i++) {
         const leg = model.legs[i];
         if (curled) {
@@ -337,18 +371,32 @@ export class AnimalRenderer {
           continue;
         }
         leg.visible = true;
+
+        const baseY = leg.userData.baseY ?? leg.position.y;
+        leg.userData.baseY = baseY;
+
         if (airborne) {
           // Tucked in mid-jump.
-          leg.rotation.z = -0.5;
+          leg.rotation.z = lerp(leg.rotation.z, -0.55, dt * 10);
+          leg.position.y = baseY;
           continue;
         }
-        if (!moving) {
+        if (!moving && !swimming) {
           leg.rotation.z = lerp(leg.rotation.z, 0, dt * 6);
+          leg.position.y = lerp(leg.position.y, baseY, dt * 6);
           continue;
         }
+
         // Diagonal gait: front-left moves with back-right.
         const diagonal = i === 0 || i === 3 ? 1 : -1;
-        leg.rotation.z = Math.sin(actor.phase) * amplitude * diagonal;
+        const legPhase = actor.phase * (swimming ? 1.5 : 1) + (diagonal > 0 ? 0 : Math.PI);
+        const swing = Math.sin(legPhase);
+
+        leg.rotation.z = swing * amplitude;
+        // Lift only while the leg travels forward, so the other half of the
+        // cycle plants it — that asymmetry is what makes it look like walking.
+        const lift = Math.max(0, Math.cos(legPhase));
+        leg.position.y = baseY + lift * def.silhouette.height * 0.14 * actor.gait;
       }
     }
 
@@ -389,6 +437,27 @@ export class AnimalRenderer {
     }
 
     // --- Swimming --------------------------------------------------------
+    /*
+     * Swimming needs its own motion, because the walk cycle looks absurd in
+     * water. An animal in a river sways its whole body side to side, rolls
+     * slightly with each stroke, and bobs on the surface — and crucially it
+     * keeps moving even when barely making headway, which is why the leg
+     * amplitude above has a floor while swimming.
+     */
+    if (actor.inWater) {
+      const stroke = time * 2.6 + actor.id * 0.9;
+      // Yaw sway: the body fishtails around its heading.
+      root.rotation.y += Math.sin(stroke) * 0.09 * (0.4 + actor.gait);
+      // Roll into each stroke.
+      root.rotation.z = Math.sin(stroke + 0.7) * 0.07;
+      // Bob on the surface, independent of the wave the water shader draws.
+      root.position.y += Math.sin(stroke * 0.8) * 0.05;
+      if (model.body !== root) {
+        // Nose up slightly, the way a swimming animal holds its head clear.
+        model.body.rotation.x = lerp(model.body.rotation.x, -0.12, dt * 4);
+      }
+    }
+
     if (submerged) {
       // Sink until only the top of the head shows. A submerged caiman is
       // supposed to be almost indistinguishable from a floating log.
@@ -439,6 +508,26 @@ export class AnimalRenderer {
     if (list.length < 48) list.push(model);
     actor.model = null;
     actor.detail = -1;
+  }
+
+  /**
+   * Actors standing or swimming in water, for the ripple effect.
+   *
+   * Reported with their speed so the effects renderer can spawn ripples in
+   * proportion to how hard they are churning the surface — a drifting caiman
+   * barely disturbs it, a fleeing capybara throws a wake.
+   */
+  collectWaterWakes(out: { x: number; z: number; speed: number; radius: number }[]): void {
+    out.length = 0;
+    for (const actor of this.actors.values()) {
+      if (!actor.inWater || !actor.model) continue;
+      out.push({
+        x: actor.pos.x,
+        z: actor.pos.z,
+        speed: actor.gait,
+        radius: Math.max(0.35, ANIMALS[actor.species].silhouette.width * 1.5),
+      });
+    }
   }
 
   /** Actors that currently have visible flies, for the effects renderer. */

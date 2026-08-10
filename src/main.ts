@@ -128,6 +128,8 @@ class Game {
   /** Noises already played, so a repeated snapshot does not double-trigger. */
   private playedNoises = new Set<string>();
   private lastLightningTime = -99;
+  /** Tracks the attack cooldown edge, so a bite can be heard and felt. */
+  private lastAttackReady = true;
 
   constructor() {
     this.canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -521,6 +523,26 @@ class Game {
       }
       // Your own fly swarm buzzes audibly, so you know without looking.
       audioSystem.updateFlyBuzz(snapshot.self.flies);
+
+      /*
+       * Bite feedback.
+       *
+       * The server emits an attack noise, but noises are only streamed to a
+       * player while their "listen" sense is active — so without this the player
+       * pressed the mouse button and nothing whatsoever happened, which made the
+       * attack feel broken even when it was landing. Driving it off the
+       * authority's own cooldown means the sound only plays when the server
+       * actually accepted the attack.
+       */
+      const attackReady = snapshot.self.attackReady > 0.5;
+      if (this.lastAttackReady && !attackReady) {
+        const pos = this.tmpVec;
+        if (this.renderer.animals.getPosition(this.state.actorId, pos)) {
+          audioSystem.playAttack(pos.x, pos.y, pos.z, false);
+        }
+        this.renderer.cameraRig.addShake(0.35);
+      }
+      this.lastAttackReady = attackReady;
     }
 
     // --- Play the noises the server let us hear --------------------------

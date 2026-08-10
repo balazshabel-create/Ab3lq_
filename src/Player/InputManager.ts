@@ -133,21 +133,30 @@ export class InputManager {
     add(window, 'mousemove', ((e: MouseEvent) => {
       if (!this.enabled) return;
       /*
-       * Two look modes.
+       * Mouse movement always turns the camera, whether or not the pointer is
+       * locked.
        *
-       * Normally the pointer is locked and every mouse movement turns the
-       * camera. But pointer lock can be unavailable — most often because the
-       * game is embedded in an iframe that was not granted the permission — and
-       * without a fallback the player can walk but never turn, which is
-       * unplayable. So when the pointer is not locked, holding the right button
-       * drags the view instead. Right button is used rather than left because
-       * left is the attack, and a drag-to-look that also mauled everything in
-       * front of you would be worse than no fallback at all.
+       * Pointer lock is still requested on click because it is the better
+       * experience — the cursor disappears and cannot hit the window edge. But
+       * it is unavailable in some contexts (most often an iframe that was not
+       * granted the permission), and requiring a held button as a fallback made
+       * the game feel broken. Since the HUD is entirely `pointer-events: none`
+       * during a round, there is nothing on screen the free cursor needs to
+       * click, so simply always looking is both safe and what players expect.
        */
-      const dragLooking = !this.locked && this.mouseButtons.has(2);
-      if (!this.locked && !dragLooking) return;
-      this.lookX += e.movementX * this.sensitivity;
-      this.lookY -= e.movementY * this.sensitivity;
+      let dx = e.movementX;
+      let dy = e.movementY;
+      /*
+       * Without pointer lock, movementX/Y can spike enormously when the cursor
+       * re-enters the window or the browser coalesces events. Clamp per event so
+       * a stray jump cannot spin the camera through several revolutions.
+       */
+      if (!this.locked) {
+        dx = Math.max(-140, Math.min(140, dx));
+        dy = Math.max(-140, Math.min(140, dy));
+      }
+      this.lookX += dx * this.sensitivity;
+      this.lookY -= dy * this.sensitivity;
     }) as EventListener);
 
     add(this.canvas, 'wheel', ((e: WheelEvent) => {

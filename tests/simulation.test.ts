@@ -9,8 +9,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { Simulation } from '../src/Core/Simulation';
-import { Role, RoundPhase, ActorFlags } from '../src/Core/Types';
-import { ANIMALS, HUNTER_SPECIES, PLAYABLE_SPECIES, Species } from '../src/Animals/AnimalTypes';
+import { Role, RoundPhase, ActorFlags, type Actor } from '../src/Core/Types';
+import {
+  ALL_SPECIES,
+  ANIMALS,
+  HUNTER_SPECIES,
+  PLAYABLE_SPECIES,
+  SPAWNABLE_SPECIES,
+  Species,
+  isEnabled,
+} from '../src/Animals/AnimalTypes';
+import { canPrey } from '../src/Animals/FoodChain';
 import { Terrain } from '../src/World/Terrain';
 import { Rng } from '../src/Systems/Rng';
 import {
@@ -21,7 +30,12 @@ import {
   WeaknessId,
 } from '../src/Gameplay/Weaknesses';
 import { assignRoles } from '../src/Gameplay/RoundState';
-import { decodeSnapshot, encodeSnapshot, type Snapshot } from '../src/Networking/Protocol';
+import {
+  InputAction,
+  decodeSnapshot,
+  encodeSnapshot,
+  type Snapshot,
+} from '../src/Networking/Protocol';
 import {
   HUNGER_DECAY_RATE,
   ROUND_DURATION,
@@ -482,6 +496,111 @@ test('players and AI of the same species are indistinguishable on the wire', () 
   for (const a of sameSpecies) {
     assert.equal(shape(a), playerShape, 'AI and player must serialise identically');
   }
+});
+
+test('withdrawn species never appear anywhere in the game', () => {
+  // The four flying species were withdrawn. Their table entries must remain (the
+  // wire format indexes into ALL_SPECIES) but they must never reach the world.
+  const withdrawn = [Species.Parrot, Species.Eagle, Species.Heron, Species.Bat];
+
+  for (const species of withdrawn) {
+    assert.equal(isEnabled(species), false, `${species} should be withdrawn`);
+    assert.ok(ALL_SPECIES.includes(species), 'the table entry must be kept for wire stability');
+    assert.ok(!SPAWNABLE_SPECIES.includes(species), `${species} must not be spawnable`);
+    assert.ok(!PLAYABLE_SPECIES.includes(species), `${species} must not be selectable`);
+    assert.ok(!HUNTER_SPECIES.includes(species), `${species} must not be dealt the hunter role`);
+  }
+
+  // And none of them should be in a populated world.
+  const sim = new Simulation(4711);
+  for (let i = 0; i < 4; i++) sim.addPlayer(`p${i}`, `P${i}`);
+  sim.startRound(new Map());
+  advance(sim, 12);
+
+  const seen = new Set<Species>();
+  sim.forEachNearby(0, 0, 100_000, (a) => seen.add(a.species));
+  for (const species of withdrawn) {
+    assert.ok(!seen.has(species), `${species} was spawned despite being withdrawn`);
+  }
+});
+
+test('a predator can actually kill the AI prey it hunts', () => {
+  // Regression test for a bite that connected but did nothing useful: at
+  // HUNTER_DAMAGE a fleeing capybara needed three hits across seven seconds, so
+  // predators could never feed and the attack felt broken.
+  const sim = new Simulation(1357);
+  sim.addPlayer('a', 'A');
+  sim.startRound(new Map());
+  advance(sim, 10);
+
+  const hunter = sim.getPlayers()[0];
+  assert.equal(hunter.role, Role.Hunter, 'a solo player is dealt the hunter role');
+
+  // Find something this predator naturally hunts.
+  const found: Actor[] = [];
+  sim.forEachNearby(0, 0, 100_000, (a) => {
+    if (found.length === 0 && canPrey(hunter.species, a.species)) found.push(a);
+  });
+  assert.ok(found.length > 0, `found no prey species for a ${hunter.species}`);
+
+  // Put it right in front of the hunter's jaws.
+  const target = found[0];
+  target.pos.x = hunter.pos.x + Math.cos(hunter.yaw) * 1.6;
+  target.pos.z = hunter.pos.z + Math.sin(hunter.yaw) * 1.6;
+  target.pos.y = hunter.pos.y;
+
+  // Send as the hunter's own client: with several players the hunter is not
+  // necessarily the first one, and a herbivore's attack is correctly refused.
+  sim.applyInput(hunter.clientId, {
+    seq: 1,
+    moveX: 0,
+    moveZ: 0,
+    yaw: hunter.yaw,
+    pitch: 0,
+    actions: InputAction.Attack,
+  });
+  sim.update(SIM_DT);
+
+  const after = sim.getActor(target.id);
+  const died = !after || (after.flags & ActorFlags.Dead) !== 0;
+  assert.ok(died, `a single bite should take natural prey, but the ${target.species} survived`);
+  assert.equal(hunter.stats.kills, 1, 'the kill must be credited');
+});
+
+test('a bite on another player is survivable', () => {
+  // The other half of the balance: players must NOT die to one bite, or being
+  // found would be the same as being dead and a chase would never be a contest.
+  const sim = new Simulation(2468);
+  sim.addPlayer('a', 'A');
+  sim.addPlayer('b', 'B');
+  sim.startRound(new Map());
+  advance(sim, 10);
+
+  const hunter = sim.getPlayers().find((p) => p.role === Role.Hunter)!;
+  const victim = sim.getPlayers().find((p) => p.role === Role.Survivor)!;
+
+  victim.pos.x = hunter.pos.x + Math.cos(hunter.yaw) * 1.6;
+  victim.pos.z = hunter.pos.z + Math.sin(hunter.yaw) * 1.6;
+  victim.pos.y = hunter.pos.y;
+  const before = victim.health;
+
+  // Send as the hunter's own client: with several players the hunter is not
+  // necessarily the first one, and a herbivore's attack is correctly refused.
+  sim.applyInput(hunter.clientId, {
+    seq: 1,
+    moveX: 0,
+    moveZ: 0,
+    yaw: hunter.yaw,
+    pitch: 0,
+    actions: InputAction.Attack,
+  });
+  sim.update(SIM_DT);
+
+  assert.ok(victim.health < before, 'the bite must land');
+  assert.ok(
+    victim.health > 0 || victim.maxHealth < 70,
+    'a healthy player should survive a single bite',
+  );
 });
 
 test('a simulation tick stays well inside the frame budget', () => {

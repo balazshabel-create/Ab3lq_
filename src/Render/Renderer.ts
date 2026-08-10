@@ -21,6 +21,7 @@ import { AnimalRenderer } from './AnimalRenderer';
 import { EffectsRenderer, type FlySwarmInput } from './EffectsRenderer';
 import { CameraRig } from '../Player/CameraRig';
 import { SpatialGrid } from '../Systems/SpatialGrid';
+import { WATER_LEVEL } from '../Systems/Config';
 import { clamp01, lerp } from '../Systems/Noise';
 
 /** A prop treated as a vertical cylinder the camera cannot pass through. */
@@ -59,6 +60,12 @@ export class Renderer {
   private terrain: Terrain;
   private settings: GraphicsSettings;
   private swarms: FlySwarmInput[] = [];
+  private wakes: { x: number; z: number; speed: number; radius: number }[] = [];
+  /**
+   * Water level as of the last frame, used by the water test and the ripples.
+   * A flash flood raises it, so it cannot be read from the constant.
+   */
+  private waterLevel = WATER_LEVEL;
   private time = 0;
   private canvas: HTMLCanvasElement;
   /** Extra FOV added by the "Bad Eye" weakness vignette, etc. */
@@ -121,6 +128,15 @@ export class Renderer {
 
     this.buildCameraBlockers(content);
     this.cameraRig.setBlockerTest((x, y, z) => this.isBlocked(x, y, z));
+
+    // The animal renderer needs to know who is in the water so it can play the
+    // swimming animation; the terrain lives here, so the test is supplied here.
+    this.animals.setWaterTest((x, z, y) => {
+      if (!terrain.isWater(x, z)) return false;
+      // Also require the animal to actually be down at the surface, so a monkey
+      // in a tree overhanging the river is not treated as swimming.
+      return y <= this.waterLevel + 0.6;
+    });
 
     this.resize();
   }
@@ -223,6 +239,7 @@ export class Renderer {
    */
   render(dt: number, world: RenderWorldState): void {
     this.time += dt;
+    this.waterLevel = world.waterLevel;
 
     // --- Camera ----------------------------------------------------------
     this.cameraRig.update(dt, this.animals);
@@ -286,6 +303,8 @@ export class Renderer {
     this.animals.update(dt, cameraPos, this.time);
 
     // --- Effects ----------------------------------------------------------
+    this.animals.collectWaterWakes(this.wakes);
+    this.effects.updateRipples(this.wakes, world.waterLevel, dt);
     this.animals.collectFlySwarms(this.swarms);
     this.effects.update(
       dt,

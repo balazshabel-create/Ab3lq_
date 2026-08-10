@@ -152,6 +152,14 @@ export class EffectsRenderer {
   private fogPlanes: THREE.Mesh[] = [];
   private fogMaterial: THREE.MeshBasicMaterial;
 
+  // --- Water ripples ------------------------------------------------------
+  private ripples: THREE.InstancedMesh;
+  private rippleMaterial: THREE.MeshBasicMaterial;
+  /** Live ripples: expanding rings on the water surface. */
+  private ripplePool: { x: number; z: number; age: number; life: number; scale: number }[] = [];
+  private rippleSpawnAccumulator = 0;
+  private static readonly RIPPLE_POOL = 96;
+
   constructor(scene: THREE.Scene, settings: GraphicsSettings) {
     this.settings = settings;
     this.group.name = 'effects';
@@ -251,6 +259,30 @@ export class EffectsRenderer {
     this.pings.name = 'noise-pings';
     this.group.add(this.pings);
 
+    // --- Water ripples ----------------------------------------------------
+    // Flat expanding rings laid on the water surface. Cheap, and they do a lot
+    // of work: they show that an animal is *in* the water rather than floating
+    // above it, and a wake is a genuine tell that something is moving out there.
+    const rippleGeometry = new THREE.RingGeometry(0.55, 1, 18);
+    rippleGeometry.rotateX(-Math.PI / 2);
+    this.rippleMaterial = new THREE.MeshBasicMaterial({
+      color: 0xdfeee8,
+      transparent: true,
+      opacity: 0.3,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    this.ripples = new THREE.InstancedMesh(
+      rippleGeometry,
+      this.rippleMaterial,
+      EffectsRenderer.RIPPLE_POOL,
+    );
+    this.ripples.frustumCulled = false;
+    this.ripples.count = 0;
+    this.ripples.renderOrder = 2;
+    this.ripples.name = 'water-ripples';
+    this.group.add(this.ripples);
+
     // --- Ground fog -------------------------------------------------------
     // A few large soft planes near the ground. Not true volumetrics, but it
     // gives the layered mist look for very little cost, and it moves.
@@ -339,6 +371,76 @@ export class EffectsRenderer {
       plane.position.z = cameraPos.z + Math.cos(time * 0.04 + i * 1.7) * 12;
       plane.position.y = 1.2 + i * 2.4 + Math.sin(time * 0.3 + i) * 0.3;
     }
+  }
+
+  /**
+   * Spawn and advance water ripples.
+   *
+   * Ripples are emitted around anything in the water at a rate proportional to
+   * how fast it is moving, then expand and fade. A stationary animal still emits
+   * a slow trickle, so it reads as sitting *in* the water rather than on it.
+   */
+  updateRipples(
+    wakes: { x: number; z: number; speed: number; radius: number }[],
+    waterLevel: number,
+    dt: number,
+  ): void {
+    if (this.settings.effectsQuality === 'off') {
+      this.ripples.count = 0;
+      return;
+    }
+
+    // --- Age out the existing ripples ------------------------------------
+    for (let i = this.ripplePool.length - 1; i >= 0; i--) {
+      this.ripplePool[i].age += dt;
+      if (this.ripplePool[i].age >= this.ripplePool[i].life) this.ripplePool.splice(i, 1);
+    }
+
+    // --- Spawn new ones ---------------------------------------------------
+    // One shared accumulator rather than a per-actor timer: the total spawn rate
+    // is what has to stay bounded, however many animals are in the river.
+    this.rippleSpawnAccumulator += dt;
+    const spawnInterval = 0.09;
+    if (wakes.length > 0 && this.rippleSpawnAccumulator >= spawnInterval) {
+      this.rippleSpawnAccumulator = 0;
+      for (const wake of wakes) {
+        if (this.ripplePool.length >= EffectsRenderer.RIPPLE_POOL) break;
+        // Fast movers throw ripples constantly; a drifting animal rarely.
+        const chance = 0.12 + clamp01(wake.speed) * 0.85;
+        if (Math.random() > chance) continue;
+        // Scatter the origin a little so a wake is not a single tidy column.
+        const jitter = wake.radius * 0.6;
+        this.ripplePool.push({
+          x: wake.x + (Math.random() - 0.5) * jitter,
+          z: wake.z + (Math.random() - 0.5) * jitter,
+          age: 0,
+          life: 1.1 + Math.random() * 0.9,
+          scale: wake.radius * (0.7 + Math.random() * 0.5),
+        });
+      }
+    }
+
+    // --- Draw -------------------------------------------------------------
+    const count = Math.min(this.ripplePool.length, EffectsRenderer.RIPPLE_POOL);
+    this.ripples.count = count;
+    if (count === 0) return;
+
+    for (let i = 0; i < count; i++) {
+      const r = this.ripplePool[i];
+      const t = clamp01(r.age / r.life);
+      // Expand quickly at first, then ease out — how a real ripple spreads.
+      const size = r.scale * (0.35 + Math.pow(t, 0.55) * 2.6);
+      this.trackPos.set(r.x, waterLevel + 0.05, r.z);
+      this.trackQuat.identity();
+      this.trackScale.set(size, 1, size);
+      this.trackMatrix.compose(this.trackPos, this.trackQuat, this.trackScale);
+      this.ripples.setMatrixAt(i, this.trackMatrix);
+    }
+    this.ripples.instanceMatrix.needsUpdate = true;
+
+    // Fade the whole set with the youngest ripple's life, since per-instance
+    // opacity would need a custom shader for very little visual gain.
+    this.rippleMaterial.opacity = 0.26;
   }
 
   /**
@@ -444,6 +546,8 @@ export class EffectsRenderer {
     this.trackMaterial.dispose();
     this.pings.geometry.dispose();
     this.pingMaterial.dispose();
+    this.ripples.geometry.dispose();
+    this.rippleMaterial.dispose();
     for (const plane of this.fogPlanes) plane.geometry.dispose();
     this.fogMaterial.dispose();
     this.group.removeFromParent();

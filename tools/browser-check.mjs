@@ -247,7 +247,9 @@ log('role dealt', `${roleInfo.title} | ${roleInfo.weakness}`);
 await page.screenshot({ path: `${outDir}/04-role-card.png` });
 
 // --- The round itself ------------------------------------------------------
-await page.waitForSelector('#screen-hud.active', { timeout: 40_000 });
+// Generous: this runs against software-rasterised GL on a machine that may also
+// be building, and the intro countdown is real simulation time.
+await page.waitForSelector('#screen-hud.active', { timeout: 90_000 });
 log('round started', 'HUD active');
 
 // Let the round run so animals spawn, the sun moves and the HUD ticks.

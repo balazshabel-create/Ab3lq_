@@ -27,7 +27,6 @@ import { Rng } from '../Systems/Rng';
 export enum EventId {
   TropicalStorm = 'tropical_storm',
   CrocodileMigration = 'crocodile_migration',
-  ParrotSwarm = 'parrot_swarm',
   FlashFlood = 'flash_flood',
   JaguarTerritory = 'jaguar_territory',
   JungleFog = 'jungle_fog',
@@ -83,17 +82,6 @@ export const EVENTS: Record<EventId, EventDef> = {
     duration: 90,
     weight: 13,
     spawnBurst: { species: Species.Caiman, count: 22 },
-  },
-  [EventId.ParrotSwarm]: {
-    id: EventId.ParrotSwarm,
-    name: 'Parrot Swarm',
-    emoji: '🦜',
-    announcement: 'PARROT SWARM',
-    detail: 'Hundreds of macaws burst through the canopy. Nobody can hear anything.',
-    duration: 45,
-    weight: 15,
-    spawnBurst: { species: Species.Parrot, count: 34 },
-    noiseScale: 0.7,
   },
   [EventId.FlashFlood]: {
     id: EventId.FlashFlood,
