@@ -1,0 +1,34 @@
+{
+  "name": "jungle-jukebox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Jungle Jukebox - a 3D multiplayer social-deduction survival game set in the Amazon rainforest.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173",
+    "typecheck": "tsc --noEmit",
+    "server": "tsx server/index.ts",
+    "server:build": "tsc -p tsconfig.server.json",
+    "start": "npm run build && concurrently -k \"npm:server\" \"npm:preview\"",
+    "test": "tsx --test tests/*.test.ts",
+    "smoke": "tsx tools/smoke-client.ts",
+    "verify:browser": "node tools/browser-check.mjs http://localhost:4173 screenshots",
+    "verify": "npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "three": "^0.169.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "@types/three": "^0.169.0",
+    "@types/ws": "^8.5.12",
+    "concurrently": "^9.0.1",
+    "playwright": "^1.62.1",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vite": "^8.2.1"
+  }
+}
