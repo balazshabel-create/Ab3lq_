@@ -69,6 +69,64 @@ const RAIN_FRAGMENT = /* glsl */ `
   }
 `;
 
+/**
+ * Falling leaves.
+ *
+ * Same stateless trick as the rain — position is a pure function of time and a
+ * per-particle seed, so thousands of leaves cost no CPU at all. They fall far
+ * more slowly than rain and drift sideways as they go, which is what makes a
+ * canopy feel alive even when nothing else is moving.
+ */
+const LEAF_VERTEX = /* glsl */ `
+  uniform float uTime;
+  uniform float uHeight;
+  uniform float uRadius;
+  uniform vec3 uCenter;
+  uniform float uWind;
+  attribute float aSeed;
+  varying float vAlpha;
+  varying float vShade;
+
+  void main() {
+    float seed = aSeed;
+    // Each leaf has its own fall period, so they never form visible ranks.
+    float fall = fract(uTime * (0.035 + seed * 0.05) + seed * 7.3);
+    float y = uHeight * (1.0 - fall);
+
+    float angle = seed * 6.2831853;
+    float radius = uRadius * sqrt(fract(seed * 53.17));
+    vec3 offset = vec3(cos(angle) * radius, y, sin(angle) * radius);
+
+    // Tumbling drift: a slow spiral, widening as it descends.
+    float t = uTime * (0.6 + seed) + seed * 20.0;
+    offset.x += sin(t) * (1.2 + fall * 2.5) + uWind * fall * 9.0;
+    offset.z += cos(t * 0.8) * (1.2 + fall * 2.5);
+
+    vec4 mvPosition = viewMatrix * vec4(uCenter + offset, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+    gl_PointSize = clamp(120.0 / -mvPosition.z, 1.5, 9.0);
+    // Fade in high up and out just before the ground, so none of them pop.
+    vAlpha = smoothstep(0.0, 0.1, fall) * (1.0 - smoothstep(0.88, 1.0, fall));
+    // Flicker between face and edge as it tumbles.
+    vShade = 0.55 + 0.45 * abs(sin(t * 1.7));
+  }
+`;
+
+const LEAF_FRAGMENT = /* glsl */ `
+  precision mediump float;
+  uniform vec3 uColorA;
+  uniform vec3 uColorB;
+  uniform float uOpacity;
+  varying float vAlpha;
+  varying float vShade;
+  void main() {
+    vec2 d = gl_PointCoord - 0.5;
+    if (length(d) > 0.5) discard;
+    vec3 color = mix(uColorA, uColorB, vShade);
+    gl_FragColor = vec4(color, vAlpha * uOpacity);
+  }
+`;
+
 const FLY_VERTEX = /* glsl */ `
   uniform float uTime;
   attribute vec3 aCenter;
@@ -152,6 +210,11 @@ export class EffectsRenderer {
   private fogPlanes: THREE.Mesh[] = [];
   private fogMaterial: THREE.MeshBasicMaterial;
 
+  // --- Falling leaves -----------------------------------------------------
+  private leaves: THREE.Points;
+  private leafMaterial: THREE.ShaderMaterial;
+  private leafGeometry: THREE.BufferGeometry;
+
   // --- Water ripples ------------------------------------------------------
   private ripples: THREE.InstancedMesh;
   private rippleMaterial: THREE.MeshBasicMaterial;
@@ -223,6 +286,36 @@ export class EffectsRenderer {
     this.flies.name = 'flies';
     this.group.add(this.flies);
 
+    // --- Falling leaves ---------------------------------------------------
+    const leafCount = Math.max(1, Math.round(settings.rainParticles * 0.12) + 60);
+    this.leafGeometry = new THREE.BufferGeometry();
+    const leafSeeds = new Float32Array(leafCount);
+    for (let i = 0; i < leafCount; i++) leafSeeds[i] = Math.random();
+    this.leafGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(leafCount * 3), 3));
+    this.leafGeometry.setAttribute('aSeed', new THREE.BufferAttribute(leafSeeds, 1));
+    this.leafGeometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), WORLD_SIZE);
+
+    this.leafMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uHeight: { value: 26 },
+        uRadius: { value: 40 },
+        uCenter: { value: new THREE.Vector3() },
+        uWind: { value: 0.2 },
+        uColorA: { value: new THREE.Color(0x3d6b26) },
+        uColorB: { value: new THREE.Color(0x8a7a2c) },
+        uOpacity: { value: 0.85 },
+      },
+      vertexShader: LEAF_VERTEX,
+      fragmentShader: LEAF_FRAGMENT,
+      transparent: true,
+      depthWrite: false,
+    });
+    this.leaves = new THREE.Points(this.leafGeometry, this.leafMaterial);
+    this.leaves.frustumCulled = false;
+    this.leaves.name = 'falling-leaves';
+    this.group.add(this.leaves);
+
     // --- Footprints -------------------------------------------------------
     // A small flattened wedge, laid on the ground and faded by age.
     const printGeometry = new THREE.CircleGeometry(0.16, 5);
@@ -266,9 +359,9 @@ export class EffectsRenderer {
     const rippleGeometry = new THREE.RingGeometry(0.55, 1, 18);
     rippleGeometry.rotateX(-Math.PI / 2);
     this.rippleMaterial = new THREE.MeshBasicMaterial({
-      color: 0xdfeee8,
+      color: 0xcfe0da,
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.14,
       depthWrite: false,
       side: THREE.DoubleSide,
     });
@@ -338,6 +431,19 @@ export class EffectsRenderer {
       u.uRadius.value = Math.min(60, this.settings.viewDistance * 0.32);
     }
 
+    // --- Falling leaves ---------------------------------------------------
+    const leavesVisible = this.settings.effectsQuality !== 'off';
+    this.leaves.visible = leavesVisible;
+    if (leavesVisible) {
+      const u = this.leafMaterial.uniforms;
+      u.uTime.value = time;
+      u.uCenter.value.set(cameraPos.x, cameraPos.y - 2, cameraPos.z);
+      u.uWind.value = wind;
+      u.uRadius.value = Math.min(46, this.settings.viewDistance * 0.26);
+      // Leaves come down harder in wind and rain.
+      u.uOpacity.value = 0.55 + clamp01(wind) * 0.35;
+    }
+
     // --- Flies ------------------------------------------------------------
     this.flyMaterial.uniforms.uTime.value = time;
     let slot = 0;
@@ -359,7 +465,7 @@ export class EffectsRenderer {
     this.flies.visible = slot > 0;
 
     // --- Ground fog -------------------------------------------------------
-    const fogVisible = this.settings.volumetricFog && fogDensity > 0.05;
+    const fogVisible = this.settings.volumetricFog && fogDensity > 0.2;
     this.fogMaterial.opacity = fogVisible ? clamp01(fogDensity) * 0.16 : 0;
     this.fogMaterial.color.copy(fogColor).lerp(new THREE.Color(0xffffff), 0.25);
     for (let i = 0; i < this.fogPlanes.length; i++) {
@@ -429,7 +535,7 @@ export class EffectsRenderer {
       const r = this.ripplePool[i];
       const t = clamp01(r.age / r.life);
       // Expand quickly at first, then ease out — how a real ripple spreads.
-      const size = r.scale * (0.35 + Math.pow(t, 0.55) * 2.6);
+      const size = r.scale * (0.3 + Math.pow(t, 0.55) * 1.5);
       this.trackPos.set(r.x, waterLevel + 0.05, r.z);
       this.trackQuat.identity();
       this.trackScale.set(size, 1, size);
@@ -440,7 +546,7 @@ export class EffectsRenderer {
 
     // Fade the whole set with the youngest ripple's life, since per-instance
     // opacity would need a custom shader for very little visual gain.
-    this.rippleMaterial.opacity = 0.26;
+    this.rippleMaterial.opacity = 0.13;
   }
 
   /**
@@ -542,6 +648,8 @@ export class EffectsRenderer {
     this.rainMaterial.dispose();
     this.flyGeometry.dispose();
     this.flyMaterial.dispose();
+    this.leafGeometry.dispose();
+    this.leafMaterial.dispose();
     this.tracks.geometry.dispose();
     this.trackMaterial.dispose();
     this.pings.geometry.dispose();

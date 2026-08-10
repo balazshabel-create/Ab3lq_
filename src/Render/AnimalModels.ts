@@ -331,7 +331,12 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
    * head and tail and leaves the animal visibly in three pieces. Flattening
    * vertically means scaling local X.
    */
-  const torso = mesh(capsule(W * 0.44, L * 0.4), c.body, bodyGroup);
+  /*
+   * The capsule has to be long enough to actually *reach* the head and tail
+   * anchors (at ±0.4·L). At 0.4·L it fell short at both ends and the animal read
+   * as three separate objects floating in a line.
+   */
+  const torso = mesh(capsule(W * 0.44, L * 0.62), c.body, bodyGroup);
   torso.rotation.z = Math.PI / 2;
   torso.scale.set(0.62, 1, 1);
 
@@ -345,6 +350,10 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
   head.position.set(L * 0.42, 0, 0);
   bodyGroup.add(head);
   model.head = head;
+
+  // Shoulders: blends the head into the torso instead of butting against it.
+  const shoulder = mesh(sphere(W * 0.44, detail > 0.5 ? 8 : 5), c.body, bodyGroup, L * 0.3, 0, 0);
+  shoulder.scale.set(1, 0.6, 1);
 
   const jaw = mesh(box(L * 0.3, H * 0.34, W * 0.5), c.body, head, L * 0.12, 0, 0);
   jaw.scale.set(1, 1, 1);

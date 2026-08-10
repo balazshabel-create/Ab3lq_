@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { Terrain } from '../World/Terrain';
 import { WATER_LEVEL, WORLD_SIZE } from '../Systems/Config';
-import { clamp01, smoothstep } from '../Systems/Noise';
+import { Noise2D, clamp01, smoothstep } from '../Systems/Noise';
 
 /**
  * Ground palette. Tuned to read as Amazon basin rather than generic grass.
@@ -35,8 +35,12 @@ export class TerrainMesh {
   readonly mesh: THREE.Mesh;
   private geometry: THREE.PlaneGeometry;
   private material: THREE.MeshLambertMaterial;
+  /** Fine noise used only to mottle the vertex colours. */
+  private detailNoise: Noise2D;
 
   constructor(terrain: Terrain, segments: number) {
+    // Seeded from the terrain so the mottling matches on every client.
+    this.detailNoise = new Noise2D(terrain.seed ^ 0x5eed);
     this.geometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, segments, segments);
     // PlaneGeometry is built in XY; rotate it into the XZ ground plane.
     this.geometry.rotateX(-Math.PI / 2);
@@ -78,6 +82,24 @@ export class TerrainMesh {
 
       // Steep faces are bare rock regardless of everything above.
       color.lerp(COLORS.rock, smoothstep(0.5, 0.95, slope));
+
+      /*
+       * Mottling.
+       *
+       * Up to here the ground is a smooth interpolation between a handful of
+       * colours, which at close range looks like a painted backdrop — the eye
+       * expects a forest floor to be visually noisy. Two octaves of noise, one
+       * broad and one fine, break it up into patches of leaf litter and moss for
+       * no runtime cost at all: this is baked once into the vertex colours.
+       */
+      const broad = this.detailNoise.sample(x * 0.06, z * 0.06);
+      const fine = this.detailNoise.sample(x * 0.31, z * 0.31);
+      const mottle = 1 + broad * 0.1 + fine * 0.055;
+      color.multiplyScalar(mottle);
+      // Tint the darker patches slightly cooler, the lighter ones warmer, which
+      // reads as dappled light rather than as brightness noise.
+      if (broad > 0) color.r *= 1 + broad * 0.05;
+      else color.b *= 1 - broad * 0.05;
 
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;

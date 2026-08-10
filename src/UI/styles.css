@@ -1148,6 +1148,37 @@ input[type='text']:focus {
   font-weight: 700;
 }
 
+/*
+ * Colour grade.
+ *
+ * A permanent, very subtle vignette plus a warm centre. This is the cheapest
+ * "looks more expensive" trick there is: darkening the corners focuses the eye
+ * on the middle of the frame and hides the point where the fog meets the view
+ * distance. Kept low-contrast so it never reads as a dirty screen.
+ */
+.grade-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 120% 100% at 50% 45%, rgba(255, 214, 150, 0.05) 0%, transparent 55%),
+    radial-gradient(ellipse 90% 85% at 50% 50%, transparent 45%, rgba(3, 10, 6, 0.5) 100%);
+  mix-blend-mode: multiply;
+}
+
+/* A second pass in screen blend, for a faint atmospheric lift. */
+.grade-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 100% 90% at 50% 38%,
+    rgba(150, 200, 255, 0.045) 0%,
+    transparent 60%
+  );
+  mix-blend-mode: screen;
+}
+
 /* Damage vignette */
 .damage-vignette {
   position: absolute;

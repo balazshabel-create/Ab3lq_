@@ -54,7 +54,7 @@ and writes screenshots to `screenshots/`.
 | **Move** | `WASD`, `Shift` to sprint, `Space` to jump |
 | **Whistle** | `Q` — **once a minute, or flies give you away** |
 | **Eat** | Hold `E` |
-| **Attack** | Left click (predators only) |
+| **Attack** | Left click — any animal can bite, but a herbivore's does little |
 | **Ability** | `X` (species signature move) |
 | **Climb** | `R` up, `F` down |
 | **Submerge** | `C` (crocodiles, caimans) |
@@ -195,9 +195,13 @@ weights. Rebalancing does not require touching any system.
   temperament and signature ability — all data in one table. The four flying
   species are withdrawn via an `enabled` flag rather than deleted, so the
   snapshot format's species indices stay stable
-- Procedural animal models: ten body plans built from primitives, with gait,
-  head, tail, wing and serpent-undulation animation driven only from snapshot
-  fields
+- Procedural animal models: ten body plans built from primitives, with a walk
+  cycle that lifts each leg during its forward half, a distinct swimming motion
+  (fishtail sway, roll and bob), head, tail and serpent undulation — all driven
+  only from snapshot fields, so a player and an AI animate identically
+- Per-instance colour variation on every plant, mottled terrain vertex colours,
+  drifting falling leaves, water ripples that scale with how hard an animal is
+  churning the surface, and a subtle colour grade
 - AI with a weighted behaviour selector (wander, graze, drink, flee, hunt, rest,
   sleep, bask, follow, patrol, vocalise), herds, reaction delays, and
   day/night + weather-dependent behaviour
@@ -217,9 +221,16 @@ weights. Rebalancing does not require touching any system.
   selection and ready states, private role cards
 - Main menu over the live 3D world, LOW/MEDIUM/HIGH presets plus 19 individual
   graphics options, controls and how-to-play screens
-- Fully procedural audio: whistles pitched per player, positional footsteps,
-  animal calls, fly buzz, rain, wind, river, insects, frogs, thunder, and a
-  tension drone that rises as your whistle goes overdue
+- Fully procedural audio through a small algorithmic reverb: the signature
+  whistle (a swoop, a vibrato sustain and a drop, pitched per player so people
+  are distinguishable by ear), positional footsteps, fly buzz, rain, wind,
+  river, insects, frogs, thunder, and a tension drone that rises as your
+  whistle goes overdue
+- An ambience director that scatters distant calls — macaws, howler troops,
+  night birds, frogs — at irregular intervals from random directions, with the
+  pool changing between day and night. A static ambience bed stops registering
+  after a minute; the irregular punctuation is what makes a rainforest
+  unmistakable
 
 ## Known gaps
 

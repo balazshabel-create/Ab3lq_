@@ -1239,13 +1239,24 @@ export class Simulation implements AiContext {
   private tryAttack(player: PlayerActor, stats: ResolvedStats): void {
     if (player.attackCooldown > 0) return;
     const def = ANIMALS[player.species];
-    // Only animals with the anatomy for it can attack at all: a capybara
-    // cannot bite its way out of trouble, and that is the point.
+
+    /*
+     * Every animal can attack. Whether it *should* is another matter.
+     *
+     * This used to refuse outright for anything that was not a decent-sized
+     * meat eater, which read as the button being broken. Letting everyone swing
+     * is better: a cornered capybara biting back is a real (desperate) option,
+     * and a frog attacking a jaguar is its own kind of answer. The balance lives
+     * in the damage instead of in a refusal — a herbivore's bite is a third of a
+     * predator's, and body size scales it further, so a tiny herbivore is doing
+     * little more than making a point.
+     */
     const meatEater =
       def.diet === Diet.Carnivore ||
       def.diet === Diet.Piscivore ||
       def.diet === Diet.Omnivore;
-    if (!meatEater || def.size < SizeClass.Small) return;
+    const sizeFactor = [0.22, 0.5, 0.8, 1.0, 1.15][def.size] ?? 0.8;
+    const attackPower = (meatEater ? 1 : 0.34) * sizeFactor;
 
     player.attackCooldown = HUNTER_ATTACK_COOLDOWN;
     player.flags |= ActorFlags.Attacking;
@@ -1303,11 +1314,13 @@ export class Simulation implements AiContext {
      */
     let damage: number;
     if (victim.kind === ActorKind.Player) {
-      damage = player.role === Role.Hunter ? HUNTER_DAMAGE : HUNTER_DAMAGE * 0.55;
+      const roleScale = player.role === Role.Hunter ? 1 : 0.55;
+      damage = HUNTER_DAMAGE * roleScale * attackPower;
     } else if (canPrey(player.species, victim.species)) {
+      // A predator taking its natural prey succeeds outright, as the AI does.
       damage = victim.maxHealth;
     } else {
-      damage = HUNTER_DAMAGE * 1.8;
+      damage = HUNTER_DAMAGE * 1.8 * attackPower;
     }
 
     this.damageActor(victim.id, armoured ? damage * 0.3 : damage, player.id);

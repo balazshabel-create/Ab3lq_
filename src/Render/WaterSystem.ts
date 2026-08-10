@@ -77,11 +77,22 @@ const FRAGMENT_SHADER = /* glsl */ `
   }
 
   void main() {
-    // Water depth comes from a baked texture of the terrain heightfield, so the
-    // shader knows where the shallows are without any CPU work per frame.
+    /*
+     * Water depth comes from a baked texture of the terrain heightfield, so the
+     * shader knows where the shallows are without any CPU work per frame.
+     *
+     * The texture stores ground height normalised over a 7 m band centred on the
+     * water line, so the water line itself sits at 1/7 of the range, not at
+     * zero. Getting that wrong is not subtle: the water plane spans the entire
+     * map, so treating dry land as "zero depth" drew a 35%-opacity white sheet
+     * over the whole world and washed every scene out to grey.
+     */
     vec2 uv = vWorldXZ / uWorldSize + 0.5;
     float ground = texture2D(uDepthMap, uv).r;
-    float depth = max(0.0, 1.0 - ground);
+    // Metres of water above the ground. Negative on dry land.
+    float depthM = ((1.0 - ground) - 0.142857) * 7.0;
+    // Anywhere the terrain rises above the water line, there is simply no water.
+    if (depthM <= 0.0) discard;
 
     vec3 normal = waveNormal(vWorldXZ);
     vec3 viewDir = normalize(uCameraPos - vWorldPos);
@@ -90,8 +101,8 @@ const FRAGMENT_SHADER = /* glsl */ `
     float fresnel = pow(1.0 - clamp(dot(viewDir, normal), 0.0, 1.0), 3.0);
     fresnel = mix(0.04, 1.0, fresnel) * uReflectivity;
 
-    // Depth-graded body colour.
-    vec3 body = mix(uShallowColor, uDeepColor, clamp(depth * 3.2, 0.0, 1.0));
+    // Depth-graded body colour: silty green in the shallows, near-black deep.
+    vec3 body = mix(uShallowColor, uDeepColor, clamp(depthM / 3.5, 0.0, 1.0));
 
     // Sky reflection plus a specular sun glint on the wave crests.
     vec3 halfway = normalize(uSunDirection + viewDir);
@@ -100,15 +111,17 @@ const FRAGMENT_SHADER = /* glsl */ `
 
     vec3 color = mix(body, reflection, fresnel);
 
-    // Foam on the crests, and along the shoreline where depth goes to zero.
+    // Foam on the crests, and a wet band in the last half metre of shallows.
     float crest = smoothstep(0.05, 0.11, vWave);
-    float shore = 1.0 - smoothstep(0.0, 0.16, depth);
+    float shore = 1.0 - smoothstep(0.0, 0.5, depthM);
     color += vec3(0.32) * crest * 0.5;
-    color = mix(color, vec3(0.72, 0.74, 0.66), shore * 0.35);
+    color = mix(color, vec3(0.72, 0.74, 0.66), shore * 0.4);
 
-    // Fade out at the very edge so the plane never shows a hard border.
-    float alpha = uOpacity * (0.35 + 0.65 * clamp(depth * 5.0, 0.0, 1.0));
+    // Shallow water is nearly clear; deep water hides what is under it.
+    float alpha = uOpacity * (0.3 + 0.7 * clamp(depthM / 1.2, 0.0, 1.0));
     alpha = mix(alpha, 1.0, fresnel * 0.5);
+    // Feather the very edge so the plane never shows a hard outline.
+    alpha *= smoothstep(0.0, 0.12, depthM);
 
     gl_FragColor = vec4(color, clamp(alpha, 0.0, 1.0));
 

@@ -31,6 +31,18 @@ export interface AudioSettings {
 
 const STORAGE_KEY = 'jungle-jukebox.audio.v1';
 
+/** The distant one-shot calls the ambience director can fire. */
+type DistantCall =
+  | 'macaw'
+  | 'howler'
+  | 'toucan'
+  | 'whoop'
+  | 'nightbird'
+  | 'frog'
+  | 'owl'
+  | 'insect'
+  | 'chirp';
+
 /** Voices that persist and are modulated rather than triggered. */
 interface AmbienceLayer {
   gain: GainNode;
@@ -59,6 +71,12 @@ export class AudioSystem {
 
   private layers = new Map<string, AmbienceLayer>();
   private started = false;
+  /** Input to the shared reverb. */
+  private reverbSend: GainNode | null = null;
+  /** Timer that scatters distant animal calls through the jungle. */
+  private directorTimer: ReturnType<typeof setTimeout> | null = null;
+  /** 0..1 night factor, kept so the director can pick the right call pool. */
+  private nightFactor = 0;
   /** Sounds triggered this frame, to avoid a hundred simultaneous footsteps. */
   private budget = 0;
   private lastFrame = 0;
@@ -101,7 +119,9 @@ export class AudioSystem {
     this.musicBus.connect(this.master);
 
     this.noiseBuffer = this.createNoiseBuffer(2);
+    this.buildReverb();
     this.buildAmbience();
+    this.startAmbienceDirector();
 
     if (this.ctx.state === 'suspended') await this.ctx.resume();
   }
@@ -113,6 +133,59 @@ export class AudioSystem {
   // -------------------------------------------------------------------------
   // Buffers and helpers
   // -------------------------------------------------------------------------
+
+  /**
+   * A small algorithmic reverb.
+   *
+   * This is the single biggest improvement to how the game sounds. Dry
+   * synthesised one-shots read as beeps in a vacuum; the same whistle through a
+   * few hundred milliseconds of diffuse tail reads as a whistle *in a forest*.
+   * Built from three prime-length delay lines with a damping lowpass in the
+   * feedback path — a Schroeder-style tail. No impulse response file needed,
+   * which keeps the project asset-free.
+   */
+  private buildReverb(): void {
+    const ctx = this.ctx!;
+    this.reverbSend = ctx.createGain();
+    this.reverbSend.gain.value = 1;
+
+    const wet = ctx.createGain();
+    wet.gain.value = 0.34;
+    wet.connect(this.master!);
+
+    // Pre-delay: nothing in a forest reflects instantly.
+    const preDelay = ctx.createDelay(0.2);
+    preDelay.delayTime.value = 0.022;
+    this.reverbSend.connect(preDelay);
+
+    // Prime-ish delay times avoid the comb resonances that make short reverbs
+    // sound metallic.
+    for (const time of [0.0371, 0.0537, 0.0731]) {
+      const delay = ctx.createDelay(0.5);
+      delay.delayTime.value = time;
+      const feedback = ctx.createGain();
+      feedback.gain.value = 0.72;
+      const damping = ctx.createBiquadFilter();
+      damping.type = 'lowpass';
+      // Foliage absorbs high frequencies, so the tail darkens as it decays.
+      damping.frequency.value = 2600;
+
+      preDelay.connect(delay);
+      delay.connect(damping);
+      damping.connect(feedback);
+      feedback.connect(delay);
+      delay.connect(wet);
+    }
+  }
+
+  /** Route a node into the reverb at the given wet amount. */
+  private sendToReverb(node: AudioNode, amount: number): void {
+    if (!this.reverbSend || amount <= 0) return;
+    const send = this.ctx!.createGain();
+    send.gain.value = amount;
+    node.connect(send);
+    send.connect(this.reverbSend);
+  }
 
   /** White noise, the raw material for rain, wind, footsteps and splashes. */
   private createNoiseBuffer(seconds: number): AudioBuffer {
@@ -368,6 +441,9 @@ export class AudioSystem {
     set('frogs', clamp01(params.nightFactor) * 0.32 * (0.4 + params.nearWater * 0.6));
     set('tension', Math.pow(clamp01(params.whistleTension), 2) * 0.4);
 
+    // The director needs to know the time of day to pick its call pool.
+    this.nightFactor = clamp01(params.nightFactor);
+
     // Smooth every layer towards its target so nothing ever clicks.
     const t = this.ctx.currentTime;
     for (const layer of this.layers.values()) {
@@ -376,15 +452,233 @@ export class AudioSystem {
   }
 
   // -------------------------------------------------------------------------
+  // The ambience director
+  // -------------------------------------------------------------------------
+
+  /**
+   * Scatter distant animal calls through the jungle.
+   *
+   * The continuous layers (rain, insects, river) give the jungle a *floor*, but
+   * they are static, and a static bed stops registering after a minute. What
+   * makes a rainforest recording unmistakable is the irregular punctuation: a
+   * macaw screech somewhere off to the left, a howler troop starting up half a
+   * kilometre away, a single frog, then nothing for eight seconds.
+   *
+   * So a self-rescheduling timer fires one-shot calls at random intervals, from
+   * random directions and distances, with the pool changing between day and
+   * night. The calls are pushed hard into the reverb and low-passed, which is
+   * what places them far away rather than next to your head.
+   */
+  private startAmbienceDirector(): void {
+    const schedule = () => {
+      // Irregular gaps: a metronome would be worse than silence.
+      const delay = 1600 + Math.random() * 5200;
+      this.directorTimer = setTimeout(() => {
+        this.playDistantCall();
+        schedule();
+      }, delay);
+    };
+    schedule();
+  }
+
+  /** One distant, reverberant call from somewhere out in the trees. */
+  private playDistantCall(): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.ambienceBus) return;
+    if (ctx.state !== 'running') return;
+
+    const night = clamp01(this.nightFactor);
+    // Day is birds and monkeys; night is frogs, insects and the odd owl-like
+    // whoop. Crossfading the pools by the night factor means dusk has both.
+    const dayCalls: DistantCall[] = ['macaw', 'howler', 'whoop', 'chirp', 'toucan'];
+    const nightCalls: DistantCall[] = ['frog', 'owl', 'insect', 'whoop', 'nightbird'];
+    const pool = Math.random() < night ? nightCalls : dayCalls;
+    const kind = pool[Math.floor(Math.random() * pool.length)];
+
+    // Place it somewhere in the middle distance around the listener.
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 28 + Math.random() * 70;
+    const x = this.listenerPos.x + Math.cos(angle) * distance;
+    const z = this.listenerPos.z + Math.sin(angle) * distance;
+    const y = this.listenerPos.y + Math.random() * 12;
+
+    const t = ctx.currentTime;
+    const out = ctx.createGain();
+    // Distance rolloff, applied on top of the panner's own.
+    out.gain.value = 0.5 * (1 - (distance - 28) / 110);
+
+    // Air and foliage swallow the top end over distance.
+    const air = ctx.createBiquadFilter();
+    air.type = 'lowpass';
+    air.frequency.value = 5200 - distance * 34;
+
+    const voice = ctx.createGain();
+    voice.connect(air).connect(out);
+
+    switch (kind) {
+      case 'macaw': {
+        // Harsh descending double squawk.
+        for (let i = 0; i < 2; i++) {
+          const start = t + i * 0.19;
+          const osc = ctx.createOscillator();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(1250, start);
+          osc.frequency.exponentialRampToValueAtTime(760, start + 0.16);
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0, start);
+          g.gain.linearRampToValueAtTime(0.3, start + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.001, start + 0.17);
+          osc.connect(g).connect(voice);
+          osc.start(start);
+          osc.stop(start + 0.2);
+        }
+        break;
+      }
+      case 'howler': {
+        // The signature roar: a long, low, resonant swell.
+        const osc = ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(78, t);
+        osc.frequency.linearRampToValueAtTime(124, t + 0.7);
+        osc.frequency.linearRampToValueAtTime(64, t + 2.2);
+        const formant = ctx.createBiquadFilter();
+        formant.type = 'bandpass';
+        formant.frequency.value = 360;
+        formant.Q.value = 4.5;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(0.4, t + 0.35);
+        g.gain.setValueAtTime(0.4, t + 1.5);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 2.4);
+        osc.connect(formant).connect(g).connect(voice);
+        osc.start(t);
+        osc.stop(t + 2.5);
+        break;
+      }
+      case 'toucan': {
+        // A dry, repeated croak-yelp.
+        for (let i = 0; i < 4; i++) {
+          const start = t + i * 0.14;
+          const osc = ctx.createOscillator();
+          osc.type = 'square';
+          osc.frequency.value = 520 + i * 18;
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0.16, start);
+          g.gain.exponentialRampToValueAtTime(0.001, start + 0.09);
+          osc.connect(g).connect(voice);
+          osc.start(start);
+          osc.stop(start + 0.1);
+        }
+        break;
+      }
+      case 'whoop': {
+        // A rising hoot, the most "deep jungle" sound there is.
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(300, t);
+        osc.frequency.exponentialRampToValueAtTime(520, t + 0.22);
+        osc.frequency.exponentialRampToValueAtTime(430, t + 0.5);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(0.3, t + 0.06);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+        osc.connect(g).connect(voice);
+        osc.start(t);
+        osc.stop(t + 0.6);
+        break;
+      }
+      case 'nightbird': {
+        // Two plaintive descending notes.
+        for (let i = 0; i < 2; i++) {
+          const start = t + i * 0.42;
+          const osc = ctx.createOscillator();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(880 - i * 90, start);
+          osc.frequency.exponentialRampToValueAtTime(690 - i * 90, start + 0.3);
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0, start);
+          g.gain.linearRampToValueAtTime(0.2, start + 0.05);
+          g.gain.exponentialRampToValueAtTime(0.001, start + 0.34);
+          osc.connect(g).connect(voice);
+          osc.start(start);
+          osc.stop(start + 0.36);
+        }
+        break;
+      }
+      case 'frog': {
+        // A pulsed croak.
+        const osc = ctx.createOscillator();
+        osc.type = 'square';
+        osc.frequency.value = 165;
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 620;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, t);
+        for (let i = 0; i < 5; i++) {
+          g.gain.setValueAtTime(0.22, t + i * 0.075);
+          g.gain.setValueAtTime(0.01, t + i * 0.075 + 0.042);
+        }
+        g.gain.linearRampToValueAtTime(0, t + 0.42);
+        osc.connect(lp).connect(g).connect(voice);
+        osc.start(t);
+        osc.stop(t + 0.45);
+        break;
+      }
+      case 'owl':
+      case 'insect':
+      default: {
+        // A short high trill — cicada or tree frog, depending on your ear.
+        const osc = ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.value = kind === 'owl' ? 420 : 2700;
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = kind === 'owl' ? 480 : 3000;
+        bp.Q.value = 8;
+        const trem = ctx.createOscillator();
+        trem.frequency.value = kind === 'owl' ? 5 : 24;
+        const tremGain = ctx.createGain();
+        tremGain.gain.value = 0.1;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(kind === 'owl' ? 0.22 : 0.12, t + 0.08);
+        g.gain.exponentialRampToValueAtTime(0.001, t + (kind === 'owl' ? 0.7 : 1.1));
+        trem.connect(tremGain).connect(g.gain);
+        trem.start(t);
+        trem.stop(t + 1.2);
+        osc.connect(bp).connect(g).connect(voice);
+        osc.start(t);
+        osc.stop(t + 1.2);
+        break;
+      }
+    }
+
+    // Heavy reverb is what sells "far away in the trees".
+    this.sendToReverb(out, 0.85);
+    out.connect(this.createPanner(x, y, z, 260)).connect(this.ambienceBus);
+  }
+
+  // -------------------------------------------------------------------------
   // One-shot sounds
   // -------------------------------------------------------------------------
 
   /**
-   * The whistle.
+   * The whistle — the signature sound of the game, so it gets real attention.
    *
-   * A two-note rising figure on a filtered triangle wave, with the pitch keyed
-   * off the whistler's id so different players sound slightly different — which
-   * makes "that was a whistle over there, and it wasn't mine" a real deduction.
+   * The shape is the two-finger "come here" whistle: a fast upward swoop, a held
+   * note with vibrato, then a clean drop. Four things make it read as a whistle
+   * rather than a beep:
+   *
+   *   • a *sine* fundamental, because a whistle is nearly a pure tone;
+   *   • a quiet second harmonic, for the edge a real whistle has;
+   *   • vibrato on the sustain — a held human note is never perfectly steady;
+   *   • a breath transient at the attack, and a reverb tail so it sounds like it
+   *     is carrying across a valley.
+   *
+   * The base pitch is derived from the whistler's id, so players are
+   * distinguishable by ear. "That whistle was not mine, and it came from over
+   * there" is a genuine deduction, so it has to be audible in the sound itself.
    */
   playWhistle(x: number, y: number, z: number, sourceId: number, isSelf: boolean): void {
     const ctx = this.ctx;
@@ -393,36 +687,86 @@ export class AudioSystem {
     const t = ctx.currentTime;
     // Deterministic per-player variation.
     const variation = ((sourceId * 2654435761) % 1000) / 1000;
-    const base = lerp(760, 1180, variation);
+    const base = lerp(900, 1500, variation);
 
+    // --- Envelope timings --------------------------------------------------
+    const swoopEnd = t + 0.075;
+    const holdEnd = swoopEnd + 0.26;
+    const dropEnd = holdEnd + 0.13;
+
+    const out = ctx.createGain();
+    out.gain.value = 1;
+
+    // --- Fundamental -------------------------------------------------------
     const osc = ctx.createOscillator();
-    osc.type = 'triangle';
-    const gain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 3200;
+    osc.type = 'sine';
+    // Swoop up from a fifth below, hold, then drop away.
+    osc.frequency.setValueAtTime(base * 0.62, t);
+    osc.frequency.exponentialRampToValueAtTime(base, swoopEnd);
+    osc.frequency.setValueAtTime(base, holdEnd);
+    osc.frequency.exponentialRampToValueAtTime(base * 0.72, dropEnd);
 
-    // Rising two-tone whistle: a "phee-oo" that carries.
-    osc.frequency.setValueAtTime(base, t);
-    osc.frequency.linearRampToValueAtTime(base * 1.42, t + 0.11);
-    osc.frequency.setValueAtTime(base * 1.42, t + 0.2);
-    osc.frequency.linearRampToValueAtTime(base * 1.16, t + 0.42);
+    // Vibrato, fading in over the sustain so the attack stays crisp.
+    const vibrato = ctx.createOscillator();
+    vibrato.type = 'sine';
+    vibrato.frequency.value = 5.6;
+    const vibratoDepth = ctx.createGain();
+    vibratoDepth.gain.setValueAtTime(0, t);
+    vibratoDepth.gain.linearRampToValueAtTime(base * 0.022, swoopEnd + 0.08);
+    vibratoDepth.gain.linearRampToValueAtTime(0, dropEnd);
+    vibrato.connect(vibratoDepth).connect(osc.frequency);
+    vibrato.start(t);
+    vibrato.stop(dropEnd + 0.1);
 
-    const peak = isSelf ? 0.2 : 0.32;
-    gain.gain.setValueAtTime(0, t);
-    gain.gain.linearRampToValueAtTime(peak, t + 0.03);
-    gain.gain.setValueAtTime(peak, t + 0.2);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    const oscGain = ctx.createGain();
+    const peak = isSelf ? 0.26 : 0.34;
+    oscGain.gain.setValueAtTime(0, t);
+    oscGain.gain.linearRampToValueAtTime(peak, t + 0.022);
+    oscGain.gain.setValueAtTime(peak, holdEnd);
+    oscGain.gain.exponentialRampToValueAtTime(0.0008, dropEnd + 0.08);
+    osc.connect(oscGain).connect(out);
+    osc.start(t);
+    osc.stop(dropEnd + 0.12);
 
-    osc.connect(filter).connect(gain);
+    // --- Second harmonic, for brightness ----------------------------------
+    const harmonic = ctx.createOscillator();
+    harmonic.type = 'sine';
+    harmonic.frequency.setValueAtTime(base * 1.24, t);
+    harmonic.frequency.exponentialRampToValueAtTime(base * 2, swoopEnd);
+    harmonic.frequency.setValueAtTime(base * 2, holdEnd);
+    harmonic.frequency.exponentialRampToValueAtTime(base * 1.44, dropEnd);
+    const harmonicGain = ctx.createGain();
+    harmonicGain.gain.setValueAtTime(0, t);
+    harmonicGain.gain.linearRampToValueAtTime(peak * 0.16, t + 0.03);
+    harmonicGain.gain.exponentialRampToValueAtTime(0.0005, dropEnd);
+    harmonic.connect(harmonicGain).connect(out);
+    harmonic.start(t);
+    harmonic.stop(dropEnd + 0.05);
+
+    // --- Breath transient --------------------------------------------------
+    if (this.noiseBuffer) {
+      const breath = ctx.createBufferSource();
+      breath.buffer = this.noiseBuffer;
+      const breathFilter = ctx.createBiquadFilter();
+      breathFilter.type = 'bandpass';
+      breathFilter.frequency.value = base * 1.4;
+      breathFilter.Q.value = 1.4;
+      const breathGain = ctx.createGain();
+      breathGain.gain.setValueAtTime(peak * 0.5, t);
+      breathGain.gain.exponentialRampToValueAtTime(0.0005, t + 0.07);
+      breath.connect(breathFilter).connect(breathGain).connect(out);
+      breath.start(t, Math.random(), 0.12);
+    }
+
+    // --- Routing -----------------------------------------------------------
+    // A whistle is meant to carry, so it gets the most reverb of anything.
+    this.sendToReverb(out, isSelf ? 0.45 : 0.6);
     if (isSelf) {
       // Your own whistle is not positioned — it comes from you.
-      gain.connect(this.sfxBus);
+      out.connect(this.sfxBus);
     } else {
-      gain.connect(this.createPanner(x, y, z, 120)).connect(this.sfxBus);
+      out.connect(this.createPanner(x, y, z, 150)).connect(this.sfxBus);
     }
-    osc.start(t);
-    osc.stop(t + 0.6);
   }
 
   /** A footstep or a splash. Short, quiet, and heavily distance-attenuated. */
@@ -453,7 +797,10 @@ export class AudioSystem {
     gain.gain.setValueAtTime(peak, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + (inWater ? 0.22 : 0.11));
 
-    source.connect(filter).connect(gain).connect(this.createPanner(x, y, z, 45)).connect(this.sfxBus);
+    source.connect(filter).connect(gain);
+    // A touch of reverb, so footsteps sit in the forest rather than on top of it.
+    this.sendToReverb(gain, 0.18);
+    gain.connect(this.createPanner(x, y, z, 45)).connect(this.sfxBus);
     source.start(t, offset, 0.3);
   }
 
@@ -536,6 +883,7 @@ export class AudioSystem {
       osc.stop(t + 0.35);
     }
 
+    this.sendToReverb(gain, 0.5);
     gain.connect(this.createPanner(x, y, z, 150)).connect(this.sfxBus);
   }
 
@@ -767,6 +1115,10 @@ export class AudioSystem {
   }
 
   dispose(): void {
+    if (this.directorTimer !== null) {
+      clearTimeout(this.directorTimer);
+      this.directorTimer = null;
+    }
     void this.ctx?.close();
     this.ctx = null;
     this.started = false;

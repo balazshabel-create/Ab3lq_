@@ -230,6 +230,7 @@ export class FoliageRenderer {
     const quaternion = new THREE.Quaternion();
     const scale = new THREE.Vector3();
     const axis = new THREE.Vector3(0, 1, 0);
+    const tint = new THREE.Color();
 
     for (const [kind, byChunk] of buckets) {
       const config = KIND_CONFIG[kind]!;
@@ -272,12 +273,37 @@ export class FoliageRenderer {
           scale.setScalar(p.scale);
           matrix.compose(position, quaternion, scale);
           mesh.setMatrixAt(i, matrix);
+
+          /*
+           * Per-instance tint.
+           *
+           * Without this every bush in the jungle is the *exact* same shade of
+           * green, which is the single most artificial-looking thing about a
+           * heavily instanced scene — the eye reads the repetition instantly. A
+           * per-instance colour multiplier costs one extra vertex attribute and
+           * no draw calls, and it turns a flat green mass into a canopy with
+           * depth. Derived from the position so it is stable across reloads and
+           * identical on every client.
+           */
+          const jitter = hashPosition(p.x, p.z);
+          const brightness = 0.8 + jitter.a * 0.4;
+          // A warm/cool axis on top of brightness: sun-bleached leaves next to
+          // ones in shade.
+          const warmth = (jitter.b - 0.5) * 0.14;
+          tint.setRGB(
+            brightness + warmth,
+            brightness,
+            brightness - warmth * 0.6,
+          );
+          mesh.setColorAt(i, tint);
+
           minX = Math.min(minX, p.x);
           maxX = Math.max(maxX, p.x);
           minZ = Math.min(minZ, p.z);
           maxZ = Math.max(maxZ, p.z);
         }
         mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
         // Compute a real bounding volume so frustum culling is accurate.
         mesh.computeBoundingSphere();
 
@@ -762,6 +788,18 @@ function buildCave(): PropAssets {
   mouth.translate(0, 0.45, 0.55);
   parts.push({ geometry: mouth, color: new THREE.Color(0x1b1a1e) });
   return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
+}
+
+/**
+ * Two stable pseudo-random values from a world position.
+ *
+ * Position-derived rather than counter-derived so a prop keeps its exact tint
+ * when the graphics preset thins the instance list, and so every client agrees.
+ */
+function hashPosition(x: number, z: number): { a: number; b: number } {
+  const s = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
+  const t = Math.sin(x * 39.3468 + z * 11.135) * 24634.6345;
+  return { a: s - Math.floor(s), b: t - Math.floor(t) };
 }
 
 /** Chunk index for a world position. */

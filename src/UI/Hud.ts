@@ -83,6 +83,7 @@ export class Hud {
   private eventBanner: HTMLElement;
   private interactPrompt: HTMLElement;
   private damageVignette: HTMLElement;
+  private gradeOverlay: HTMLElement;
   private eyeVignette: HTMLElement;
   private waterOverlay: HTMLElement;
   private deathOverlay: HTMLElement;
@@ -163,6 +164,8 @@ export class Hud {
     this.killFeed = el('div', { class: 'kill-feed' });
     this.eventBanner = el('div', { class: 'event-banner' });
     this.interactPrompt = el('div', { class: 'interact-prompt' });
+    // A permanent, subtle colour grade. Sits under every other overlay.
+    this.gradeOverlay = el('div', { class: 'grade-overlay' });
     this.damageVignette = el('div', { class: 'damage-vignette' });
     this.eyeVignette = el('div', { class: 'eye-vignette' });
     this.waterOverlay = el('div', { class: 'water-overlay' });
@@ -182,6 +185,7 @@ export class Hud {
     this.deathOverlay.append(deathTitle, this.deathSub);
 
     this.root.append(
+      this.gradeOverlay,
       this.killFeed,
       this.eventBanner,
       this.interactPrompt,
