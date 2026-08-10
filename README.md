@@ -59,8 +59,33 @@ and writes screenshots to `screenshots/`.
 | **Climb** | `R` up, `F` down |
 | **Submerge** | `C` (crocodiles, caimans) |
 | **Listen** | `G` (hunter only) |
-| **Look** | Move the mouse (click to capture the cursor) |
+| **Look** | Move the mouse — click to lock the cursor to the window |
+| **Fullscreen** | Use the in-game button, not F11 (see below) |
 | **Debug overlay** | `F3` |
+
+### Fullscreen and the mouse
+
+Use the game's own **Fullscreen** button (main menu, or Settings → Display)
+rather than F11. F11 is a browser window state: the page never learns about it,
+and the mouse stays an ordinary desktop cursor — so on a multi-monitor setup it
+slides straight onto the second screen mid-round.
+
+The Fullscreen API version is requested by the page, which means it can be
+paired with a **pointer lock** in the same user gesture. Pointer lock is the only
+mechanism that actually confines the cursor to the window: it hides the pointer
+and delivers relative movement instead of a screen position. The game takes the
+lock when a round starts and re-takes it on the next click or keypress if the
+browser drops it (pressing Escape always releases it).
+
+Two caveats worth knowing:
+
+- Inside an embedded iframe, fullscreen requires the host to grant permission,
+  and pointer lock may be refused for a cross-origin frame. When the lock is
+  refused the game says so instead of telling you to keep clicking, and falls
+  back to free-cursor look so it stays playable. Open the game in its own tab
+  for a locked cursor.
+- Nothing a web page can do will confine a *free* cursor. Without pointer lock
+  there is no CSS or JavaScript that keeps the mouse on one monitor.
 
 ### The whistle
 

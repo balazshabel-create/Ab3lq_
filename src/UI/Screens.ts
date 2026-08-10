@@ -29,6 +29,13 @@ import {
   type LevelSetting,
 } from '../Graphics/QualitySettings';
 import { audioSystem } from '../Audio/AudioSystem';
+import {
+  enterFullscreen,
+  exitFullscreen,
+  fullscreenSupported,
+  isFullscreen,
+  toggleFullscreen,
+} from '../Player/Fullscreen';
 import type { LobbyState } from '../Networking/Protocol';
 import { MAX_PLAYERS, ROUND_DURATION, WHISTLE_INTERVAL } from '../Systems/Config';
 import {
@@ -148,6 +155,14 @@ export class MainMenu {
       this.showOnlineDialog(actions);
     });
 
+    const fullscreen = el('button', { class: 'btn' }, '⛶  Fullscreen');
+    fullscreen.addEventListener('click', () => {
+      audioSystem.playUiClick();
+      // Requesting fullscreen and pointer lock from the same gesture is what
+      // keeps the mouse on this monitor once a round starts.
+      void toggleFullscreen();
+    });
+
     const settings = el('button', { class: 'btn' }, '⚙  Settings');
     settings.addEventListener('click', () => {
       audioSystem.playUiClick();
@@ -170,7 +185,7 @@ export class MainMenu {
       }, 120);
     });
 
-    buttons.append(play, online, settings, exit);
+    buttons.append(play, online, fullscreen, settings, exit);
 
     this.root.append(
       logo,
@@ -318,6 +333,22 @@ export class SettingsScreen {
 
   private buildGraphicsTab(container: HTMLElement): void {
     const settings = graphicsConfig.get();
+
+    // --- Display ---------------------------------------------------------
+    container.append(el('div', { class: 'section-title' }, 'Display'));
+    const fsToggle = toggleControl(isFullscreen(), (value) => {
+      // Must run inside the click, so the browser accepts the gesture.
+      void (value ? enterFullscreen() : exitFullscreen());
+    });
+    container.appendChild(
+      settingRow(
+        'Fullscreen',
+        fullscreenSupported()
+          ? 'Use this rather than F11: the game can then lock the mouse to the window, so the cursor cannot slide onto another monitor.'
+          : 'Unavailable here — this page is embedded and was not granted fullscreen permission.',
+        fsToggle,
+      ),
+    );
 
     // --- Presets ---------------------------------------------------------
     container.append(el('div', { class: 'section-title' }, 'Preset'));

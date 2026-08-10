@@ -75,6 +75,8 @@ export class InputManager {
   private zoom = 0;
   private locked = false;
   private enabled = false;
+  private lastLockAttempt = 0;
+  private lockRejected = false;
   private canvas: HTMLElement;
   private sensitivity = 0.0022;
   /** Actions that fire once per press rather than every frame. */
@@ -100,6 +102,16 @@ export class InputManager {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (!this.keys.has(e.code)) this.pressed.add(e.code);
       this.keys.add(e.code);
+      /*
+       * Also treat a keypress as a chance to re-take pointer lock.
+       *
+       * The browser drops the lock whenever the player presses Escape, and it
+       * will only give it back on a fresh user gesture. Without this the cursor
+       * silently becomes free again mid-round — which on a multi-monitor setup
+       * means it wanders onto the other screen and clicks land in another
+       * window.
+       */
+      if (!this.locked) void this.requestLock();
       // Space would otherwise scroll the page.
       if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
     }) as EventListener);
@@ -118,6 +130,8 @@ export class InputManager {
       if (!this.enabled) return;
       this.mouseButtons.add(e.button);
       if (e.button === 2) e.preventDefault();
+      // Any click is a user gesture, which is the only moment a browser will
+      // grant pointer lock — so every click is a chance to re-confine the mouse.
       if (!this.locked) void this.requestLock();
     }) as EventListener);
 
@@ -167,17 +181,49 @@ export class InputManager {
 
     add(document, 'pointerlockchange', (() => {
       this.locked = document.pointerLockElement === this.canvas;
+      if (this.locked) this.lockRejected = false;
+    }) as EventListener);
+
+    add(document, 'pointerlockerror', (() => {
+      // Fires when the document is not allowed to lock at all.
+      this.lockRejected = true;
     }) as EventListener);
   }
 
-  /** Ask for pointer lock. Must be called from a user gesture. */
+  /**
+   * Ask for pointer lock — the only way to stop the cursor leaving the window.
+   *
+   * Pointer lock both hides the cursor and confines it, delivering relative
+   * deltas instead of a screen position. That is what prevents the mouse from
+   * sliding onto a second monitor while playing, in fullscreen or otherwise.
+   *
+   * Browsers only grant it from a user gesture, and impose a short cooldown
+   * after a lock is released with Escape, so a rejected request is normal and
+   * must not be treated as an error. Requests are rate-limited so a held key
+   * does not hammer the API.
+   */
   async requestLock(): Promise<void> {
     if (this.locked || !this.enabled) return;
+    const now = performance.now();
+    if (now - this.lastLockAttempt < 400) return;
+    this.lastLockAttempt = now;
     try {
       await this.canvas.requestPointerLock();
+      this.lockRejected = false;
     } catch {
-      // Some browsers reject this outside a gesture; the player can click again.
+      // Either no user gesture, still inside the post-Escape cooldown, or the
+      // document is not permitted to lock at all (an iframe without the
+      // `pointer-lock` permission). The look fallback keeps the game playable.
+      this.lockRejected = true;
     }
+  }
+
+  /**
+   * True if the last attempt to lock was refused.
+   * The HUD uses this to explain what the player can and cannot expect.
+   */
+  get lockUnavailable(): boolean {
+    return this.lockRejected;
   }
 
   releaseLock(): void {

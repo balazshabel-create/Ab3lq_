@@ -51,6 +51,8 @@ export interface HudState {
   interactPrompt: string | null;
   /** False when the mouse is not captured, so the HUD can explain how to look. */
   pointerLocked: boolean;
+  /** True when the browser refused pointer lock outright, so the hint is honest. */
+  pointerLockUnavailable: boolean;
 }
 
 export class Hud {
@@ -176,8 +178,6 @@ export class Hud {
     // InputManager. Without this the player has no way to discover that they can
     // still turn the camera by dragging.
     this.pointerHint = el('div', { class: 'pointer-hint' });
-    this.pointerHint.innerHTML =
-      'Move the mouse to look around · click for full mouse capture';
 
     this.deathOverlay = el('div', { class: 'death-overlay' });
     const deathTitle = el('div', { class: 'death-title' }, 'YOU DIED');
@@ -288,6 +288,15 @@ export class Hud {
     }
 
     this.deathOverlay.classList.toggle('visible', state.dead);
+    /*
+     * Only claim the click will help if it actually can. Inside an iframe that
+     * was not granted the pointer-lock permission it never will, and telling the
+     * player to click repeatedly would be a lie.
+     */
+    const hint = state.pointerLockUnavailable
+      ? 'Mouse capture is blocked here, so the cursor can leave the window — open the game in its own tab to lock it'
+      : 'Click to capture the mouse — that also keeps the cursor on this monitor';
+    if (this.pointerHint.textContent !== hint) this.pointerHint.textContent = hint;
     this.pointerHint.classList.toggle('visible', !state.pointerLocked && !state.dead);
 
     // --- Timers ----------------------------------------------------------

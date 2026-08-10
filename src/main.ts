@@ -755,6 +755,7 @@ class Game {
       underwater: this.renderer.cameraRig.underwater,
       interactPrompt: this.buildInteractPrompt(),
       pointerLocked: this.input.isLocked,
+      pointerLockUnavailable: this.input.lockUnavailable,
     };
 
     this.hud.update(hudState, dt);
