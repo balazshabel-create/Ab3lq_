@@ -203,7 +203,16 @@ export class InputManager {
    * does not hammer the API.
    */
   async requestLock(): Promise<void> {
-    if (this.locked || !this.enabled) return;
+    if (this.locked) return;
+    /*
+     * Deliberately not gated on `enabled`.
+     *
+     * The lock has to be taken on the click that *starts* the round, because
+     * that click is the user gesture the browser requires — by the time the
+     * round is actually running, eight seconds of intro later, there is no
+     * gesture left to spend. Locking slightly early is harmless: the look
+     * handler still ignores mouse movement until input is enabled.
+     */
     const now = performance.now();
     if (now - this.lastLockAttempt < 400) return;
     this.lastLockAttempt = now;

@@ -59,33 +59,29 @@ and writes screenshots to `screenshots/`.
 | **Climb** | `R` up, `F` down |
 | **Submerge** | `C` (crocodiles, caimans) |
 | **Listen** | `G` (hunter only) |
-| **Look** | Move the mouse — click to lock the cursor to the window |
-| **Fullscreen** | Use the in-game button, not F11 (see below) |
+| **Look** | Move the mouse (the cursor is captured automatically) |
 | **Debug overlay** | `F3` |
 
-### Fullscreen and the mouse
+### The mouse is captured automatically
 
-Use the game's own **Fullscreen** button (main menu, or Settings → Display)
-rather than F11. F11 is a browser window state: the page never learns about it,
-and the mouse stays an ordinary desktop cursor — so on a multi-monitor setup it
-slides straight onto the second screen mid-round.
+Starting a round takes a **pointer lock**: the cursor is hidden and confined to
+the window, and the mouse reports relative movement instead of a screen
+position. That is the only mechanism that stops the pointer sliding onto a
+second monitor mid-game — F11 cannot do it, because it is only a browser window
+state and the mouse stays an ordinary desktop cursor.
 
-The Fullscreen API version is requested by the page, which means it can be
-paired with a **pointer lock** in the same user gesture. Pointer lock is the only
-mechanism that actually confines the cursor to the window: it hides the pointer
-and delivers relative movement instead of a screen position. The game takes the
-lock when a round starts and re-takes it on the next click or keypress if the
-browser drops it (pressing Escape always releases it).
+The lock is taken on the click that starts the round, because a browser will only
+grant it from a user gesture and the intro countdown would otherwise burn it. It
+is held across the role card and the round itself. Pressing Escape releases it
+and opens the settings panel (you need a cursor there); closing the panel takes
+it straight back. Any click or keypress during a round re-acquires it if it was
+somehow lost.
 
-Two caveats worth knowing:
-
-- Inside an embedded iframe, fullscreen requires the host to grant permission,
-  and pointer lock may be refused for a cross-origin frame. When the lock is
-  refused the game says so instead of telling you to keep clicking, and falls
-  back to free-cursor look so it stays playable. Open the game in its own tab
-  for a locked cursor.
-- Nothing a web page can do will confine a *free* cursor. Without pointer lock
-  there is no CSS or JavaScript that keeps the mouse on one monitor.
+One honest limitation: inside an embedded iframe a cross-origin frame may be
+refused the lock. When that happens the game says so rather than telling you to
+keep clicking, and falls back to free-cursor look so it stays playable — open it
+in its own tab for a captured cursor. Nothing a web page can do will confine a
+*free* cursor.
 
 ### The whistle
 

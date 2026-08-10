@@ -202,10 +202,30 @@ class Game {
         this.settings.rebuild();
         this.showScreen('settings');
       },
-      onCloseSettings: () => this.showScreen(this.previousScreen === 'settings' ? 'menu' : this.previousScreen),
+      onCloseSettings: () => {
+        const target = this.previousScreen === 'settings' ? 'menu' : this.previousScreen;
+        this.showScreen(target);
+        // Returning to a live round: this click is a gesture, so take the mouse
+        // back immediately rather than leaving the cursor free until the player
+        // happens to click again.
+        if (target === 'hud') void this.input.requestLock();
+      },
       onSetSpecies: (species) => this.transport?.send({ t: ClientMsg.SetSpecies, species }),
       onSetReady: (ready) => this.transport?.send({ t: ClientMsg.SetReady, ready }),
-      onStartRound: () => this.transport?.send({ t: ClientMsg.StartRound }),
+      onStartRound: () => {
+        this.transport?.send({ t: ClientMsg.StartRound });
+        /*
+         * Take the mouse now, on this click.
+         *
+         * This is the whole reason the cursor stays on one monitor: pointer lock
+         * confines it to the window, and a browser will only grant it from a
+         * user gesture. Waiting until the round actually begins is too late —
+         * the intro countdown has burned the gesture by then. Players who did
+         * not press this button (anyone but the host, online) get the lock from
+         * their first click or keypress once the round is live.
+         */
+        void this.input.requestLock();
+      },
       onLeaveLobby: () => void this.leave(),
       onPlayAgain: () => void this.playAgain(),
       onBackToMenu: () => void this.leave(),
@@ -247,13 +267,25 @@ class Game {
       node?.classList.toggle('active', key === name);
     }
 
-    // Input, the pointer lock and the hidden cursor all belong to the in-round
-    // screen only — menus need a visible, working cursor.
+    // Input and the hidden cursor belong to the in-round screen only — menus
+    // need a visible, working cursor.
     const playing = name === 'hud';
     this.input.setEnabled(playing);
     this.renderer.cameraRig.setFreeMode(!playing);
     document.body.classList.toggle('playing', playing);
-    if (!playing) {
+
+    /*
+     * The pointer lock spans the role card as well as the round itself.
+     *
+     * It is acquired on the click that starts the round (the only user gesture
+     * available), and the role card sits between that click and the live round.
+     * Releasing it here would throw the lock away a moment after taking it, and
+     * the cursor would be free again — able to wander to another monitor —
+     * exactly when play begins. Menus and the results screen do release it,
+     * because those need clicking.
+     */
+    const keepsPointerLock = playing || name === 'role';
+    if (!keepsPointerLock) {
       this.input.releaseLock();
       this.pointMenuCameraAtSomethingNice();
     }
