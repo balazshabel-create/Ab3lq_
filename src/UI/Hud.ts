@@ -174,7 +174,7 @@ export class Hud {
     // still turn the camera by dragging.
     this.pointerHint = el('div', { class: 'pointer-hint' });
     this.pointerHint.innerHTML =
-      'Move the mouse to look around · click to capture the cursor';
+      'Move the mouse to look around · click for full mouse capture';
 
     this.deathOverlay = el('div', { class: 'death-overlay' });
     const deathTitle = el('div', { class: 'death-title' }, 'YOU DIED');

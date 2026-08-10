@@ -247,10 +247,12 @@ class Game {
       node?.classList.toggle('active', key === name);
     }
 
-    // Input and the pointer lock only belong to the in-round screen.
+    // Input, the pointer lock and the hidden cursor all belong to the in-round
+    // screen only — menus need a visible, working cursor.
     const playing = name === 'hud';
     this.input.setEnabled(playing);
     this.renderer.cameraRig.setFreeMode(!playing);
+    document.body.classList.toggle('playing', playing);
     if (!playing) {
       this.input.releaseLock();
       this.pointMenuCameraAtSomethingNice();
@@ -456,7 +458,16 @@ class Game {
           this.roleScreen.setCountdown(packet.status.timeLeft);
           if (this.screen !== 'role' && this.state.roleCard) this.showScreen('role');
         } else if (packet.status.phase === RoundPhase.Playing) {
-          if (this.screen !== 'hud') {
+          /*
+           * Enter the round only from the screens that lead into it.
+           *
+           * Testing against `!== 'hud'` looks equivalent and is not: round
+           * status arrives ten times a second, so any overlay the player opened
+           * deliberately — the settings panel on Escape — was slammed shut
+           * within 100 ms, taking the mouse cursor with it.
+           */
+          const enteringFrom = this.screen === 'role' || this.screen === 'lobby' || this.screen === 'result';
+          if (enteringFrom) {
             this.hud.reset();
             this.showScreen('hud');
             void this.input.requestLock();

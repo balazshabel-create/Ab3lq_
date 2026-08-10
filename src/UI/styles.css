@@ -59,6 +59,20 @@ body {
   z-index: 0;
 }
 
+/*
+ * Hide the cursor while a round is running.
+ *
+ * When pointer lock is granted the browser hides it for us, but pointer lock is
+ * unavailable in some contexts (an iframe without the permission, most often),
+ * and there a visible arrow sits in the middle of the jungle the whole match.
+ * The class is only set on the in-round screen, so menus keep their cursor.
+ */
+body.playing,
+body.playing #game-canvas,
+body.playing #ui-root {
+  cursor: none;
+}
+
 #ui-root {
   position: fixed;
   inset: 0;
