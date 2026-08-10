@@ -173,7 +173,7 @@ class Game {
     this.loading.setProgress(1, 'Ready');
     await nextFrame();
 
-    window.addEventListener('resize', () => this.renderer.resize());
+    window.addEventListener('resize', () => this.onViewportResize());
     document.addEventListener('visibilitychange', () => {
       void audioSystem.setSuspended(document.hidden);
     });
@@ -398,6 +398,29 @@ class Game {
       await this.startLocalHost(Math.floor(Math.random() * 0x7fffffff), 0);
       this.showScreen('menu');
     }
+  }
+
+  /**
+   * The viewport changed size — the host window, or the panel the game is
+   * embedded in, was resized.
+   *
+   * The 3D view repaints for free, because the canvas is redrawn every frame. The
+   * HTML interface is not: it is only painted when something about it changes, so
+   * a resize leaves the compositor holding a paint made for the old layout. In an
+   * embedded webview that stale paint is not always discarded, and the result is a
+   * ghost copy of the interface — most visibly the role card — still sitting where
+   * the old, differently-sized layout had centred it.
+   *
+   * Removing the blend-mode and backdrop-filter layers removed the cause. Nudging
+   * the UI layer into a genuine repaint covers the rest: a forced reflow with the
+   * layer detached, so the next paint has to be produced from scratch. It costs
+   * one synchronous layout on an event that already triggers several.
+   */
+  private onViewportResize(): void {
+    this.renderer.resize();
+    this.uiRoot.style.display = 'none';
+    void this.uiRoot.offsetHeight; // read back to force the reflow, not just queue it
+    this.uiRoot.style.display = '';
   }
 
   /** Rebuild terrain, props and the renderer for a new seed. */

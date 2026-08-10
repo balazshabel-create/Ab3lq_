@@ -178,6 +178,16 @@ function log(step, detail = '') {
   console.log(`  ${step.padEnd(34)} ${detail}`);
 }
 
+/*
+ * Failures are collected rather than thrown, so one broken assertion does not hide
+ * the rest of the run. Declared up here because some checks happen mid-walkthrough
+ * (they need a particular screen to be up) and the report is printed at the end.
+ */
+const failures = [];
+function fail(reason) {
+  failures.push(reason);
+}
+
 console.log(`\nLoading ${baseUrl}\n`);
 await page.goto(baseUrl, { waitUntil: 'networkidle', timeout: 60_000 });
 
@@ -235,6 +245,16 @@ await page.click('#screen-lobby .btn:has-text("Start Round")');
 
 // --- Role card -------------------------------------------------------------
 await page.waitForSelector('#screen-role.active', { timeout: 20_000 });
+// The card fades in over 0.6s from opacity 0. Screenshotting the instant the
+// screen goes active caught it mid-fade and wrote out a blank frame, which made
+// the artefact this whole check exists for impossible to see by eye.
+await page.waitForFunction(
+  () => {
+    const card = document.querySelector('.role-card');
+    return card !== null && Number.parseFloat(getComputedStyle(card).opacity) > 0.98;
+  },
+  { timeout: 5000 },
+);
 const roleInfo = await page.evaluate(() => {
   const card = document.querySelector('.role-card');
   return {
@@ -245,6 +265,39 @@ const roleInfo = await page.evaluate(() => {
 });
 log('role dealt', `${roleInfo.title} | ${roleInfo.weakness}`);
 await page.screenshot({ path: `${outDir}/04-role-card.png` });
+
+/*
+ * The role card was reported rendering twice — a ghost copy offset sideways and
+ * clipped, after the embedding panel was resized. So: resize with the card up and
+ * check the card is still exactly one element, centred in the *new* viewport.
+ *
+ * Be honest about what this can and cannot catch. The duplicate was a stale
+ * compositor layer, and a screenshot forces a fresh paint, so no pixel assertion
+ * here would reproduce it. What is testable is that the DOM holds a single card
+ * and that its layout follows the resize — plus the blend-layer sweep further
+ * down, which asserts the property that caused it is gone.
+ */
+const resizeCheck = await (async () => {
+  await page.setViewportSize({ width: 1180, height: 780 });
+  await page.waitForTimeout(250);
+  return page.evaluate(() => {
+    const cards = document.querySelectorAll('.role-card');
+    const box = cards[0]?.getBoundingClientRect();
+    return {
+      count: cards.length,
+      offCentre: box ? Math.abs((box.left + box.right) / 2 - window.innerWidth / 2) : 999,
+    };
+  });
+})();
+if (resizeCheck.count !== 1) {
+  fail(`the role card is in the DOM ${resizeCheck.count} times — expected exactly 1`);
+}
+if (resizeCheck.offCentre > 2) {
+  fail(`after a resize the role card sits ${resizeCheck.offCentre.toFixed(0)}px off centre`);
+}
+log('resize', `card still single and centred (±${resizeCheck.offCentre.toFixed(1)}px)`);
+await page.setViewportSize({ width: 1600, height: 900 });
+await page.waitForTimeout(250);
 
 // --- The round itself ------------------------------------------------------
 // Generous: this runs against software-rasterised GL on a machine that may also
@@ -324,6 +377,35 @@ await page.screenshot({ path: `${outDir}/06-in-round-later.png` });
 // choice for performance), so the buffer is already cleared by the time any
 // script outside the render call could sample it. Decoding Playwright's
 // screenshot instead measures exactly what a player would see.
+/*
+ * Regression guard for the ghosted interface.
+ *
+ * `mix-blend-mode` and `backdrop-filter` both force an element into its own
+ * composited layer — and a blend mode drags its whole stacking context into a
+ * composited blend group. In an embedded webview those groups do not reliably
+ * invalidate when the host frame is resized, which is what left a second, offset
+ * copy of the role card on screen. This asserts none of the interface asks for one
+ * again. Unlike a pixel check it tests the cause directly, which is the only part
+ * of this that a headless screenshot cannot see.
+ */
+const compositedLayers = await page.evaluate(() => {
+  const offenders = [];
+  for (const node of document.querySelectorAll('#ui-root *, #ui-root')) {
+    const s = getComputedStyle(node);
+    const label = `${node.tagName.toLowerCase()}.${node.className || '(no class)'}`;
+    if (s.mixBlendMode && s.mixBlendMode !== 'normal') {
+      offenders.push(`${label} → mix-blend-mode: ${s.mixBlendMode}`);
+    }
+    const bf = s.backdropFilter || s.webkitBackdropFilter;
+    if (bf && bf !== 'none') offenders.push(`${label} → backdrop-filter: ${bf}`);
+  }
+  return offenders;
+});
+if (compositedLayers.length > 0) {
+  fail(`${compositedLayers.length} UI element(s) force a compositing layer: ${compositedLayers.join('; ')}`);
+}
+log('compositing layers', compositedLayers.length === 0 ? 'none — no ghosting risk' : 'FOUND');
+
 const shotBuffer = await page.screenshot({ clip: { x: 500, y: 250, width: 600, height: 400 } });
 const pixelCheck = analysePng(shotBuffer);
 log('distinct colours', String(pixelCheck.uniqueColors));
@@ -334,7 +416,6 @@ await browser.close();
 
 // --- Report ---------------------------------------------------------------
 console.log('');
-const failures = [];
 
 const numeric = (value) => Number.parseFloat(String(value ?? '0'));
 if (numeric(stats.snapshot) < 5) failures.push(`only ${stats.snapshot} actors in the snapshot`);
