@@ -403,13 +403,37 @@ export class AnimalRenderer {
       actor.slopePitch += (clamped - actor.slopePitch) * Math.min(1, dt * 9);
       pitch += actor.slopePitch;
 
-      // Clearance: with the body pitched, its ends sit at ±reach·sin(pitch)
-      // relative to the centre. Raise the root by whatever the deeper end is
-      // short by, so nothing dips below the surface it is standing on.
+      /*
+       * Clearance: with the body pitched, its ends sit at ±reach·sin(pitch)
+       * relative to the centre. Raise the root by whatever the deeper end is
+       * short by, so nothing dips below the surface it is standing on.
+       *
+       * ## The cap, which is the whole point
+       *
+       * Without it this launched animals into the air, and the place it happened
+       * was the riverbank — walk up to the reeds at the water's edge and your
+       * animal would rise several metres and hang there with its legs dangling.
+       *
+       * The mechanism: `front` is the ground one body-length ahead, and at the
+       * foot of a steep bank that is metres above the animal. The pitch is
+       * clamped to 32°, so the body stays roughly level while `front` runs away
+       * upwards, and the uncapped deficit lifted the animal by the entire height
+       * of the bank. Deepening the river made the banks steeper and turned an
+       * occasional oddity into something you could reproduce on purpose.
+       *
+       * The fix is to bound the correction by what it is *for*. The only dip this
+       * needs to cancel is the geometric one the pitch itself introduces, which
+       * can never exceed reach·sin(maxPitch). Anything beyond that is not a
+       * pitched body sinking into a slope, it is a wall — and the right answer at
+       * a wall is to clip a little, not to levitate. The movement solver already
+       * refuses to walk up anything that steep, so the animal is not going there
+       * anyway.
+       */
       const rise = Math.sin(actor.slopePitch) * reach;
       const frontGap = actor.pos.y + rise - front;
       const backGap = actor.pos.y - rise - back;
-      const deficit = Math.max(0, -Math.min(frontGap, backGap));
+      const maxLift = reach * Math.sin(MAX_SLOPE_PITCH);
+      const deficit = Math.min(maxLift, Math.max(0, -Math.min(frontGap, backGap)));
       root.position.y += deficit;
     } else {
       actor.slopePitch += (0 - actor.slopePitch) * Math.min(1, dt * 6);

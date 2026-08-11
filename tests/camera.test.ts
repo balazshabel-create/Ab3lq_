@@ -19,7 +19,8 @@ import * as THREE from 'three';
 import { CameraRig } from '../src/Player/CameraRig';
 import { Terrain } from '../src/World/Terrain';
 import { Species, ANIMALS } from '../src/Animals/AnimalTypes';
-import type { AnimalRenderer } from '../src/Render/AnimalRenderer';
+import { AnimalRenderer } from '../src/Render/AnimalRenderer';
+import { presetSettings } from '../src/Graphics/QualitySettings';
 import { WATER_LEVEL } from '../src/Systems/Config';
 
 /**
@@ -129,5 +130,68 @@ test('the camera stays above water for an animal swimming on the surface', () =>
     rig.underwater,
     false,
     `the camera went under (y=${camera.position.y.toFixed(2)}) for an animal at the surface`,
+  );
+});
+
+test('a steep bank never launches an animal into the air', () => {
+  /*
+   * The bug this pins down: walking up to the reeds at the water's edge lifted
+   * your animal several metres off the ground, where it hung with its legs
+   * dangling.
+   *
+   * The cause was the terrain-following clearance in AnimalRenderer. It samples
+   * the ground one body-length fore and aft and raises the animal so neither end
+   * dips below the surface — but the body pitch is clamped to 32°, so at the foot
+   * of a steep bank the body stayed level while the forward sample ran away
+   * upwards, and the correction lifted the animal by the whole height of the
+   * bank. Deepening the river made the banks steeper and turned it from an
+   * occasional oddity into something reproducible.
+   *
+   * Driven through the real renderer with a synthetic ground sampler, because the
+   * failure is a function of the height *difference* between the samples and
+   * nothing else — a cliff in a flat world reproduces it exactly.
+   */
+  const scene = new THREE.Scene();
+  const settings = presetSettings('high');
+  const animals = new AnimalRenderer(scene, settings);
+
+  // A world that is flat at z <= 0 and a sheer 12 m wall beyond it.
+  animals.setGroundSampler((_x: number, z: number) => (z > 0 ? 12 : 0));
+  // Nothing is in water here; the clearance only runs for animals on ground.
+  animals.setWaterTest(() => false);
+
+  const species = Species.Caiman;
+  animals.applySnapshot([
+    {
+      id: 1,
+      species,
+      // Standing on the flat, facing the wall.
+      x: 0,
+      y: 0,
+      z: -0.2,
+      yaw: Math.PI / 2,
+      gait: 0,
+      flags: 0,
+      flies: 0,
+    },
+  ]);
+
+  const cameraPos = new THREE.Vector3(0, 2, -8);
+  for (let i = 0; i < 120; i++) animals.update(1 / 60, cameraPos, i / 60);
+
+  const root = scene.getObjectByName('animals')?.children[0];
+  assert.ok(root, 'the animal was never drawn');
+
+  /*
+   * The legitimate correction is bounded by the geometry it exists to cancel:
+   * half a body length times sin(32°). Anything much above that is the animal
+   * levitating up the wall.
+   */
+  const reach = Math.max(0.25, ANIMALS[species].silhouette.length * 0.42);
+  const allowed = reach * Math.sin(0.56) + 0.05;
+  assert.ok(
+    root!.position.y <= allowed,
+    `the animal was lifted to y=${root!.position.y.toFixed(2)} beside a 12 m wall; ` +
+      `the clearance should never exceed ${allowed.toFixed(2)}m`,
   );
 });

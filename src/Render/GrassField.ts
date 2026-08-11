@@ -18,9 +18,10 @@
  * regenerates identically every time it is revisited and every client agrees,
  * with nothing stored between visits.
  *
- * The result is roughly one tuft per one and a half square metres near the
- * camera — twenty times the old density — for a bounded cost that does not
- * depend on the size of the world at all.
+ * The result is around seven and a half tufts per square metre, held all the way
+ * out to seventy metres — well over a hundred thousand of them on screen — for a
+ * bounded cost that does not depend on the size of the world at all. The cost is
+ * bounded by a two-level LOD rather than by a short cull distance; see MAX_REACH.
  */
 
 import * as THREE from 'three';
@@ -35,14 +36,29 @@ const CHUNK = 14;
 /**
  * Cap on how far the dense field reaches, in metres.
  *
- * Independent of the preset's `grassDistance`, and deliberately short. Coverage
- * area grows as the square of the radius, so most of the instances in a 46 m ring
- * are in the outermost few metres, where a fifteen-centimetre tuft is two pixels
- * tall and contributes nothing. Spending that budget on the near field instead is
- * what pays for the density. The cutoff is not visible for the same reason it is
- * cheap to remove: there is almost nothing there to see.
+ * This was 22, on the reasoning that coverage area grows as the square of the
+ * radius so the outer ring is nearly all of the cost for nearly none of the
+ * benefit. That reasoning is sound about *triangles* and wrong about *coverage*:
+ * a 22 m cutoff means the ground stops being grass a couple of body lengths away
+ * and becomes bare heightfield, and because the cut is a circle centred on the
+ * camera it follows you around as a visible ring of baldness.
+ *
+ * Raised to 70 to match the high preset's `grassDistance`, so grass now reaches
+ * as far as the setting claims. The triangle cost that used to justify the short
+ * cutoff is paid for by the far LOD instead: past `LOD_DISTANCE` a tuft keeps its
+ * footprint and colour but drops to a third of its blades — see
+ * buildGrassTuftGeometry.
  */
-const MAX_REACH = 22;
+const MAX_REACH = 70;
+
+/**
+ * Range past which chunks are built from the cheap tuft, in metres.
+ *
+ * Chosen from where a tuft stops being resolvable rather than from a budget: at
+ * 25 m a half-metre clump is a few dozen pixels tall, and its individual blades
+ * are sub-pixel. Everything past that contributes mass and colour only.
+ */
+const LOD_DISTANCE = 25;
 
 /**
  * Tufts per square metre at full density.
@@ -54,19 +70,18 @@ const MAX_REACH = 22;
  * bigger makes it worse. So the tufts are small — about fifteen centimetres — and
  * there are a lot of them.
  */
-const TUFT_DENSITY = 5.4;
+const TUFT_DENSITY = 7.5;
 
 /*
- * Density and reach trade against each other, and the trade is heavily in favour
- * of density.
+ * Density and reach no longer trade against each other, and that is the point of
+ * the LOD.
  *
- * Coverage area grows as the square of the reach, so most of the tufts in a
- * 26 m ring live in its outermost few metres — where a blade is a couple of
- * pixels tall and adds nothing but triangles. Pulling the reach in to 22 m and
- * spending the budget on density instead is what closes the ground over near the
- * camera, which is the only place grass is really *seen*. Same triangle count,
- * completely different picture: at 1.9 the field was a scattering of tufts with
- * visible ground between them.
+ * The earlier note here argued for buying density by cutting the reach, because
+ * coverage area grows as the square of the radius and the outer ring is nearly
+ * all of the cost. True, but it bought a dense patch surrounded by bare ground —
+ * and the bare ground moved with the camera. Splitting the tuft into two blade
+ * counts breaks the trade instead: the density stays high all the way out, and
+ * the ring past 25 m pays a third of the triangles for it.
  */
 
 /**
@@ -89,15 +104,21 @@ interface GrassChunk {
   mesh: THREE.InstancedMesh;
   cx: number;
   cz: number;
+  /** Which tuft geometry this chunk was built with. */
+  lod: Lod;
 }
+
+type Lod = 'near' | 'far';
 
 export class GrassField {
   private group = new THREE.Group();
-  private geometry: THREE.BufferGeometry;
+  /** One tuft geometry per LOD, shared by every chunk at that level. */
+  private geometry: Record<Lod, THREE.BufferGeometry>;
   private material: THREE.Material;
   private chunks = new Map<number, GrassChunk>();
-  private pool: THREE.InstancedMesh[] = [];
-  private pending: { cx: number; cz: number }[] = [];
+  /** Free meshes, kept per LOD since the geometry is baked into the mesh. */
+  private pool: Record<Lod, THREE.InstancedMesh[]> = { near: [], far: [] };
+  private pending: { cx: number; cz: number; lod: Lod }[] = [];
   private settings: GraphicsSettings;
   private terrain: Terrain;
   /** Instances per chunk at the current preset. */
@@ -113,7 +134,10 @@ export class GrassField {
   constructor(scene: THREE.Scene, terrain: Terrain, settings: GraphicsSettings) {
     this.terrain = terrain;
     this.settings = settings;
-    this.geometry = buildGrassTuftGeometry();
+    this.geometry = {
+      near: buildGrassTuftGeometry('near'),
+      far: buildGrassTuftGeometry('far'),
+    };
     this.material = vertexColorMaterial({ side: THREE.DoubleSide });
     // Same wind shader as the rest of the foliage, so a gust moves the whole
     // jungle together rather than the bushes and the grass disagreeing.
@@ -149,15 +173,34 @@ export class GrassField {
     const keepRadius = reach + CHUNK * 0.75;
     const keepSq = keepRadius * keepRadius;
 
-    // --- Retire what has gone out of range --------------------------------
+    /*
+     * Which LOD a chunk wants, from its nearest corner rather than its centre.
+     *
+     * Using the centre would let a 14 m chunk whose near edge is 19 m away be
+     * built from the cheap tuft, and its near edge is close enough to see the
+     * missing blades. Hysteresis (a wider band for keeping than for switching)
+     * stops a chunk sitting exactly on the boundary from rebuilding every frame
+     * as the player shuffles.
+     */
+    const lodFor = (i: number, j: number, hysteresis: number): Lod => {
+      const nearX = Math.max(i * CHUNK, Math.min(cameraPos.x, (i + 1) * CHUNK));
+      const nearZ = Math.max(j * CHUNK, Math.min(cameraPos.z, (j + 1) * CHUNK));
+      const d = Math.hypot(nearX - cameraPos.x, nearZ - cameraPos.z);
+      return d <= LOD_DISTANCE + hysteresis ? 'near' : 'far';
+    };
+
+    // --- Retire what has gone out of range, or wants a different LOD -------
     for (const [key, chunk] of this.chunks) {
       const cx = (chunk.cx + 0.5) * CHUNK;
       const cz = (chunk.cz + 0.5) * CHUNK;
       const dx = cx - cameraPos.x;
       const dz = cz - cameraPos.z;
-      if (dx * dx + dz * dz > keepSq) {
+      const outOfRange = dx * dx + dz * dz > keepSq;
+      // Keep an existing chunk at its current level within a 6 m dead band.
+      const wants = lodFor(chunk.cx, chunk.cz, chunk.lod === 'near' ? 6 : -6);
+      if (outOfRange || wants !== chunk.lod) {
         this.group.remove(chunk.mesh);
-        this.pool.push(chunk.mesh);
+        this.pool[chunk.lod].push(chunk.mesh);
         this.chunks.delete(key);
       }
     }
@@ -174,7 +217,7 @@ export class GrassField {
         const dz = cz - cameraPos.z;
         const d2 = dx * dx + dz * dz;
         if (d2 > keepSq) continue;
-        this.pending.push({ cx: i, cz: j });
+        this.pending.push({ cx: i, cz: j, lod: lodFor(i, j, 0) });
       }
     }
     // Nearest first, so what the player is standing in appears before the edge.
@@ -183,8 +226,18 @@ export class GrassField {
       const db = Math.hypot((b.cx + 0.5) * CHUNK - cameraPos.x, (b.cz + 0.5) * CHUNK - cameraPos.z);
       return da - db;
     });
-    for (let n = 0; n < Math.min(BUILDS_PER_FRAME, this.pending.length); n++) {
-      this.build(this.pending[n].cx, this.pending[n].cz);
+    /*
+     * A larger build budget than before, scaled by how much is outstanding.
+     *
+     * The reach went from 22 m to 70 m, which is ten times the chunks — at two
+     * builds a frame the field would take the best part of a minute to fill in,
+     * and the player would watch grass creep towards them. Building more per
+     * frame while there is a backlog, and dropping back to a trickle once the
+     * ring is full, keeps the steady-state cost where it was.
+     */
+    const budget = this.pending.length > 24 ? BUILDS_PER_FRAME * 5 : BUILDS_PER_FRAME;
+    for (let n = 0; n < Math.min(budget, this.pending.length); n++) {
+      this.build(this.pending[n].cx, this.pending[n].cz, this.pending[n].lod);
     }
 
     // --- Wind -------------------------------------------------------------
@@ -211,8 +264,8 @@ export class GrassField {
    * in the water, none on bare rock, and thinner where the foliage field says the
    * ground is open — so a clearing stays legibly a clearing.
    */
-  private build(cx: number, cz: number): void {
-    const mesh = this.pool.pop() ?? this.newMesh();
+  private build(cx: number, cz: number, lod: Lod): void {
+    const mesh = this.pool[lod].pop() ?? this.newMesh(lod);
     const originX = cx * CHUNK;
     const originZ = cz * CHUNK;
     // Grid side that holds `perChunk` cells.
@@ -308,11 +361,11 @@ export class GrassField {
       mesh.visible = true;
     }
     this.group.add(mesh);
-    this.chunks.set(chunkKey(cx, cz), { mesh, cx, cz });
+    this.chunks.set(chunkKey(cx, cz), { mesh, cx, cz, lod });
   }
 
-  private newMesh(): THREE.InstancedMesh {
-    const mesh = new THREE.InstancedMesh(this.geometry, this.material, this.perChunk);
+  private newMesh(lod: Lod): THREE.InstancedMesh {
+    const mesh = new THREE.InstancedMesh(this.geometry[lod], this.material, this.perChunk);
     mesh.castShadow = false;
     mesh.receiveShadow = false;
     mesh.name = 'grass-chunk';
@@ -322,7 +375,7 @@ export class GrassField {
   private retireAll(): void {
     for (const chunk of this.chunks.values()) {
       this.group.remove(chunk.mesh);
-      this.pool.push(chunk.mesh);
+      this.pool[chunk.lod].push(chunk.mesh);
     }
     this.chunks.clear();
   }
@@ -334,8 +387,10 @@ export class GrassField {
       this.recomputeBudget();
       // Instance capacity is baked into an InstancedMesh, so a density change
       // has to throw the pool away rather than resize it.
-      for (const mesh of this.pool) mesh.dispose();
-      this.pool.length = 0;
+      for (const list of [this.pool.near, this.pool.far]) {
+        for (const mesh of list) mesh.dispose();
+        list.length = 0;
+      }
       for (const chunk of this.chunks.values()) {
         this.group.remove(chunk.mesh);
         chunk.mesh.dispose();
@@ -361,9 +416,12 @@ export class GrassField {
 
   dispose(): void {
     this.retireAll();
-    for (const mesh of this.pool) mesh.dispose();
-    this.pool.length = 0;
-    this.geometry.dispose();
+    for (const list of [this.pool.near, this.pool.far]) {
+      for (const mesh of list) mesh.dispose();
+      list.length = 0;
+    }
+    this.geometry.near.dispose();
+    this.geometry.far.dispose();
     this.material.dispose();
     this.group.removeFromParent();
   }

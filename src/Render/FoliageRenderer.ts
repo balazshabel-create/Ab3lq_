@@ -1171,7 +1171,7 @@ function bladeGeometry(
  * and both have to use the same tuft or the two would visibly disagree at the
  * boundary between them.
  */
-export function buildGrassTuftGeometry(): THREE.BufferGeometry {
+export function buildGrassTuftGeometry(lod: 'near' | 'far' = 'near'): THREE.BufferGeometry {
   /*
    * Tall, arching, gradient blades.
    *
@@ -1226,7 +1226,27 @@ export function buildGrassTuftGeometry(): THREE.BufferGeometry {
    * at ~5 tufts/m² the skirts of adjacent clumps now overlap instead of leaving
    * bare floor between them.
    */
-  const skirt = 7;
+  /*
+   * ## The far variant, and why the count is what changes
+   *
+   * Covering the ground out to seventy metres at this density means well over a
+   * hundred thousand tufts, and at sixty-odd triangles each that is seven million
+   * triangles of grass — enough to matter even on a good card.
+   *
+   * The lever that costs nothing visually is blade *count*, not tuft count.
+   * Beyond twenty-five metres or so a whole tuft is a few pixels tall, so the
+   * individual blades are not resolvable and their only contribution is the
+   * overall mass and colour of the clump. A far tuft therefore keeps the same
+   * footprint and the same colour ramp with a third of the blades: the field
+   * still reads as continuous cover to the horizon, and the triangle budget goes
+   * where the player can actually see detail.
+   *
+   * Reducing the *density* at range instead would be the wrong trade, because
+   * perspective means a distant square metre occupies fewer pixels — thinning it
+   * shows up immediately as a bald patch, while thinning each clump does not.
+   */
+  const far = lod === 'far';
+  const skirt = far ? 4 : 7;
   for (let i = 0; i < skirt; i++) {
     // Full circle, golden-angle stepped so the spread does not form a visible
     // ring of evenly spaced spokes.
@@ -1242,7 +1262,7 @@ export function buildGrassTuftGeometry(): THREE.BufferGeometry {
     parts.push(blade);
   }
 
-  const blades = 5;
+  const blades = far ? 3 : 5;
   for (let i = 0; i < blades; i++) {
     /*
      * A one-sided clump, not a rosette.
@@ -1284,7 +1304,9 @@ export function buildGrassTuftGeometry(): THREE.BufferGeometry {
 
   // One broad low leaf: rainforest floor is not a lawn, it is grass interleaved
   // with wider low-growing foliage, and one broad blade among the narrow ones is
-  // what carries that read.
+  // what carries that read. Kept even on the far variant: it is a single quad and
+  // it is the widest thing in the clump, so it does more for a distant tuft's
+  // mass than any of the narrow blades.
   const broad = bladeGeometry(0.13, 0.24, 0.14, 2, { base: 0x25491b, tip: 0x5d9432 });
   broad.rotateZ(-0.5);
   broad.rotateY(1.7);

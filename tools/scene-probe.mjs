@@ -131,8 +131,33 @@ try {
   console.log('never reached the in-round screen:', JSON.stringify(state));
   throw err;
 }
-// Let the streamed grass chunks and the foliage batches settle.
-await page.waitForTimeout(6000);
+/*
+ * Wait for the streamed grass to finish filling in, rather than guessing a settle
+ * time.
+ *
+ * The field builds a bounded number of chunks per frame, so how long it takes to
+ * fill is a function of frame rate — and under SwiftShader that is a few frames a
+ * second. A fixed six-second wait measured a third-built ring and made the density
+ * look like it had been set far too low. Watching the chunk count until it stops
+ * growing measures the steady state instead, whatever the frame rate.
+ */
+await page.waitForFunction(
+  () => {
+    const g = window.__jj;
+    const n = g?.renderer?.grass?.visibleChunks ?? 0;
+    const w = window;
+    w.__grassPrev ??= -1;
+    w.__grassStable ??= 0;
+    if (n > 0 && n === w.__grassPrev) w.__grassStable++;
+    else w.__grassStable = 0;
+    w.__grassPrev = n;
+    // Three consecutive identical readings: the ring is full.
+    return w.__grassStable >= 3;
+  },
+  null,
+  { timeout: 180000, polling: 1000 },
+).catch(() => console.log('  [warn] the grass field never stopped growing'));
+await page.waitForTimeout(1500);
 
 const stats = await page.evaluate(() => {
   const g = window.__jj;
