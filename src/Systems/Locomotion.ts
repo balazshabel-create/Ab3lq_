@@ -346,13 +346,27 @@ export function applyMovement(
   // ---- Integrate vertically --------------------------------------------
   const surface = terrain.surfaceAt(actor.pos.x, actor.pos.z);
   if (swimming) {
-    // Float at the surface, or sit just under it while submerged.
-    const submergeOffset = intent.submerge ? -def.silhouette.height * 0.85 : 0;
-    const targetY = WATER_LEVEL - def.silhouette.height * 0.25 + submergeOffset;
+    /*
+     * Float at the surface, or sit on the bottom while submerged.
+     *
+     * Submerging is gated on `canSubmerge`, not on being able to swim: only the
+     * ambush reptiles get to disappear under the water. See the field's comment
+     * in AnimalTypes for why that distinction is worth enforcing.
+     *
+     * The depth is measured from the bed rather than from the water line, so a
+     * submerged animal lies *on the bottom* of a deep channel instead of hovering
+     * a fixed distance below the surface — which is both what a crocodile does
+     * and what puts it down among the weed that hides it.
+     */
+    const canSubmerge = loco.canSubmerge && depth > def.silhouette.height * 1.1;
+    const submerging = intent.submerge && canSubmerge;
+    const targetY = submerging
+      ? groundHeight + def.silhouette.height * 0.5
+      : WATER_LEVEL - def.silhouette.height * 0.25;
     actor.pos.y += (targetY - actor.pos.y) * Math.min(1, dt * 6);
     state.vy = 0;
     state.airborne = false;
-    actor.flags = intent.submerge
+    actor.flags = submerging
       ? actor.flags | ActorFlags.Submerged
       : actor.flags & ~ActorFlags.Submerged;
   } else {

@@ -316,17 +316,15 @@ export function generateWorld(
   // --- Cosmetic layer ----------------------------------------------------
   if (options.cosmetic) {
     const d = clamp01(options.cosmeticDensity);
-    placeScattered(terrain, cosmeticRng, Math.round(WORLD_PROPS.grassPatches * d), 0.08, (x, z, y, rng) => {
-      content.cosmetic.push({
-        kind: PropKind.Grass,
-        x,
-        y,
-        z,
-        rot: rng.range(0, Math.PI * 2),
-        scale: rng.range(0.7, 1.5),
-        variant: rng.int(0, 2),
-      });
-    });
+    /*
+     * No grass here.
+     *
+     * Grass is the one prop that needs a density scattering cannot reach. Across
+     * a world this size, forty thousand tufts is one per fourteen square metres —
+     * a few sprigs on bare ground rather than a forest floor — and a believable
+     * density would need hundreds of thousands of stored props. It is generated
+     * on demand in a ring around the camera instead; see GrassField.ts.
+     */
     placeScattered(terrain, cosmeticRng, Math.round(WORLD_PROPS.ferns * d), 0.3, (x, z, y, rng) => {
       content.cosmetic.push({
         kind: PropKind.Fern,

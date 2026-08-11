@@ -4,7 +4,8 @@ A 3D multiplayer social-deduction survival game set in the Amazon rainforest.
 
 Everyone is an animal. Hundreds of AI animals move around you that look and
 behave exactly the same. One of the players is the **hunter** — also an animal,
-also surrounded by its own kind. You have ten minutes.
+also surrounded by its own kind. You have ten minutes, inside a circle that
+closes in every two of them.
 
 And once a minute, you have to whistle.
 
@@ -57,7 +58,7 @@ and writes screenshots to `screenshots/`.
 | **Attack** | Left click — any animal can bite, but a herbivore's does little |
 | **Ability** | `X` (species signature move) |
 | **Climb** | `R` up, `F` down |
-| **Submerge** | `C` (crocodiles, caimans) |
+| **Submerge** | `C` — crocodilians only, and only in deep water |
 | **Listen** | `G` (hunter only) |
 | **Look** | Move the mouse (the cursor is captured automatically) |
 | **Debug overlay** | `F3` |
@@ -82,6 +83,29 @@ refused the lock. When that happens the game says so rather than telling you to
 keep clicking, and falls back to free-cursor look so it stays playable — open it
 in its own tab for a captured cursor. Nothing a web page can do will confine a
 *free* cursor.
+
+### The storm circle
+
+A circle is drawn somewhere random in the jungle when the round is dealt, and it
+closes in every two minutes: 300 m down to 36 m over four shrinks, with the last
+one held for the final minute. Outside it there is a wall of storm, continuous
+lightning and tornadoes. The first ring does 2.4 %/s, so cutting a corner through
+it to get back is a real and frightening option; the last does 20 %/s, which is
+not an option at all.
+
+It exists because hiding had a degenerate optimum. Walk to a far corner, stand in
+a bush, wait out ten minutes — unbeatable, and extremely boring for the hider as
+much as for the hunter. The circle removes the corner, and by the last stage
+everyone still alive is in a clearing-sized space together, still pretending.
+
+Every circle is guaranteed to contain river. A caiman with nowhere to swim cannot
+hide, cannot feed and cannot use its ability, so the sequence is planned
+*backwards* from the smallest ring — the endgame circle is chosen on water
+deliberately, then the larger ones grow outwards around it.
+
+The AI runs for the middle too, overriding even fleeing a predator. A crowd
+standing placidly in a tornado would be a tell, and would make the wall read as
+scenery rather than as weather.
 
 ### The whistle
 
@@ -120,6 +144,18 @@ capybara is slightly slower than the others.
 Weaknesses come in three rarity tiers. Rarer does not mean strictly worse — it
 means it changes how you have to play the round.
 
+### You do not choose your animal
+
+Every round deals you a random species and there is no lobby control that
+influences it. If players could pick they would, and they would pick the same
+thing every time — eight capybaras that are all people means hiding among AI has
+stopped meaning anything, and "that species is popular with humans" is a read no
+amount of careful animal impersonation beats.
+
+Being handed something unexpected is also the round's opening problem: you find
+out you are a sloth and have to work out how a sloth survives. The lobby keeps
+the full bestiary as a read-only reference so you can prepare for any of them.
+
 ### Behave like an animal
 
 There is no disguise button. The AI animals wander a few metres, stop, look
@@ -140,11 +176,12 @@ src/
   World/        Terrain heightfield + river carving, prop scattering
   Animals/      Species table, food chain
   AI/           Animal behaviour, herds
-  Gameplay/     Round flow, weaknesses, hunger, whistle/flies, random events
+  Gameplay/     Round flow, weaknesses, hunger, whistle/flies, storm zone, events
   Environment/  Weather and the march from afternoon to night
   Core/         Entity types, the authoritative Simulation
   Networking/   Protocol, transport-agnostic GameHost, WS + local transports
-  Render/       Renderer, terrain mesh, water, sky, foliage, animals, effects
+  Render/       Renderer, terrain, water, sky, foliage, streamed grass, backdrop,
+                storm wall, animals, effects
   Player/       Camera rig, input
   Hunter/       (hunter senses live in Simulation + Renderer)
   Audio/        Procedural WebAudio soundscape
@@ -208,9 +245,16 @@ weights. Rebalancing does not require touching any system.
 
 ## What is implemented
 
-- Procedural Amazon map: heightfield terrain, a meandering main river with
-  tributaries, sunlit clearings, canopy, undergrowth, rocks, fallen logs,
-  abandoned huts, rope bridges, cave mouths, lily pads, hanging vines
+- Procedural Amazon map, a kilometre across: heightfield terrain, a meandering
+  main river with tributaries, sunlit clearings, canopy, undergrowth, rocks,
+  fallen logs, abandoned huts, rope bridges, cave mouths, reeds at the waterline,
+  weed on the river bed, lily pads, hanging vines
+- A backdrop that continues the jungle past the playable edge out to a ring of
+  mountains four kilometres away, so the world never visibly ends
+- The shrinking storm circle, with a churning wall, drifting tornadoes and
+  continuous lightning
+- Dense streamed ground cover: grass generated on demand in chunks around the
+  camera rather than scattered over the map, plus flowers in five colours
 - 23 species defined, 19 active and 17 of those playable, each with its own
   speed, diet, hunger rate, locomotion (swim / climb / jump), silhouette,
   temperament and signature ability — all data in one table. The four flying
@@ -263,9 +307,15 @@ Honest list of what a prototype this size does not have:
   for internet play.
 - **Water reflections are a fresnel sky approximation**, not a real planar
   reflection pass — it reads as water but does not mirror the trees.
-- **Ambient occlusion and motion blur are exposed as settings but not yet
-  implemented** as post-processing passes; the toggles are wired through and
-  currently no-ops.
+- **There is no post-processing chain.** Ambient occlusion, bloom and motion blur
+  are exposed as settings, wired through, and currently no-ops. Adding them means
+  an EffectComposer pass stack, which has not been built.
+- **No ray tracing and no frame generation.** Neither is available to a WebGL
+  page: there is no ray-tracing API in the platform, and frame generation is a
+  driver/vendor feature (DLSS, FSR) that a browser cannot reach. What the
+  lighting actually is: one shadow-mapped directional sun on a tightened frustum,
+  a hemisphere bounce term, a weak opposite-side fill, and ACES tone mapping.
+  That is a long way from ray tracing and it is worth being straight about.
 - **No client-side reconciliation of the hunter's attack**, so a bite's visual
   and its result arrive one round trip apart.
 - Practice bots in single-player wander and whistle roughly on time, which is
@@ -275,6 +325,9 @@ Honest list of what a prototype this size does not have:
   The flight model works but the body plan reads poorly in play, so they are
   disabled rather than shipped half-finished.
 - Mouse sensitivity in the settings panel is displayed but not yet persisted.
+- Grass reaches 26 m and then stops. The cutoff is hard to see — a 15 cm tuft is
+  a couple of pixels tall at that range — but it is a cutoff, not a fade.
+- The four flying species remain withdrawn; see above.
 
 ## Licence
 

@@ -73,6 +73,17 @@ export interface Locomotion {
   jumpPower: number;
   /** Can it fly? Flyers ignore ground collision while airborne. */
   canFly: boolean;
+  /**
+   * Can it dive fully under the water and stay there?
+   *
+   * Deliberately *not* the same thing as being a good swimmer. A capybara swims
+   * better than a caiman and still cannot lie on the river bed waiting; only the
+   * ambush reptiles get that, and it is the strongest concealment in the game —
+   * a submerged animal is nearly impossible to spot from the bank. Handing it to
+   * every strong swimmer would make the river a free hiding place for half the
+   * roster and leave the crocodilians with no signature move.
+   */
+  canSubmerge: boolean;
   /** Cruise altitude above ground while flying. */
   flyHeight: number;
   /** Sprint multiplier override; 1 means "no sprint". */
@@ -218,6 +229,7 @@ function loco(partial: Partial<Locomotion>): Locomotion {
     canJump: true,
     jumpPower: 1,
     canFly: false,
+    canSubmerge: false,
     flyHeight: 0,
     sprintMultiplier: 1,
     agility: 1,
@@ -300,6 +312,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
       sprintMultiplier: 1.9,
       agility: 0.62,
       canJump: false,
+      canSubmerge: true,
     }),
     silhouette: {
       length: 3.4,
@@ -486,6 +499,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
       canJump: false,
       sprintMultiplier: 1.6,
       agility: 0.85,
+      canSubmerge: true,
     }),
     silhouette: {
       length: 4.6,
@@ -529,6 +543,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
       canJump: false,
       sprintMultiplier: 1.8,
       agility: 0.72,
+      canSubmerge: true,
     }),
     silhouette: {
       length: 2.1,

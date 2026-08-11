@@ -71,6 +71,14 @@ interface KindConfig {
 /** Flower colours. Tropical, but not so saturated they read as plastic. */
 const FLOWER_PALETTE = [0xe4483f, 0xe8c33a, 0xf0eee4, 0xa964c4, 0xe87ba8];
 
+/*
+ * Note the absence of PropKind.Grass.
+ *
+ * Grass is not a scattered prop any more. Reaching a believable density this way
+ * would need hundreds of thousands of stored props, so it is streamed in chunks
+ * around the camera instead — see GrassField.ts. A prop kind with no entry here
+ * is simply skipped, so nothing else needs to know.
+ */
 const KIND_CONFIG: Partial<Record<PropKind, KindConfig>> = {
   [PropKind.Tree]: {
     // Trees are landmarks; they must be visible as far as the fog allows.
@@ -96,13 +104,6 @@ const KIND_CONFIG: Partial<Record<PropKind, KindConfig>> = {
     distance: (s) => Math.min(s.viewDistance, 80),
     density: (s) => s.foliageDensity,
     wind: 1.3,
-    castShadow: false,
-    chunkGrid: FINE_GRID,
-  },
-  [PropKind.Grass]: {
-    distance: (s) => s.grassDistance,
-    density: (s) => s.foliageDensity,
-    wind: 1.8,
     castShadow: false,
     chunkGrid: FINE_GRID,
   },
@@ -194,7 +195,7 @@ interface ChunkBatch {
  * keep working — writing a whole material from scratch would mean
  * reimplementing three's shadow mapping.
  */
-function applyWind(material: THREE.Material, strength: number): void {
+export function applyWind(material: THREE.Material, strength: number): void {
   const uniforms = {
     uTime: { value: 0 },
     uWind: { value: 0.3 },
@@ -435,6 +436,11 @@ export class FoliageRenderer {
     propGeometryCache.clear();
   }
 
+  /** The batch list, for the verification tools' instance-count checks. */
+  get batchList(): readonly ChunkBatch[] {
+    return this.batches;
+  }
+
   /** Draw-call count, for the debug overlay. */
   get visibleBatches(): number {
     let n = 0;
@@ -484,16 +490,13 @@ function buildPropGeometry(kind: PropKind, settings: GraphicsSettings): PropAsse
       assets = buildTree(detail);
       break;
     case PropKind.Bush:
-      assets = buildBush(detail, 0x2f5423);
+      assets = buildBush(detail, 0x4a7530);
       break;
     case PropKind.FruitBush:
       assets = buildFruitBush(detail);
       break;
     case PropKind.Fern:
       assets = buildFern(detail);
-      break;
-    case PropKind.Grass:
-      assets = buildGrass();
       break;
     case PropKind.Flower:
       assets = buildFlower();
@@ -568,7 +571,7 @@ function merge(parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[]):
   return merged;
 }
 
-function vertexColorMaterial(options: { transparent?: boolean; side?: THREE.Side } = {}): THREE.Material {
+export function vertexColorMaterial(options: { transparent?: boolean; side?: THREE.Side } = {}): THREE.Material {
   return new THREE.MeshLambertMaterial({
     vertexColors: true,
     flatShading: true,
@@ -599,7 +602,7 @@ function buildTree(detail: number): PropAssets {
 
   // Canopy: three overlapping domes at different heights, so tree tops form an
   // uneven roof rather than a row of identical blobs.
-  const canopyColors = [0x1f4517, 0x27551c, 0x2f6322];
+  const canopyColors = [0x2c5c22, 0x35692a, 0x3f7830];
   const heights = [12.4, 14.2, 15.6];
   const radii = [4.6, 3.7, 2.6];
   for (let i = 0; i < 3; i++) {
@@ -624,7 +627,16 @@ function buildTree(detail: number): PropAssets {
   return { geometry: merge(parts), material: vertexColorMaterial() };
 }
 
-/** A bush: overlapping spheres. The primary hiding place in the game. */
+/**
+ * A bush: overlapping spheres. The primary hiding place in the game.
+ *
+ * The albedo here is much brighter than a photograph of a shade-grown shrub, and
+ * that is deliberate. sRGB 0x2f5423 — which looks like a perfectly reasonable
+ * bush green in a colour picker — is only 0.088 in linear light. Multiply that by
+ * a canopy-shadowed sun and push it through ACES tone mapping and the bush comes
+ * out as a black hexagon with one lit facet: it stops reading as the thing you
+ * hide in and starts reading as a hole in the ground.
+ */
 function buildBush(detail: number, color: number): PropAssets {
   const segments = detail >= 2 ? 7 : 5;
   const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
@@ -637,7 +649,9 @@ function buildBush(detail: number, color: number): PropAssets {
     blob.scale(1, 0.85, 1);
     blob.translate(Math.cos(a) * 0.35, 0.5 + (i % 2) * 0.22, Math.sin(a) * 0.35);
     // Vary the shade per blob so the bush has internal depth.
-    const shade = base.clone().offsetHSL(0, 0, (i % 2 === 0 ? 0.04 : -0.05));
+    // A wider lightness spread than looks right in isolation: the darker blobs
+    // sit in the bush's own shadow and need somewhere to fall to.
+    const shade = base.clone().offsetHSL(0, 0, (i % 2 === 0 ? 0.07 : -0.06));
     parts.push({ geometry: blob, color: shade });
   }
   return { geometry: merge(parts), material: vertexColorMaterial() };
@@ -645,7 +659,7 @@ function buildBush(detail: number, color: number): PropAssets {
 
 /** A fruit bush: a bush with visible berries, so food is findable. */
 function buildFruitBush(detail: number): PropAssets {
-  const bush = buildBush(detail, 0x2b4a1e);
+  const bush = buildBush(detail, 0x446d2b);
 
   // merge() assigns one flat colour per part, so the fruit is built as its own
   // geometry and concatenated afterwards — that keeps the bush's per-blob
@@ -702,7 +716,7 @@ function buildFern(detail: number): PropAssets {
     frond.translate(0, 0.42, 0);
     parts.push({
       geometry: frond,
-      color: new THREE.Color(i % 2 === 0 ? 0x3a6b25 : 0x2e5a1e),
+      color: new THREE.Color(i % 2 === 0 ? 0x4d8330 : 0x3d6c24),
     });
   }
   return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
@@ -738,23 +752,44 @@ function bladeGeometry(width: number, height: number, lean: number, segments = 4
   return g;
 }
 
-/** Grass: a tuft of leaning blades fanned around the origin. */
-function buildGrass(): PropAssets {
+/**
+ * Grass: a tuft of leaning blades fanned around the origin.
+ *
+ * Exported because the dense near-field grass (GrassField) streams its own
+ * instances around the camera rather than drawing from the scattered prop list,
+ * and both have to use the same tuft or the two would visibly disagree at the
+ * boundary between them.
+ */
+export function buildGrassTuftGeometry(): THREE.BufferGeometry {
   const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  /*
+   * Five short blades, two segments each: twenty triangles per tuft.
+   *
+   * Both numbers were tuned against a triangle budget, and the budget is the
+   * whole story here. Grass reads as grass through *density*, not blade size — a
+   * sparse field of tall blades looks like reeds stuck in a lawn — but density
+   * multiplies whatever a single tuft costs. At seven blades and three segments,
+   * a believable density came to over two million triangles. At twenty triangles
+   * a tuft, the same density costs under a hundred thousand.
+   *
+   * Height matters too, and in the same direction: a tuft tops out around fifteen
+   * centimetres, which is ankle height on most of the roster. The first pass had
+   * blades taller than a capybara.
+   */
   const blades = 5;
   for (let i = 0; i < blades; i++) {
-    // Golden-angle fan so five blades never line up, at any rotation.
+    // Golden-angle fan so the blades never line up, at any rotation.
     const a = i * 2.399963;
-    const blade = bladeGeometry(0.11, 0.5 + (i % 3) * 0.22, 0.16 + (i % 2) * 0.12);
+    const blade = bladeGeometry(0.06, 0.1 + (i % 3) * 0.035, 0.06 + (i % 2) * 0.04, 2);
     blade.rotateY(a);
-    blade.translate(Math.cos(a) * 0.05, 0, Math.sin(a) * 0.05);
+    blade.translate(Math.cos(a) * 0.03, 0, Math.sin(a) * 0.03);
     // Alternate shades so a tuft has depth even before the per-instance tint.
     parts.push({
       geometry: blade,
-      color: new THREE.Color(i % 3 === 0 ? 0x538530 : i % 3 === 1 ? 0x3d6824 : 0x477329),
+      color: new THREE.Color(i % 3 === 0 ? 0x5c8f34 : i % 3 === 1 ? 0x3d6824 : 0x4c7a2b),
     });
   }
-  return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
+  return merge(parts);
 }
 
 /**
@@ -897,11 +932,11 @@ function buildVine(): PropAssets {
   const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
   const rope = new THREE.CylinderGeometry(0.05, 0.04, 5.5, 4);
   rope.translate(0, -2.75, 0);
-  parts.push({ geometry: rope, color: new THREE.Color(0x35521f) });
+  parts.push({ geometry: rope, color: new THREE.Color(0x466a2a) });
   for (let i = 0; i < 4; i++) {
     const leaf = new THREE.PlaneGeometry(0.3, 0.22);
     leaf.translate(0.15, -1 - i * 1.2, 0);
-    parts.push({ geometry: leaf, color: new THREE.Color(0x3f6b24) });
+    parts.push({ geometry: leaf, color: new THREE.Color(0x53883a) });
   }
   return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
 }

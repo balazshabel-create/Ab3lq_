@@ -1203,6 +1203,56 @@ input[type='text']:focus {
   background: linear-gradient(100deg, rgba(0, 0, 0, 0.62) 0%, transparent 34%);
 }
 
+/* ------------------------------------------------------------------------- */
+/* The storm circle                                                           */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * Sits directly under the round timer. Quiet by default and impossible to miss
+ * once it matters — a player who is being killed by the storm should not have to
+ * notice a subtle colour change to find out.
+ */
+.zone-strip {
+  margin-top: 6px;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: rgba(199, 214, 235, 0.72);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+
+.zone-strip.warning {
+  color: var(--amber-bright);
+  font-weight: 700;
+}
+
+.zone-strip.danger {
+  color: #fff;
+  font-weight: 700;
+  background: rgba(150, 32, 24, 0.82);
+  padding: 4px 9px;
+  border-radius: 3px;
+  display: inline-block;
+  animation: pulse-warn 0.7s ease-in-out infinite;
+}
+
+/*
+ * The screen edge while you are out in the storm.
+ *
+ * Deliberately a vignette rather than a full-screen wash: it has to read as
+ * urgent without hiding the way back, and the way back is in the middle of the
+ * screen because that is where you are running.
+ */
+.storm-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  background:
+    radial-gradient(ellipse 85% 78% at 50% 50%, transparent 38%, rgba(96, 26, 20, 0.62) 100%),
+    radial-gradient(ellipse 120% 100% at 50% 50%, transparent 60%, rgba(30, 34, 52, 0.5) 100%);
+}
+
 /* Underwater tint */
 .water-overlay {
   position: absolute;

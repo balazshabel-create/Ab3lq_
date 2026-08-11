@@ -55,10 +55,44 @@ interface RenderActor {
    * on something it can work out for itself would be waste.
    */
   inWater: boolean;
+  /**
+   * Smoothed terrain pitch, in radians. Positive = nose up.
+   *
+   * Smoothed rather than sampled fresh each frame because an animal walking over
+   * a rock gets a step change in the gradient, and snapping to it makes the whole
+   * body flick. A short filter turns that into a lean.
+   */
+  slopePitch: number;
+  /** Jaw opening, 0 = shut, 1 = wide. Smoothed so bites do not snap. */
+  jawOpen: number;
+  /** Bite animation timer, counts down from BITE_DURATION. */
+  biteTimer: number;
+  /** Attacking flag as of the previous snapshot, to catch the rising edge. */
+  wasAttacking: boolean;
+  /** In-water state last frame, so entering the water can be detected. */
+  wasInWater: boolean;
 }
 
 const MODEL_DETAIL_NEAR = 1;
 const MODEL_DETAIL_FAR = 0.3;
+
+/**
+ * How long one bite takes to play out, in seconds.
+ *
+ * Shorter than the attack cooldown on purpose: the animation is the *strike*,
+ * and the rest of the cooldown is the animal recovering, which reads better as
+ * ordinary movement than as a held pose.
+ */
+const BITE_DURATION = 0.42;
+
+/**
+ * Ceiling on how far terrain-following will pitch a body, in radians.
+ *
+ * A heightfield can be near-vertical at a cliff edge, and without a clamp an
+ * animal that walks up to one stands on its nose. 32° is steeper than anything
+ * the movement solver actually lets an animal walk up.
+ */
+const MAX_SLOPE_PITCH = 0.56;
 
 export class AnimalRenderer {
   private group = new THREE.Group();
@@ -71,6 +105,8 @@ export class AnimalRenderer {
   private tmpVec = new THREE.Vector3();
   /** Supplied by the Renderer, which owns the terrain heightfield. */
   private waterTest: ((x: number, z: number, y: number) => boolean) | null = null;
+  /** Ground height lookup, for pitching bodies to the slope they stand on. */
+  private groundAt: ((x: number, z: number) => number) | null = null;
 
   constructor(scene: THREE.Scene, settings: GraphicsSettings) {
     this.settings = settings;
@@ -89,6 +125,11 @@ export class AnimalRenderer {
   /** Give the renderer a way to ask whether a position is in water. */
   setWaterTest(test: (x: number, z: number, y: number) => boolean): void {
     this.waterTest = test;
+  }
+
+  /** Give the renderer a ground-height lookup, for terrain-following bodies. */
+  setGroundSampler(sample: (x: number, z: number) => number): void {
+    this.groundAt = sample;
   }
 
   /** The Object3D for an actor, if it is currently drawn. */
@@ -141,6 +182,11 @@ export class AnimalRenderer {
           fade: 0,
           distance: 0,
           inWater: false,
+          slopePitch: 0,
+          jawOpen: 0,
+          biteTimer: 0,
+          wasAttacking: false,
+          wasInWater: false,
         };
         this.actors.set(s.id, actor);
       }
@@ -159,6 +205,19 @@ export class AnimalRenderer {
       actor.flags = s.flags;
       actor.flies = s.flies;
       actor.stale = 0;
+
+      /*
+       * Latch a bite on the rising edge of the Attacking flag.
+       *
+       * The flag is only set for a fraction of a second on the server, and
+       * snapshots arrive at 10 Hz — reading the flag directly would mean the
+       * animation plays for however long the flag happened to be visible, and
+       * would be missed entirely whenever the strike fell between two snapshots.
+       * Latching a fixed-length timer instead means every bite is drawn in full.
+       */
+      const attacking = (s.flags & ActorFlags.Attacking) !== 0;
+      if (attacking && !actor.wasAttacking) actor.biteTimer = BITE_DURATION;
+      actor.wasAttacking = attacking;
     }
 
     // Remove anything that has not been mentioned for a few snapshots — it has
@@ -272,13 +331,24 @@ export class AnimalRenderer {
      * (cos θ, -sin θ) in XZ, so matching the heading (cos yaw, sin yaw) requires
      * exactly θ = -yaw. Any offset here makes every animal in the game walk at
      * an angle to the way it is facing.
+     *
+     * The same convention fixes what the other two axes mean, and it is not the
+     * intuitive one. With the body lying along X and Y up, the lateral axis is Z
+     * — so **pitch (nose up/down) is a rotation about Z, and roll (tipping
+     * sideways) is a rotation about X**, which is the opposite of what you would
+     * write for a model facing -Z. Euler order is the default XYZ, meaning the
+     * matrix is Rx·Ry·Rz and the Z term is applied first, in the model's own
+     * frame, before the yaw turns it — exactly what a body-relative pitch needs.
+     *
+     * Both of these were previously the wrong way round here, so "lean forward
+     * when sprinting" rolled animals onto their side and the death pose stood
+     * them on their nose.
      */
     root.rotation.y = -actor.yaw;
     root.visible = true;
 
     const dead = (actor.flags & ActorFlags.Dead) !== 0;
     const eating = (actor.flags & ActorFlags.Eating) !== 0;
-    const submerged = (actor.flags & ActorFlags.Submerged) !== 0;
     const alerted = (actor.flags & ActorFlags.Alerted) !== 0;
     const flinching = (actor.flags & ActorFlags.Flinching) !== 0;
     const curled = (actor.flags & ActorFlags.Curled) !== 0;
@@ -287,11 +357,51 @@ export class AnimalRenderer {
     if (dead) {
       // Roll onto one side and stop animating. A carcass is a landmark, and a
       // very informative one.
-      root.rotation.z = Math.PI * 0.42;
+      root.rotation.x = Math.PI * 0.42;
+      root.rotation.z = 0;
       root.position.y -= def.silhouette.height * 0.35;
       return;
     }
-    root.rotation.z = 0;
+
+    /*
+     * ---- Follow the ground -----------------------------------------------
+     *
+     * The server sends one position, and its Y is the ground under the animal's
+     * *centre*. Drawing a level body there is fine for a frog and wrong for a
+     * four-metre caiman: walking uphill, the ground under its head is a metre
+     * higher than under its middle, so the front of the animal is buried in the
+     * hillside — which is exactly the tail-and-snout clipping this fixes.
+     *
+     * So sample the ground under each end, pitch the body to the line between
+     * them, and then lift the whole animal so the *lower* end still clears the
+     * surface. Two extra heightfield samples per drawn animal, and only for the
+     * ones actually standing on ground.
+     */
+    let pitch = 0;
+    let roll = 0;
+    const onGround = !actor.inWater && !airborne && this.groundAt !== null;
+    if (onGround) {
+      const reach = Math.max(0.25, def.silhouette.length * 0.42);
+      const fx = Math.cos(actor.yaw);
+      const fz = Math.sin(actor.yaw);
+      const front = this.groundAt!(actor.pos.x + fx * reach, actor.pos.z + fz * reach);
+      const back = this.groundAt!(actor.pos.x - fx * reach, actor.pos.z - fz * reach);
+      const target = Math.atan2(front - back, reach * 2);
+      const clamped = Math.max(-MAX_SLOPE_PITCH, Math.min(MAX_SLOPE_PITCH, target));
+      actor.slopePitch += (clamped - actor.slopePitch) * Math.min(1, dt * 9);
+      pitch += actor.slopePitch;
+
+      // Clearance: with the body pitched, its ends sit at ±reach·sin(pitch)
+      // relative to the centre. Raise the root by whatever the deeper end is
+      // short by, so nothing dips below the surface it is standing on.
+      const rise = Math.sin(actor.slopePitch) * reach;
+      const frontGap = actor.pos.y + rise - front;
+      const backGap = actor.pos.y - rise - back;
+      const deficit = Math.max(0, -Math.min(frontGap, backGap));
+      root.position.y += deficit;
+    } else {
+      actor.slopePitch += (0 - actor.slopePitch) * Math.min(1, dt * 6);
+    }
 
     // Stride frequency scales with size: small animals patter, big ones plod.
     const strideRate = 9 / Math.max(0.35, def.silhouette.length * 0.85);
@@ -314,10 +424,10 @@ export class AnimalRenderer {
       // Vertical bob on each footfall, plus breathing when still.
       const bob = moving ? Math.abs(swing) * def.silhouette.height * 0.06 * actor.gait : 0;
       model.body.position.y = baseY + bob + breathe;
-      // Slight roll into the stride.
-      model.body.rotation.z = moving ? swing * 0.05 * actor.gait : 0;
-      // Lean forward when sprinting.
-      model.body.rotation.x = -actor.gait * 0.12;
+      // Roll into the stride — about X, the lateral axis. See the note above.
+      model.body.rotation.x = moving ? swing * 0.05 * actor.gait : 0;
+      // Lean forward when sprinting: nose down is a negative pitch about Z.
+      model.body.rotation.z = -actor.gait * 0.12;
       if (curled) {
         // Armadillo ball: shrink and hide the limbs.
         model.body.scale.setScalar(lerp(model.body.scale.x, 0.72, dt * 6));
@@ -351,6 +461,49 @@ export class AnimalRenderer {
         // miss, distinctive enough to notice if you are watching for it.
         model.head.rotation.y += Math.sin(time * 40) * 0.3;
       }
+    }
+
+    /*
+     * --- The bite ---------------------------------------------------------
+     *
+     * Three phases in under half a second: rear back with the mouth opening,
+     * snap the head forward as the jaw shuts, then recover. The whole animal
+     * lunges, not just the head — a bite that only moves the jaw reads as an
+     * animal yawning at its prey.
+     *
+     * This is also the only feedback a player gets that their attack happened at
+     * all, so it has to be legible from behind, which is where the camera is.
+     */
+    if (actor.biteTimer > 0) {
+      actor.biteTimer = Math.max(0, actor.biteTimer - dt);
+      const t = 1 - actor.biteTimer / BITE_DURATION; // 0 → 1 over the strike
+      // Windup for the first 35%, strike to 60%, recovery after.
+      const windup = clamp01(t / 0.35);
+      const strike = clamp01((t - 0.35) / 0.25);
+      const recover = clamp01((t - 0.6) / 0.4);
+      // Open on the windup, slam shut on the strike.
+      actor.jawOpen = Math.max(actor.jawOpen, windup * (1 - strike));
+      // Pull back, then throw the whole body forward.
+      const lunge = -windup * 0.12 + strike * 0.3 - recover * 0.3;
+      pitch += -windup * 0.18 + strike * 0.26 - recover * 0.08;
+      root.position.x += Math.cos(actor.yaw) * lunge;
+      root.position.z += Math.sin(actor.yaw) * lunge;
+    }
+
+    // --- Jaw -------------------------------------------------------------
+    if (model.jaw) {
+      if (eating) {
+        // Chewing: a steady champ, faster than the head's nod so the two do not
+        // beat against each other into one slow bob.
+        actor.jawOpen = 0.35 + Math.sin(time * 11 + actor.id) * 0.3;
+      } else if (actor.biteTimer <= 0) {
+        // Relax shut. Panting when hard-run keeps a sprinting animal from
+        // looking like it is holding its breath.
+        const pant = actor.gait > 0.75 ? 0.22 + Math.sin(time * 7.5) * 0.12 : 0;
+        actor.jawOpen += (pant - actor.jawOpen) * Math.min(1, dt * 8);
+      }
+      // Negative Z opens a jaw downwards — see addJaw.
+      model.jaw.rotation.z = -clamp01(actor.jawOpen) * 0.55;
     }
 
     // --- Legs ------------------------------------------------------------
@@ -448,21 +601,31 @@ export class AnimalRenderer {
       const stroke = time * 2.6 + actor.id * 0.9;
       // Yaw sway: the body fishtails around its heading.
       root.rotation.y += Math.sin(stroke) * 0.09 * (0.4 + actor.gait);
-      // Roll into each stroke.
-      root.rotation.z = Math.sin(stroke + 0.7) * 0.07;
+      // Roll into each stroke — about X, the lateral axis.
+      roll += Math.sin(stroke + 0.7) * 0.07;
       // Bob on the surface, independent of the wave the water shader draws.
       root.position.y += Math.sin(stroke * 0.8) * 0.05;
       if (model.body !== root) {
         // Nose up slightly, the way a swimming animal holds its head clear.
-        model.body.rotation.x = lerp(model.body.rotation.x, -0.12, dt * 4);
+        model.body.rotation.z = lerp(model.body.rotation.z, 0.12, dt * 4);
       }
     }
 
-    if (submerged) {
-      // Sink until only the top of the head shows. A submerged caiman is
-      // supposed to be almost indistinguishable from a floating log.
-      root.position.y -= def.silhouette.height * 0.55;
-    }
+    /*
+     * Submerged animals need no vertical offset here.
+     *
+     * The movement solver already puts a submerged body down on the river bed —
+     * see the `submerging` branch in Locomotion — so the snapshot's Y is already
+     * the right depth. Subtracting another half body height on top of that, which
+     * is what this used to do when submerging only sank an animal a fixed amount
+     * below the surface, now pushes it through the bed and out of sight.
+     */
+
+    // --- Commit the body orientation --------------------------------------
+    // Assigned once, at the end, so the slope, the bite lunge and the swimming
+    // roll add up instead of each overwriting the last one's axis.
+    root.rotation.z = pitch;
+    root.rotation.x = roll;
 
     // --- Fade in --------------------------------------------------------
     if (actor.fade < 1) {
@@ -508,6 +671,31 @@ export class AnimalRenderer {
     if (list.length < 48) list.push(model);
     actor.model = null;
     actor.detail = -1;
+  }
+
+  /**
+   * Animals that entered the water since the last call, for the splash effect.
+   *
+   * Detected here rather than from the server's `splashed` result because the
+   * client already recomputes `inWater` every frame from the heightfield, and a
+   * transition on that is exactly the event we want — including for animals whose
+   * splash the server never told us about because they are not ours.
+   */
+  collectSplashes(out: { x: number; z: number; strength: number }[]): void {
+    out.length = 0;
+    for (const actor of this.actors.values()) {
+      const entered = actor.inWater && !actor.wasInWater;
+      actor.wasInWater = actor.inWater;
+      if (!entered || !actor.model) continue;
+      const def = ANIMALS[actor.species];
+      out.push({
+        x: actor.pos.x,
+        z: actor.pos.z,
+        // A tapir hitting the river throws far more water than a frog, and an
+        // animal that ran in throws more than one that waded.
+        strength: def.silhouette.width * def.silhouette.length * (0.5 + actor.gait),
+      });
+    }
   }
 
   /**

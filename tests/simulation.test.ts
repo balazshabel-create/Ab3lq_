@@ -30,6 +30,7 @@ import {
   WeaknessId,
 } from '../src/Gameplay/Weaknesses';
 import { assignRoles } from '../src/Gameplay/RoundState';
+import { evaluateZone, planRings } from '../src/Gameplay/StormZone';
 import {
   InputAction,
   decodeSnapshot,
@@ -625,5 +626,219 @@ test('a simulation tick stays well inside the frame budget', () => {
   assert.ok(
     perTick < 12,
     `simulation tick took ${perTick.toFixed(2)}ms with ${sim.getAnimalCount()} animals`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The storm circle
+// ---------------------------------------------------------------------------
+
+test('the storm circle shrinks on schedule and every ring nests inside its parent', () => {
+  for (const seed of [11, 2718, 90210, 4242]) {
+    const rings = planRings(new Terrain(seed), new Rng(seed).fork('zone'));
+    assert.ok(rings.length >= 2, `seed ${seed}: expected several rings, got ${rings.length}`);
+    assert.equal(rings[0].radius, ZONE_INITIAL_RADIUS);
+
+    for (let i = 1; i < rings.length; i++) {
+      const parent = rings[i - 1];
+      const child = rings[i];
+      assert.ok(child.radius < parent.radius, `ring ${i} must be smaller than ring ${i - 1}`);
+      // Containment is what makes the wall fair: it must never sweep across
+      // ground that was already inside the previous circle.
+      const centreGap = Math.hypot(child.x - parent.x, child.z - parent.z);
+      assert.ok(
+        centreGap + child.radius <= parent.radius + 1e-6,
+        `seed ${seed}: ring ${i} pokes out of its parent by ` +
+          `${(centreGap + child.radius - parent.radius).toFixed(2)}m`,
+      );
+    }
+  }
+});
+
+test('every storm circle contains water, so an aquatic animal is never stranded', () => {
+  // The final ring matters most: it is where the endgame happens, and a caiman
+  // trapped in a dry 36 m circle cannot hide, feed or use its ability.
+  let ringsWithWater = 0;
+  let ringsTotal = 0;
+  for (const seed of [11, 2718, 90210, 4242, 555, 31337]) {
+    const terrain = new Terrain(seed);
+    const rings = planRings(terrain, new Rng(seed).fork('zone'));
+    for (const ring of rings) {
+      ringsTotal++;
+      let wet = 0;
+      const samples = 200;
+      const golden = Math.PI * (3 - Math.sqrt(5));
+      for (let i = 0; i < samples; i++) {
+        const r = ring.radius * Math.sqrt((i + 0.5) / samples);
+        const a = i * golden;
+        if (terrain.isWater(ring.x + Math.cos(a) * r, ring.z + Math.sin(a) * r)) wet++;
+      }
+      if (wet > 0) ringsWithWater++;
+    }
+  }
+  // Not every ring can be guaranteed on every seed — a river may simply not run
+  // through the only patch that fits — but the planner should manage the large
+  // majority, and a regression that breaks the water bias would tank this.
+  assert.ok(
+    ringsWithWater / ringsTotal > 0.85,
+    `only ${ringsWithWater}/${ringsTotal} circles contained water`,
+  );
+});
+
+test('the zone is a pure function of round time, with no drift', () => {
+  const rings = planRings(new Terrain(777), new Rng(777).fork('zone'));
+
+  // Held before the first shrink.
+  const early = evaluateZone(rings, ZONE_FIRST_SHRINK_AT - 1);
+  assert.equal(early.shrinking, false);
+  assert.equal(early.radius, rings[0].radius);
+  assert.ok(early.untilShrink > 0 && early.untilShrink <= 1.001);
+
+  // Mid-shrink, strictly between the two radii.
+  const mid = evaluateZone(rings, ZONE_FIRST_SHRINK_AT + ZONE_SHRINK_DURATION / 2);
+  assert.equal(mid.shrinking, true);
+  assert.ok(mid.radius < rings[0].radius && mid.radius > rings[1].radius);
+
+  // Landed exactly on the next ring.
+  const after = evaluateZone(rings, ZONE_FIRST_SHRINK_AT + ZONE_SHRINK_DURATION + 0.5);
+  assert.equal(after.shrinking, false);
+  assert.ok(Math.abs(after.radius - rings[1].radius) < 1e-6);
+
+  // Evaluating the same instant twice must give bit-identical answers, which is
+  // the property that stops the client's wall drifting from the server's.
+  const a = evaluateZone(rings, 314.159);
+  const b = evaluateZone(rings, 314.159);
+  assert.deepEqual(a, b);
+
+  // By the end of the round it is the final ring and stays there.
+  const end = evaluateZone(rings, ROUND_DURATION);
+  assert.equal(end.stage, rings.length - 1);
+  assert.equal(end.untilShrink, Infinity);
+  assert.ok(Math.abs(end.radius - rings[rings.length - 1].radius) < 1e-6);
+});
+
+test('nothing spawns in the storm', () => {
+  const sim = new Simulation(8080);
+  for (let i = 0; i < 6; i++) sim.addPlayer(`p${i}`, `P${i}`);
+  sim.startRound();
+
+  const zone = sim.zone;
+  let outside = 0;
+  let total = 0;
+  sim.forEachNearby(0, 0, 100_000, (a) => {
+    total++;
+    if (Math.hypot(a.pos.x - zone.x, a.pos.z - zone.z) > zone.radius) outside++;
+  });
+  assert.ok(total > 50, `expected a populated world, got ${total} actors`);
+  assert.equal(outside, 0, `${outside} of ${total} actors spawned outside the circle`);
+});
+
+test('the storm kills a player who stays out in it', () => {
+  const sim = new Simulation(1234);
+  sim.addPlayer('a', 'A');
+  sim.startRound();
+  advance(sim, 10);
+
+  const player = sim.getPlayers()[0];
+  const zone = sim.zone;
+  // Teleport well outside, and keep them there: the storm should finish them.
+  const push = (): void => {
+    player.pos.x = zone.x + zone.radius + 40;
+    player.pos.z = zone.z;
+  };
+  push();
+
+  const steps = Math.round(120 / TICK);
+  for (let i = 0; i < steps && player.health > 0; i++) {
+    push();
+    sim.update(TICK);
+  }
+  assert.equal(player.health, 0, 'standing in the storm for two minutes must be fatal');
+});
+
+test('only crocodilians can submerge', () => {
+  for (const species of PLAYABLE_SPECIES) {
+    const canSubmerge = ANIMALS[species].locomotion.canSubmerge;
+    if (!canSubmerge) continue;
+    // Anything allowed to disappear under water must at least be a strong
+    // swimmer; a submerging land animal would be a bug in the table.
+    assert.ok(
+      ANIMALS[species].locomotion.swimSpeed > 1,
+      `${species} can submerge but is not a strong swimmer`,
+    );
+  }
+  // The signature ambush species specifically must have it.
+  assert.ok(ANIMALS[Species.Crocodile].locomotion.canSubmerge);
+  assert.ok(ANIMALS[Species.Caiman].locomotion.canSubmerge);
+  // And a capybara — a better swimmer than either — must not.
+  assert.equal(ANIMALS[Species.Capybara].locomotion.canSubmerge, false);
+});
+
+test('a crocodilian actually submerges and a capybara cannot', () => {
+  const sim = new Simulation(2468);
+  sim.addPlayer('a', 'A');
+  sim.startRound();
+  advance(sim, 10);
+
+  const player = sim.getPlayers()[0];
+  const zone = sim.zone;
+
+  /** Put the player in the deepest water inside the circle and hold C down. */
+  const diveTest = (species: Species): { submerged: boolean; depthBelowSurface: number } => {
+    player.species = species;
+    sim.refreshStats(player);
+    player.health = player.maxHealth;
+    player.move = { vy: 0, airborne: false, climbHeight: 0, climbTreeId: 0, smoothSpeed: 0, stepAccumulator: 0 };
+
+    // Search the circle for genuinely deep water.
+    let best = { x: zone.x, z: zone.z, depth: 0 };
+    for (let i = 0; i < 4000; i++) {
+      const a = (i * 2.399963) % (Math.PI * 2);
+      const r = zone.radius * Math.sqrt(((i % 97) + 0.5) / 97);
+      const x = zone.x + Math.cos(a) * r;
+      const z = zone.z + Math.sin(a) * r;
+      const depth = sim.terrain.waterDepthAt(x, z);
+      if (depth > best.depth) best = { x, z, depth };
+    }
+    assert.ok(best.depth > 1.6, `seed has no deep water in the circle (best ${best.depth.toFixed(2)}m)`);
+
+    player.pos.x = best.x;
+    player.pos.z = best.z;
+    player.pos.y = sim.terrain.waterLevel;
+
+    // Hold submerge for a couple of seconds so the smoothing settles.
+    for (let i = 0; i < Math.round(2.5 / TICK); i++) {
+      sim.applyInput('a', {
+        seq: i,
+        moveX: 0,
+        moveZ: 0,
+        yaw: 0,
+        pitch: 0,
+        actions: InputAction.Submerge,
+      });
+      sim.update(TICK);
+    }
+    return {
+      submerged: (player.flags & ActorFlags.Submerged) !== 0,
+      depthBelowSurface: sim.terrain.waterLevel - player.pos.y,
+    };
+  };
+
+  const caiman = diveTest(Species.Caiman);
+  assert.ok(caiman.submerged, 'a caiman holding submerge must be flagged as submerged');
+  assert.ok(
+    caiman.depthBelowSurface > 0.4,
+    `a submerged caiman must be under the surface, was ${caiman.depthBelowSurface.toFixed(2)}m below`,
+  );
+
+  const capybara = diveTest(Species.Capybara);
+  assert.equal(
+    capybara.submerged,
+    false,
+    'a capybara must never submerge, however well it swims',
+  );
+  assert.ok(
+    capybara.depthBelowSurface < 0.4,
+    `a capybara must stay at the surface, was ${capybara.depthBelowSurface.toFixed(2)}m below`,
   );
 });

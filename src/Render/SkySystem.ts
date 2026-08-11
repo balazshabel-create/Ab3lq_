@@ -268,10 +268,17 @@ export class SkySystem {
     }
     this.sunLight.castShadow = true;
     this.sunLight.shadow.mapSize.set(size, size);
-    // The shadow frustum follows the camera, so it only needs to cover the area
-    // the player can actually see — a map-wide frustum would waste the entire
-    // shadow map on terrain nobody is looking at.
-    const extent = Math.min(90, settings.viewDistance * 0.45);
+    /*
+     * The shadow frustum follows the camera, so it only needs to cover the area
+     * the player can actually see — a map-wide frustum would waste the entire
+     * shadow map on terrain nobody is looking at.
+     *
+     * Kept deliberately tight. Halving the extent quadruples the texel density,
+     * and shadows past fifty metres are already dissolving into fog and canopy —
+     * so a 55 m frustum at 3072 is far sharper than a 90 m one at 4096, for a
+     * third of the memory. This is where shadow crispness actually comes from.
+     */
+    const extent = Math.min(55, settings.viewDistance * 0.4);
     const cam = this.sunLight.shadow.camera;
     cam.left = -extent;
     cam.right = extent;
@@ -293,6 +300,17 @@ export class SkySystem {
      * is what matters tactically.
      */
     this.sunLight.shadow.intensity = 0.6;
+  }
+
+  /**
+   * Hide the sky dome — used when the camera goes under the water.
+   *
+   * The lights stay on. Underwater is dim, not unlit: the river bed still needs
+   * to be shaded by something, and killing the sun would leave the whole scene
+   * as flat silhouettes against the fog.
+   */
+  setVisible(visible: boolean): void {
+    this.dome.visible = visible;
   }
 
   setSettings(settings: GraphicsSettings): void {
@@ -372,7 +390,22 @@ export class SkySystem {
     this.sunLight.color.copy(this.state.sunColor);
     this.sunLight.intensity = this.state.sunIntensity;
     this.ambientLight.color.copy(key.ambient);
-    this.ambientLight.groundColor.setRGB(0.14, 0.18, 0.1).multiplyScalar(1 - night * 0.6);
+    /*
+     * The hemisphere light's ground term is the bounce off the forest floor, and
+     * it was much too dark.
+     *
+     * A HemisphereLight gives a surface whatever colour its normal points at, so
+     * a surface facing sideways or down gets almost pure ground colour. With the
+     * ground term near black, every bush in the game rendered as a black blob with
+     * a green rim — only the faces that happened to point at the sun caught any
+     * light at all, and the ones that did not got nothing.
+     *
+     * A real rainforest floor is not black; it bounces a substantial amount of
+     * green-tinted light back up, which is why the undersides of leaves are lit at
+     * all. Raising this is a bounce term, not a cheat, and it is the single change
+     * that stops the undergrowth reading as silhouettes.
+     */
+    this.ambientLight.groundColor.setRGB(0.22, 0.25, 0.16).multiplyScalar(1 - night * 0.62);
     this.ambientLight.intensity = this.state.ambientIntensity;
     this.fillLight.intensity = 0.7 * (1 - night * 0.5);
 

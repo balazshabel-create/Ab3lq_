@@ -486,6 +486,34 @@ export class EffectsRenderer {
    * how fast it is moving, then expand and fade. A stationary animal still emits
    * a slow trickle, so it reads as sitting *in* the water rather than on it.
    */
+  /**
+   * A burst of ripples where an animal broke the surface.
+   *
+   * Reuses the ripple pool rather than adding a droplet particle system: a splash
+   * seen from a third-person camera a few metres away is mostly an expanding ring
+   * of disturbed water, and a handful of overlapping rings at different sizes and
+   * ages reads as one convincingly chaotic splash. Free, in the sense that the
+   * pool, the geometry and the draw call all already exist.
+   */
+  spawnSplash(events: { x: number; z: number; strength: number }[]): void {
+    if (this.settings.effectsQuality === 'off' || events.length === 0) return;
+    for (const e of events) {
+      const rings = Math.min(9, 3 + Math.round(e.strength * 4));
+      for (let i = 0; i < rings; i++) {
+        if (this.ripplePool.length >= EffectsRenderer.RIPPLE_POOL) return;
+        const spread = 0.5 + e.strength * 0.6;
+        this.ripplePool.push({
+          x: e.x + (Math.random() - 0.5) * spread,
+          z: e.z + (Math.random() - 0.5) * spread,
+          // Stagger the ages so the rings do not expand in lockstep.
+          age: Math.random() * 0.25,
+          life: 0.5 + Math.random() * 0.7,
+          scale: (0.6 + Math.random() * 1.5) * (0.6 + e.strength * 0.8),
+        });
+      }
+    }
+  }
+
   updateRipples(
     wakes: { x: number; z: number; speed: number; radius: number }[],
     waterLevel: number,

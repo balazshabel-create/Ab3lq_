@@ -370,6 +370,28 @@ await page.screenshot({ path: `${outDir}/05-in-round.png` });
 await page.waitForTimeout(6000);
 await page.screenshot({ path: `${outDir}/06-in-round-later.png` });
 
+/*
+ * A horizon shot.
+ *
+ * The default camera looks down at your own animal, which is right for playing
+ * and useless for reviewing the scene — it frames a patch of ground and nothing
+ * else. The interesting questions (does the jungle read as a jungle, does the
+ * backdrop join up, are the mountains there) are all answered by looking level.
+ *
+ * Driven through the camera rig rather than by synthesising mouse movement, which
+ * goes through pointer-lock deltas and sensitivity and lands somewhere different
+ * on every run.
+ */
+await page.evaluate(() => {
+  const rig = window.__jj?.renderer?.cameraRig;
+  if (!rig) return;
+  // addLook takes deltas; -0.5 rad of pitch from the default 0.38 puts the
+  // camera slightly below level, looking out at the trees.
+  rig.addLook(0, -0.62);
+});
+await page.waitForTimeout(1200);
+await page.screenshot({ path: `${outDir}/07-horizon.png` });
+
 // --- Verify the frame is not blank ----------------------------------------
 // A renderer that throws still leaves a canvas, so the real question is whether
 // anything was drawn into it. Reading the pixels back through WebGL does not

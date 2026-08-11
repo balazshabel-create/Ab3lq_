@@ -30,6 +30,14 @@ export interface AnimalModel {
   body: THREE.Object3D;
   /** Head — turns to look, dips to graze. */
   head: THREE.Object3D;
+  /**
+   * Lower jaw, hinged at the back of the mouth, or null if this plan has none.
+   *
+   * Rotating it open is what makes a bite read as a bite rather than as a lunge,
+   * and a chew read as a chew rather than as a nod. It is a child of the head, so
+   * it follows every head turn and dip for free.
+   */
+  jaw: THREE.Object3D | null;
   /** Legs, ordered front-left, front-right, back-left, back-right. */
   legs: THREE.Object3D[];
   /** Tail segments, base first. */
@@ -135,6 +143,7 @@ export function buildAnimalModel(species: Species, detail = 1): AnimalModel {
     root,
     body: root,
     head: root,
+    jaw: null,
     legs: [],
     tail: [],
     wings: [],
@@ -182,6 +191,42 @@ export function buildAnimalModel(species: Species, detail = 1): AnimalModel {
   }
 
   return model;
+}
+
+/**
+ * Hinge a lower jaw onto a head.
+ *
+ * The group sits at the back of the mouth and the mesh hangs forward of it, so
+ * rotating the group about Z swings the jaw open around a hinge rather than
+ * sliding the whole mouth downwards.
+ *
+ * Positive Z rotation lifts +X towards +Y, so the animator opens a mouth with a
+ * *negative* angle — the same sign convention as the head's nose-down dip.
+ */
+function addJaw(
+  model: AnimalModel,
+  head: THREE.Object3D,
+  options: {
+    hingeX: number;
+    hingeY: number;
+    length: number;
+    height: number;
+    width: number;
+    color: number;
+  },
+): void {
+  const group = new THREE.Group();
+  group.position.set(options.hingeX, options.hingeY, 0);
+  head.add(group);
+  mesh(
+    box(options.length, options.height, options.width),
+    options.color,
+    group,
+    options.length * 0.5,
+    -options.height * 0.5,
+    0,
+  );
+  model.jaw = group;
 }
 
 // ---------------------------------------------------------------------------
@@ -233,6 +278,14 @@ function buildQuadruped(
     // Snout.
     const snout = mesh(box(L * 0.16, H * 0.2, W * 0.34), c.body, neck, L * 0.22, -H * 0.06, 0);
     snout.scale.setScalar(1);
+    addJaw(model, neck, {
+      hingeX: L * 0.14,
+      hingeY: -H * 0.1,
+      length: L * 0.17,
+      height: H * 0.09,
+      width: W * 0.3,
+      color: c.belly,
+    });
     // Ears.
     for (const side of [-1, 1]) {
       mesh(cone(W * 0.12, H * 0.22), c.accent, neck, L * 0.04, W * 0.3, side * W * 0.26);
@@ -355,8 +408,18 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
   const shoulder = mesh(sphere(W * 0.44, detail > 0.5 ? 8 : 5), c.body, bodyGroup, L * 0.3, 0, 0);
   shoulder.scale.set(1, 0.6, 1);
 
-  const jaw = mesh(box(L * 0.3, H * 0.34, W * 0.5), c.body, head, L * 0.12, 0, 0);
-  jaw.scale.set(1, 1, 1);
+  // Upper jaw, fixed to the skull.
+  const upperJaw = mesh(box(L * 0.3, H * 0.2, W * 0.5), c.body, head, L * 0.12, H * 0.07, 0);
+  upperJaw.scale.set(1, 1, 1);
+  // Lower jaw, hinged — a crocodile's gape is its whole personality.
+  addJaw(model, head, {
+    hingeX: -L * 0.03,
+    hingeY: -H * 0.02,
+    length: L * 0.34,
+    height: H * 0.15,
+    width: W * 0.46,
+    color: c.body,
+  });
   if (detail > 0.4) {
     // Snout taper.
     const tip = mesh(box(L * 0.12, H * 0.24, W * 0.32), c.body, head, L * 0.3, -H * 0.02, 0);
@@ -509,6 +572,14 @@ function buildPrimate(model: AnimalModel, def: AnimalDef, detail: number): void 
   bodyGroup.add(head);
   model.head = head;
   mesh(sphere(W * 0.44, detail > 0.5 ? 9 : 5), c.body, head);
+  addJaw(model, head, {
+    hingeX: W * 0.1,
+    hingeY: -W * 0.16,
+    length: W * 0.34,
+    height: W * 0.1,
+    width: W * 0.26,
+    color: c.belly,
+  });
   if (detail > 0.4) {
     const face = mesh(sphere(W * 0.3, 7), c.belly, head, W * 0.28, -W * 0.04, 0);
     face.scale.set(0.6, 0.85, 0.8);
@@ -664,6 +735,14 @@ function buildAmphibian(model: AnimalModel, def: AnimalDef, detail: number): voi
   model.head = head;
   const skull = mesh(sphere(W * 0.42, 7), c.body, head);
   skull.scale.set(1, 0.8, 1.05);
+  addJaw(model, head, {
+    hingeX: -W * 0.3,
+    hingeY: -H * 0.06,
+    length: W * 0.66,
+    height: H * 0.08,
+    width: W * 0.38,
+    color: c.belly,
+  });
   if (detail > 0.3) {
     for (const side of [-1, 1]) {
       mesh(sphere(W * 0.17, 6), c.eye, head, W * 0.16, W * 0.3, side * W * 0.3);
@@ -745,6 +824,14 @@ function buildShelled(model: AnimalModel, def: AnimalDef, detail: number): void 
   model.head = head;
   const skull = mesh(sphere(W * 0.24, 7), c.body, head);
   skull.scale.set(1.4, 0.9, 0.9);
+  addJaw(model, head, {
+    hingeX: 0,
+    hingeY: -H * 0.04,
+    length: W * 0.3,
+    height: H * 0.06,
+    width: W * 0.18,
+    color: c.belly,
+  });
   if (detail > 0.4) {
     for (const side of [-1, 1]) {
       mesh(sphere(W * 0.05, 5), c.eye, head, W * 0.2, W * 0.08, side * W * 0.13);

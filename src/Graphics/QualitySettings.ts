@@ -119,7 +119,10 @@ const STORAGE_KEY = 'jungle-jukebox.graphics.v1';
 export function shadowMapSize(level: LevelSetting): number {
   switch (level) {
     case 'high':
-      return 2048;
+      // 3072 rather than 4096: the jump to 4k costs 67 MB of depth buffer for a
+      // difference the fog hides, and tightening the shadow frustum (see
+      // configureShadows) buys far more sharpness per byte than resolution does.
+      return 3072;
     case 'medium':
       return 1024;
     case 'low':

@@ -42,6 +42,7 @@ import {
   type PlayerInput,
   type ServerPacket,
   type Snapshot,
+  type ZoneWire,
 } from './Networking/Protocol';
 import { ActorFlags, Role, RoundPhase, Weather } from './Core/Types';
 import { ANIMALS, Species } from './Animals/AnimalTypes';
@@ -66,6 +67,8 @@ interface ClientState {
   weakness: WeaknessId | null;
   roleCard: RoleCard | null;
   status: RoundStatus | null;
+  /** The storm circle, for the HUD's countdown and distance readout. */
+  zone: ZoneWire | null;
   world: RenderWorldState;
   latestSnapshot: Snapshot | null;
   /** Health last frame, to detect damage. */
@@ -75,12 +78,16 @@ interface ClientState {
 }
 
 class Game {
+  /*
+   * Fields the verification tools read through `window.__jj`. Public for that
+   * reason and no other — nothing outside this file writes to them.
+   */
   private canvas: HTMLCanvasElement;
   private uiRoot: HTMLElement;
 
-  private terrain!: Terrain;
-  private content!: WorldContent;
-  private renderer!: Renderer;
+  terrain!: Terrain;
+  content!: WorldContent;
+  renderer!: Renderer;
   private input!: InputManager;
   private hud!: Hud;
 
@@ -95,7 +102,7 @@ class Game {
   private screen: ScreenName = 'loading';
   private previousScreen: ScreenName = 'menu';
 
-  private state: ClientState = {
+  state: ClientState = {
     clientId: '',
     actorId: 0,
     role: Role.Survivor,
@@ -103,6 +110,7 @@ class Game {
     weakness: null,
     roleCard: null,
     status: null,
+    zone: null,
     world: {
       hour: 15.2,
       weather: Weather.Clear,
@@ -111,6 +119,7 @@ class Game {
       wind: 0.2,
       waterLevel: WATER_LEVEL,
       lightning: 0,
+      zone: null,
     },
     latestSnapshot: null,
     lastHealth: 100,
@@ -506,6 +515,17 @@ class Game {
         this.state.world.rain = packet.weather.rain;
         this.state.world.fog = packet.weather.fog;
         this.state.world.wind = packet.weather.wind;
+        // The circle comes straight from the authority. The client deliberately
+        // does not recompute it: see the note on ZoneWire in Protocol.ts.
+        this.state.zone = packet.zone;
+        this.state.world.zone = packet.zone
+          ? {
+              x: packet.zone.x,
+              z: packet.zone.z,
+              radius: packet.zone.radius,
+              shrinking: packet.zone.shrinking,
+            }
+          : null;
 
         // Phase transitions drive the screens.
         if (packet.status.phase === RoundPhase.Intro) {
@@ -753,6 +773,7 @@ class Game {
         self && this.state.role === Role.Survivor
           ? clamp01(self.sinceWhistle / WHISTLE_INTERVAL)
           : 0,
+      storm: this.renderer.stormExposure,
       dt: 0,
     });
   }
@@ -773,6 +794,33 @@ class Game {
     }
     if (closest > 30) return 0;
     return clamp01(1 - closest / 30);
+  }
+
+  /**
+   * The storm circle as the HUD needs it.
+   *
+   * The distance is measured from the *player's animal*, not from the camera.
+   * The camera trails several metres behind, and a HUD that says you are two
+   * metres from safety while your animal is still being cooked would be worse
+   * than no readout at all.
+   */
+  private zoneHudState(): HudState['zone'] {
+    const zone = this.state.zone;
+    if (!zone) return null;
+    const actorId = this.state.actorId;
+    let x = this.renderer.camera.position.x;
+    let z = this.renderer.camera.position.z;
+    if (actorId && this.renderer.animals.getPosition(actorId, this.tmpVec)) {
+      x = this.tmpVec.x;
+      z = this.tmpVec.z;
+    }
+    return {
+      stage: zone.stage,
+      totalStages: zone.totalStages,
+      shrinking: zone.shrinking,
+      untilShrink: zone.untilShrink,
+      distanceOutside: Math.hypot(x - zone.x, z - zone.z) - zone.radius,
+    };
   }
 
   private updateHud(dt: number): void {
@@ -807,6 +855,7 @@ class Game {
       eating: (self?.eatProgress ?? 0) > 0,
       dead: this.state.dead,
       underwater: this.renderer.cameraRig.underwater,
+      zone: this.zoneHudState(),
       interactPrompt: this.buildInteractPrompt(),
       pointerLocked: this.input.isLocked,
       pointerLockUnavailable: this.input.lockUnavailable,
@@ -912,6 +961,21 @@ function loadPlayerName(): string {
 // ---------------------------------------------------------------------------
 
 const game = new Game();
+
+/*
+ * Expose the running client for inspection.
+ *
+ * This is how the headless verification tools read real numbers out of a live
+ * round — camera position, visible instance counts, the authoritative zone —
+ * instead of inferring them from pixels. It is also simply the fastest way to
+ * debug a rendering problem from a terminal.
+ *
+ * Note this gives away nothing: the client only ever *receives* its own role,
+ * and the whole point of the snapshot design is that another player's role is
+ * not in this process's memory to be found. See the note at the top of the file.
+ */
+(window as unknown as { __jj?: Game }).__jj = game;
+
 void game.boot().catch((err) => {
   // A hard failure during boot must say something useful rather than showing a
   // black screen.

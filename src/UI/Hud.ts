@@ -18,6 +18,7 @@ import {
   FLY_OBVIOUS_THRESHOLD,
   WHISTLE_INTERVAL,
   WHISTLE_WARN_TIME,
+  ZONE_WARNING_TIME,
 } from '../Systems/Config';
 import type { KillFeedEntry } from '../Networking/Protocol';
 import { clamp01 } from '../Systems/Noise';
@@ -47,6 +48,21 @@ export interface HudState {
   eating: boolean;
   dead: boolean;
   underwater: boolean;
+  /**
+   * The storm circle's state, or null when a round has no circle.
+   *
+   * `distanceOutside` is negative inside and positive in the storm, so one number
+   * covers both "how much room have I got" and "how far back to safety".
+   */
+  zone: {
+    stage: number;
+    totalStages: number;
+    shrinking: boolean;
+    /** Seconds until the next shrink, or -1 when it is done closing. */
+    untilShrink: number;
+    /** Metres outside the circle. Negative means safe. */
+    distanceOutside: number;
+  } | null;
   /** Set when a food source or carcass is in reach. */
   interactPrompt: string | null;
   /** False when the mouse is not captured, so the HUD can explain how to look. */
@@ -88,6 +104,8 @@ export class Hud {
   private gradeOverlay: HTMLElement;
   private eyeVignette: HTMLElement;
   private waterOverlay: HTMLElement;
+  private zoneStrip: HTMLElement;
+  private stormOverlay: HTMLElement;
   private deathOverlay: HTMLElement;
   private deathSub: HTMLElement;
   private debugOverlay: HTMLElement;
@@ -128,7 +146,23 @@ export class Hud {
     this.roundMeta = el('div', { class: 'round-meta' }, 'Survivors 0/0');
     this.weatherEl = el('div', { class: 'weather-strip' }, '☀️ Sunny · Afternoon');
     topLeft.append(this.timerEl, this.roundMeta, this.weatherEl);
+
+    /*
+     * --- The storm circle ------------------------------------------------
+     *
+     * Sits under the round timer rather than in its own corner, because it is
+     * the same kind of information — a clock the player has no control over —
+     * and because a player checking how long is left should see both at once.
+     *
+     * Three states, and only three: how far the wall is while you are safe, a
+     * countdown while a shrink is coming, and an unmissable warning while you
+     * are actually taking damage.
+     */
+    this.zoneStrip = el('div', { class: 'zone-strip' });
+    this.zoneStrip.style.display = 'none';
+    topLeft.appendChild(this.zoneStrip);
     this.root.appendChild(topLeft);
+
 
     // --- Top right: role and weakness -----------------------------------
     const topRight = el('div', { class: 'hud-corner hud-top-right' });
@@ -171,6 +205,7 @@ export class Hud {
     this.damageVignette = el('div', { class: 'damage-vignette' });
     this.eyeVignette = el('div', { class: 'eye-vignette' });
     this.waterOverlay = el('div', { class: 'water-overlay' });
+    this.stormOverlay = el('div', { class: 'storm-overlay' });
     this.debugOverlay = el('div', { class: 'debug-overlay' });
     this.toastStack = el('div', { class: 'toast-stack' });
 
@@ -192,6 +227,7 @@ export class Hud {
       this.damageVignette,
       this.eyeVignette,
       this.waterOverlay,
+      this.stormOverlay,
       this.deathOverlay,
       this.debugOverlay,
       this.toastStack,
@@ -277,6 +313,9 @@ export class Hud {
     this.listenEl.classList.toggle('ready', state.listenReady);
     this.listenEl.classList.toggle('cooling', !state.listenReady);
 
+    // --- The storm circle ------------------------------------------------
+    this.updateZone(state);
+
     // --- Overlays --------------------------------------------------------
     this.waterOverlay.style.opacity = state.underwater ? '1' : '0';
 
@@ -323,6 +362,58 @@ export class Hud {
    * without a tutorial: a calm countdown, an amber nudge, then a red alarm with
    * the fly warning behind it.
    */
+  /**
+   * The storm strip, and the red screen edge when you are out in it.
+   *
+   * Three states in priority order, because they answer different questions and
+   * only one of them is ever urgent:
+   *
+   *  1. **In the storm.** Nothing else matters. Show which way is out and how
+   *     far, in metres, updated live. A player taking 12 %/s does not need to
+   *     know which shrink they are on.
+   *  2. **A shrink is coming.** A countdown, going amber inside the warning
+   *     window, so the decision to move happens before the wall does.
+   *  3. **Safe and holding.** The quietest line: which ring, and how much room.
+   */
+  private updateZone(state: HudState): void {
+    const zone = state.zone;
+    if (!zone) {
+      this.zoneStrip.style.display = 'none';
+      this.stormOverlay.style.opacity = '0';
+      return;
+    }
+    this.zoneStrip.style.display = '';
+
+    const outside = zone.distanceOutside > 0;
+    // Ramp the screen edge over the first forty metres, so walking into the
+    // storm looks progressively worse rather than switching on at the boundary.
+    this.stormOverlay.style.opacity = outside
+      ? String(Math.min(1, 0.35 + zone.distanceOutside / 40))
+      : '0';
+
+    this.zoneStrip.classList.toggle('danger', outside);
+    this.zoneStrip.classList.toggle(
+      'warning',
+      !outside && !zone.shrinking && zone.untilShrink >= 0 && zone.untilShrink <= ZONE_WARNING_TIME,
+    );
+
+    if (outside) {
+      this.zoneStrip.textContent = `🌪 IN THE STORM · ${Math.round(zone.distanceOutside)} m to safety`;
+      return;
+    }
+    if (zone.shrinking) {
+      this.zoneStrip.textContent = '🌪 THE STORM IS CLOSING IN';
+      return;
+    }
+    if (zone.untilShrink < 0) {
+      this.zoneStrip.textContent = '🌪 Final circle · nowhere left to run';
+      return;
+    }
+    const room = Math.round(-zone.distanceOutside);
+    this.zoneStrip.textContent =
+      `🌪 Circle ${zone.stage + 1}/${zone.totalStages + 1} closes in ${formatTime(zone.untilShrink)} · ${room} m of room`;
+  }
+
   private updateWhistle(state: HudState): void {
     const required = state.role === Role.Survivor && !state.dead;
     this.whistleWidget.style.display = required ? '' : 'none';

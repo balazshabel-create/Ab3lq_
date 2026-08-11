@@ -60,20 +60,34 @@ const TREE_BAND_OUTER = INNER_RADIUS + 420;
 const TREE_SECTORS = 16;
 
 /**
- * Aerial perspective range, in metres.
+ * Aerial perspective, in metres.
  *
- * Starts beyond the playable world so nothing inside the map is hazed by this
- * (the scene fog owns that range), and saturates short of the mountains so their
- * ridgeline still reads as a shape rather than dissolving completely.
+ * The tricky part is *continuity*. The near field is hazed by the scene's
+ * exponential fog and the backdrop is not, so if the two do not agree at the
+ * seam there is a visible line in the air where one atmosphere stops and another
+ * starts — the backdrop pops out unnaturally crisp behind a fogged mid-distance.
+ *
+ * So the backdrop starts already partly hazed (`HAZE_BASE`, roughly matching what
+ * the scene fog has accumulated by the time it reaches the world edge) and ramps
+ * the rest of the way over kilometres. It saturates short of full, so the
+ * mountain ridgeline still reads as a shape rather than dissolving completely.
  */
-const HAZE_NEAR = 620;
-const HAZE_FAR = 3400;
+const HAZE_BASE = 0.42;
+const HAZE_NEAR = 500;
+const HAZE_FAR = 3200;
 
 /** Colours, sampled by altitude and distance when the mesh is built. */
 const COLOUR_JUNGLE_NEAR = new THREE.Color(0x2e5326);
 const COLOUR_JUNGLE_FAR = new THREE.Color(0x35563a);
-const COLOUR_ROCK = new THREE.Color(0x5b5f63);
-const COLOUR_PEAK = new THREE.Color(0x8d949c);
+/*
+ * Deliberately dark. A distant range is a *silhouette* — it reads as
+ * far away precisely because it is dimmer and less saturated than everything in
+ * front of it. Rock light enough to look like rock up close ends up brighter
+ * than the sky behind it, which reads as a rendering fault rather than as
+ * mountains.
+ */
+const COLOUR_ROCK = new THREE.Color(0x3f4550);
+const COLOUR_PEAK = new THREE.Color(0x5d6472);
 
 const backdropVertexShader = /* glsl */ `
   attribute vec3 tint;
@@ -82,6 +96,7 @@ const backdropVertexShader = /* glsl */ `
   varying float vHaze;
   uniform float uHazeNear;
   uniform float uHazeFar;
+  uniform float uHazeBase;
   void main() {
     vTint = tint;
     vNormalW = normalize(mat3(modelMatrix) * normal);
@@ -90,7 +105,7 @@ const backdropVertexShader = /* glsl */ `
     // player can be five hundred metres off-centre and the ridgeline nearest
     // them should be the least hazy part of it.
     float d = length(world.xyz - cameraPosition);
-    vHaze = smoothstep(uHazeNear, uHazeFar, d);
+    vHaze = uHazeBase + (1.0 - uHazeBase) * smoothstep(uHazeNear, uHazeFar, d);
     gl_Position = projectionMatrix * viewMatrix * world;
   }
 `;
@@ -150,6 +165,7 @@ export class BackdropSystem {
         uSunDir: { value: new THREE.Vector3(0.4, 0.8, 0.2) },
         uHazeNear: { value: HAZE_NEAR },
         uHazeFar: { value: HAZE_FAR },
+        uHazeBase: { value: HAZE_BASE },
         uMaxHaze: { value: 0.86 },
       },
       // Explicitly out of the scene's fog: see the header. Also no depth write
@@ -431,6 +447,11 @@ export class BackdropSystem {
     (u.uLight.value as THREE.Color).copy(lightColor);
     (u.uSunDir.value as THREE.Vector3).copy(sunDirection);
     u.uMaxHaze.value = lerp(0.88, 0.52, clamp01(nightFactor));
+  }
+
+  /** Hide the whole backdrop — used when the camera goes under the water. */
+  setVisible(visible: boolean): void {
+    this.group.visible = visible;
   }
 
   setSettings(settings: GraphicsSettings): void {

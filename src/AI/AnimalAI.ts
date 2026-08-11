@@ -271,7 +271,12 @@ export function updateAnimal(
   // Ambush predators submerge or hold still, which is how a hunter crocodile
   // gets to look exactly like scenery.
   const holding = animal.behavior === AiBehavior.Idle || animal.behavior === AiBehavior.Bask;
-  if (temper.aquatic > 0.6 && holding && animal.moveMode === MoveMode.Swim) {
+  if (
+    def.locomotion.canSubmerge &&
+    temper.aquatic > 0.6 &&
+    holding &&
+    animal.moveMode === MoveMode.Swim
+  ) {
     animal.flags |= ActorFlags.Submerged;
   }
 }

@@ -425,6 +425,16 @@ export class AudioSystem {
     underCanopy: number;
     /** 0..1, how overdue the player's whistle is. */
     whistleTension: number;
+    /**
+     * 0..1 exposure to the storm wall: 0 well inside the circle, 1 out in it.
+     *
+     * Folded into rain, wind and the tension drone rather than given a layer of
+     * its own. A squall a hundred metres away genuinely *is* more rain and more
+     * wind, so reusing those layers is both correct and free — and it means the
+     * storm crossfades with the weather instead of stacking a second downpour on
+     * top of an existing one.
+     */
+    storm: number;
     dt: number;
   }): void {
     if (!this.ctx) return;
@@ -433,13 +443,16 @@ export class AudioSystem {
       if (layer) layer.target = target;
     };
 
-    set('rain', clamp01(params.rain) * 0.5);
-    set('wind', 0.06 + clamp01(params.wind) * 0.28);
-    set('river', clamp01(params.nearWater) * 0.4);
-    // Insects peak at dusk and stay up all night.
-    set('insects', lerp(0.1, 0.5, clamp01(params.nightFactor)) * (1 - params.rain * 0.5));
-    set('frogs', clamp01(params.nightFactor) * 0.32 * (0.4 + params.nearWater * 0.6));
-    set('tension', Math.pow(clamp01(params.whistleTension), 2) * 0.4);
+    const storm = clamp01(params.storm);
+    set('rain', Math.max(clamp01(params.rain), storm * 1.15) * 0.5);
+    set('wind', 0.06 + Math.max(clamp01(params.wind), storm) * 0.34);
+    set('river', clamp01(params.nearWater) * 0.4 * (1 - storm * 0.6));
+    // Insects peak at dusk and stay up all night — and stop dead in the storm,
+    // which is the cue that tells you you have crossed the line even if you are
+    // looking the wrong way.
+    set('insects', lerp(0.1, 0.5, clamp01(params.nightFactor)) * (1 - params.rain * 0.5) * (1 - storm));
+    set('frogs', clamp01(params.nightFactor) * 0.32 * (0.4 + params.nearWater * 0.6) * (1 - storm));
+    set('tension', Math.max(Math.pow(clamp01(params.whistleTension), 2), storm * 0.8) * 0.4);
 
     // The director needs to know the time of day to pick its call pool.
     this.nightFactor = clamp01(params.nightFactor);

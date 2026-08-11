@@ -288,8 +288,12 @@ export const BACKDROP_TREES = { low: 1400, medium: 3200, high: 6000 } as const;
 export const WORLD_PROPS = {
   trees: 4200,
   bushes: 7600,
-  grassPatches: 42000,
-  flowers: 9000,
+  /*
+   * No grass budget: grass is streamed around the camera rather than scattered
+   * over the map, because scattering cannot reach a believable density at this
+   * world size. See GrassField.ts.
+   */
+  flowers: 24000,
   rocks: 900,
   logs: 620,
   ferns: 6400,

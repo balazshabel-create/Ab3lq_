@@ -17,7 +17,9 @@ import { TerrainMesh } from './TerrainMesh';
 import { WaterSystem, buildWaterDepthTexture } from './WaterSystem';
 import { SkySystem } from './SkySystem';
 import { FoliageRenderer } from './FoliageRenderer';
+import { GrassField } from './GrassField';
 import { BackdropSystem } from './BackdropSystem';
+import { StormRenderer, type StormCircle } from './StormRenderer';
 import { AnimalRenderer } from './AnimalRenderer';
 import { EffectsRenderer, type FlySwarmInput } from './EffectsRenderer';
 import { CameraRig } from '../Player/CameraRig';
@@ -43,6 +45,13 @@ export interface RenderWorldState {
   waterLevel: number;
   /** Lightning flash, 0..1. */
   lightning: number;
+  /**
+   * The storm circle, straight from the authority, or null outside a round.
+   *
+   * Passed through rather than recomputed so the drawn wall and the wall that
+   * does damage are the same circle — see StormZone.ts.
+   */
+  zone: StormCircle | null;
 }
 
 /**
@@ -67,14 +76,18 @@ export class Renderer {
   readonly terrainMesh: TerrainMesh;
   readonly water: WaterSystem;
   readonly foliage: FoliageRenderer;
+  readonly grass: GrassField;
   readonly backdrop: BackdropSystem;
+  readonly storm: StormRenderer;
   readonly animals: AnimalRenderer;
   readonly effects: EffectsRenderer;
 
   private terrain: Terrain;
-  private settings: GraphicsSettings;
+  /** Public so the verification tools can read the live preset values. */
+  settings: GraphicsSettings;
   private swarms: FlySwarmInput[] = [];
   private wakes: { x: number; z: number; speed: number; radius: number }[] = [];
+  private splashes: { x: number; z: number; strength: number }[] = [];
   /**
    * Water level as of the last frame, used by the water test and the ripples.
    * A flash flood raises it, so it cannot be read from the constant.
@@ -86,6 +99,10 @@ export class Renderer {
   private fovModifier = 1;
   private frameTimes: number[] = [];
   private lightningFlash = 0;
+  /** 0..1 how deep into the storm the camera is, for the HUD overlay. */
+  private stormIntensity = 0;
+  /** The colour of the water from inside it — fog, and the scene background. */
+  private readonly underwaterColor = new THREE.Color(0x16362c);
   /** Props the camera must not end up inside. */
   private cameraBlockers = new SpatialGrid<CameraBlocker>(16);
 
@@ -137,7 +154,9 @@ export class Renderer {
     this.scene.add(this.water.mesh);
 
     this.foliage = new FoliageRenderer(this.scene, content, settings);
+    this.grass = new GrassField(this.scene, terrain, settings);
     this.backdrop = new BackdropSystem(this.scene, terrain, settings);
+    this.storm = new StormRenderer(this.scene, settings);
     this.animals = new AnimalRenderer(this.scene, settings);
     this.effects = new EffectsRenderer(this.scene, settings);
 
@@ -146,6 +165,10 @@ export class Renderer {
 
     // The animal renderer needs to know who is in the water so it can play the
     // swimming animation; the terrain lives here, so the test is supplied here.
+    // Terrain-following bodies need the ground height under each end of an
+    // animal, so a long one does not bury its snout in a hillside.
+    this.animals.setGroundSampler((x, z) => terrain.surfaceAt(x, z));
+
     this.animals.setWaterTest((x, z, y) => {
       if (!terrain.isWater(x, z)) return false;
       // Also require the animal to actually be down at the surface, so a monkey
@@ -204,6 +227,22 @@ export class Renderer {
       });
     }
     this.cameraBlockers.rebuild(blockers);
+  }
+
+  /**
+   * Is the camera below the water surface?
+   *
+   * Both tests matter. The height test alone would trigger inside a valley whose
+   * floor happens to be below the water line but which holds no water, and the
+   * `isWater` test alone would trigger whenever a crocodile stood in the shallows
+   * with the camera comfortably in the air above it. A small margin below the
+   * surface stops the whole screen flickering between the two states while an
+   * animal bobs on a wave right at the water line.
+   */
+  private isCameraUnderwater(): boolean {
+    const p = this.camera.position;
+    if (p.y > this.waterLevel - 0.12) return false;
+    return this.terrain.isWater(p.x, p.z);
   }
 
   /** Is there solid scenery at this point? */
@@ -270,31 +309,85 @@ export class Renderer {
       this.settings,
     );
 
+    /*
+     * --- Under the water --------------------------------------------------
+     *
+     * Only crocodilians can submerge, so for most of the roster this never
+     * happens — but when it does the whole frame has to change, because the point
+     * of diving is that you *stop being able to see the world above* and the
+     * world above stops being able to see you.
+     *
+     * Three changes do all of it:
+     *   • fog becomes twenty times denser and green, so visibility drops to about
+     *     twelve metres and everything beyond it dissolves into silt;
+     *   • the sky dome and the distant backdrop are hidden, and the scene
+     *     background becomes murky water, so there is no sky above the surface to
+     *     see through it;
+     *   • the water shader switches to its from-below branch — a rippling ceiling
+     *     rather than a translucent sheet.
+     *
+     * What is left visible is the river bed, the weed, and any animal within a
+     * dozen metres. Which is the entire tactical proposition of submerging.
+     */
+    const underwater = this.isCameraUnderwater();
+    this.sky.setVisible(!underwater);
+    this.backdrop.setVisible(!underwater);
+    if (underwater) {
+      if (!this.scene.background) this.scene.background = this.underwaterColor;
+    } else if (this.scene.background) {
+      this.scene.background = null;
+    }
+
     // --- Fog ---------------------------------------------------------------
     const fog = this.scene.fog as THREE.FogExp2;
     fog.color.copy(skyState.fogColor);
     /*
      * FogExp2 falls off as 1 - exp(-(density * depth)²), so density scales as
-     * 1/viewDistance. The constant matters a lot: at 1.9 the fog is fully opaque
-     * *at* the view distance, which means it is already ~60% opaque at half that
-     * — the jungle turns into a grey wall and you cannot see the trees you are
-     * supposed to hide behind. 0.95 leaves the mid-distance readable while still
-     * hiding the view-distance boundary, and the weather term does the heavy
-     * lifting when fog or rain is actually meant to blind you.
+     * 1/viewDistance.
+     *
+     * The constant used to be 0.95, chosen so the fog was thick enough to hide
+     * the point where the terrain simply stopped. It does not have to do that job
+     * any more — the backdrop continues the jungle out to the mountains, so there
+     * is no edge to hide — and at 0.95 the fog saturates completely somewhere
+     * around four hundred metres, which means the distant jungle and the mountain
+     * range are drawn behind a solid wall of fog colour and might as well not
+     * exist.
+     *
+     * 0.42 leaves a visible haze in the near field (about 16% at the view
+     * distance) while letting the horizon through. The jungle still closes in
+     * around you — that now comes from the foliage being dense, which is a better
+     * reason for it than the air being opaque.
      */
-    const baseDensity = 0.95 / Math.max(40, this.settings.viewDistance);
+    const baseDensity = 0.42 / Math.max(40, this.settings.viewDistance);
     /*
      * The weather term is kept modest. Rain is supposed to mask *sound* — that
      * is the tactical property the simulation actually models — not to blind
      * everybody. Fog weather is the state that genuinely cuts visibility, so it
      * carries most of the weight here.
      */
-    const weatherDensity = world.fog * 0.022 + world.rain * 0.004;
-    fog.density = baseDensity + weatherDensity;
+    const weatherDensity = world.fog * 0.014 + world.rain * 0.004;
+    if (underwater) {
+      // ~12 m of visibility. Silty green rather than blue: this is an Amazon
+      // tributary, which carries enough sediment to be opaque in a metre.
+      fog.color.copy(this.underwaterColor);
+      fog.density = 0.115;
+    } else {
+      fog.density = baseDensity + weatherDensity;
+    }
+
+    // --- The storm wall ---------------------------------------------------
+    // Hidden underwater: from the river bed you can see twelve metres, so a
+    // hundred-metre-tall squall would only render as a smear of fog colour.
+    this.storm.update(underwater ? null : world.zone, dt, this.time);
+    this.stormIntensity = this.storm.intensityAt(world.zone, cameraPos.x, cameraPos.z);
 
     // --- Lightning --------------------------------------------------------
     // A storm flash briefly blows out the exposure and lights the whole map.
-    this.lightningFlash = Math.max(this.lightningFlash - dt * 3.5, world.lightning);
+    // Strikes inside the zone wall count too, scaled by how close the camera is
+    // to it — otherwise the most electrically violent thing on screen has no
+    // effect on the scene's lighting at all.
+    const zoneFlash = this.storm.flashLevel * (0.25 + this.stormIntensity * 0.75);
+    this.lightningFlash = Math.max(this.lightningFlash - dt * 3.5, world.lightning, zoneFlash);
     if (this.lightningFlash > 0.01) {
       this.renderer.toneMappingExposure = 1.05 + this.lightningFlash * 1.5;
       this.sky.ambientLight.intensity += this.lightningFlash * 1.8;
@@ -311,10 +404,12 @@ export class Renderer {
       skyState.sunColor,
       world.rain,
       world.waterLevel,
+      underwater,
     );
 
     // --- World content ----------------------------------------------------
     this.foliage.update(cameraPos, this.time, world.wind);
+    this.grass.update(cameraPos, this.time, world.wind);
     // The backdrop is outside the scene fog and does its own aerial
     // perspective, so it has to be handed the sky's colours explicitly.
     this.backdrop.update(
@@ -327,6 +422,9 @@ export class Renderer {
 
     // --- Effects ----------------------------------------------------------
     this.animals.collectWaterWakes(this.wakes);
+    // Splashes first, so a ring spawned this frame is drawn this frame.
+    this.animals.collectSplashes(this.splashes);
+    this.effects.spawnSplash(this.splashes);
     this.effects.updateRipples(this.wakes, world.waterLevel, dt);
     this.animals.collectFlySwarms(this.swarms);
     this.effects.update(
@@ -372,6 +470,7 @@ export class Renderer {
 
     this.sky.setSettings(settings);
     this.backdrop.setSettings(settings);
+    this.storm.setSettings(settings);
     this.water.setSettings(settings);
     this.animals.setSettings(settings);
     this.effects.setSettings(settings);
@@ -386,6 +485,7 @@ export class Renderer {
     ) {
       this.foliage.setSettings(settings);
     }
+    this.grass.setSettings(settings);
 
     this.resize();
   }
@@ -397,6 +497,11 @@ export class Renderer {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();
+  }
+
+  /** How exposed the camera is to the storm, 0..1. Read by the HUD. */
+  get stormExposure(): number {
+    return this.stormIntensity;
   }
 
   /** Average frames per second over the recent window. */
@@ -421,11 +526,13 @@ export class Renderer {
       drawCalls: info.calls,
       triangles: info.triangles,
       animalsDrawn: this.animals.drawnCount,
-      foliageBatches: this.foliage.visibleBatches,
+      foliageBatches: this.foliage.visibleBatches + this.grass.visibleChunks,
     };
   }
 
   dispose(): void {
+    this.grass.dispose();
+    this.storm.dispose();
     this.effects.dispose();
     this.animals.dispose();
     this.backdrop.dispose();

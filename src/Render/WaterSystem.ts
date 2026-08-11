@@ -24,6 +24,11 @@ const VERTEX_SHADER = /* glsl */ `
   varying vec3 vWorldPos;
   varying float vWave;
 
+  // Three's own fog plumbing. A custom ShaderMaterial does not get it for free,
+  // which is exactly how the water ended up as the only unfogged surface in the
+  // game — see the note in the fragment shader.
+  #include <fog_pars_vertex>
+
   void main() {
     vec4 world = modelMatrix * vec4(position, 1.0);
     vWorldXZ = world.xz;
@@ -38,7 +43,10 @@ const VERTEX_SHADER = /* glsl */ `
     vWave = wave;
 
     world.y += wave;
-    gl_Position = projectionMatrix * viewMatrix * world;
+    vec4 mvPosition = viewMatrix * world;
+    gl_Position = projectionMatrix * mvPosition;
+
+    #include <fog_vertex>
   }
 `;
 
@@ -57,10 +65,23 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform float uRain;
   uniform sampler2D uDepthMap;
   uniform float uWorldSize;
+  uniform float uUnderwater;
 
   varying vec2 vWorldXZ;
   varying vec3 vWorldPos;
   varying float vWave;
+
+  /*
+   * Fog.
+   *
+   * A ShaderMaterial gets none of three's standard plumbing unless it asks, and
+   * for a long time this one did not ask. The consequence only showed up in fog
+   * weather, and it was severe: every other surface in the game faded into the
+   * fog colour while the river stayed perfectly crisp, so the water read as a
+   * flat white sheet laid over a grey world. A river is not less atmospheric than
+   * the ground next to it.
+   */
+  #include <fog_pars_fragment>
 
   // Reconstruct a surface normal from the same wave functions as the vertex
   // shader, analytically — no normal map, no extra texture fetch.
@@ -97,6 +118,33 @@ const FRAGMENT_SHADER = /* glsl */ `
     vec3 normal = waveNormal(vWorldXZ);
     vec3 viewDir = normalize(uCameraPos - vWorldPos);
 
+    /*
+     * Seen from below, the surface is a different thing entirely.
+     *
+     * Looking up from under water you do not see a translucent sheet with the
+     * river bed behind it — you see a bright, rippling ceiling, mostly total
+     * internal reflection with a lighter disc overhead (Snell's window). Running
+     * the normal above-water path from underneath produces a murky grey film that
+     * reads as a bug, so this takes its own branch and returns early.
+     */
+    if (uUnderwater > 0.5) {
+      // How steeply we are looking at the surface. Straight up = 1.
+      float up = clamp(abs(viewDir.y), 0.0, 1.0);
+      // Snell's window: the world above is only visible within a cone. Outside
+      // it the surface mirrors the dark water back down at you.
+      float window = smoothstep(0.32, 0.78, up);
+      vec3 mirrored = uDeepColor * 1.15;
+      vec3 through = mix(uShallowColor, uSkyColor, 0.72);
+      vec3 under = mix(mirrored, through, window);
+      // Wave crests catch the light from underneath as bright rippling bands.
+      float shimmer = pow(max(dot(normal, vec3(0.0, 1.0, 0.0)), 0.0), 28.0);
+      under += uSunColor * shimmer * 0.5 * window;
+      gl_FragColor = vec4(under, 0.92);
+      #include <fog_fragment>
+      #include <colorspace_fragment>
+      return;
+    }
+
     // Fresnel: glancing angles reflect the sky, steep angles show the bottom.
     float fresnel = pow(1.0 - clamp(dot(viewDir, normal), 0.0, 1.0), 3.0);
     fresnel = mix(0.04, 1.0, fresnel) * uReflectivity;
@@ -111,11 +159,18 @@ const FRAGMENT_SHADER = /* glsl */ `
 
     vec3 color = mix(body, reflection, fresnel);
 
-    // Foam on the crests, and a wet band in the last half metre of shallows.
-    float crest = smoothstep(0.05, 0.11, vWave);
+    /*
+     * Foam on the crests, and a wet band in the last half metre of shallows.
+     *
+     * Both kept deliberately weak. The wave amplitude is around fifteen
+     * centimetres and the swell is smooth over tens of metres, so a low crest
+     * threshold does not pick out crests — it whitens roughly a third of the
+     * river at once, and the result is a milky sheet rather than water.
+     */
+    float crest = smoothstep(0.10, 0.16, vWave);
     float shore = 1.0 - smoothstep(0.0, 0.5, depthM);
-    color += vec3(0.32) * crest * 0.5;
-    color = mix(color, vec3(0.72, 0.74, 0.66), shore * 0.4);
+    color += vec3(0.26) * crest * 0.3;
+    color = mix(color, vec3(0.58, 0.59, 0.52), shore * 0.32);
 
     // Shallow water is nearly clear; deep water hides what is under it.
     float alpha = uOpacity * (0.3 + 0.7 * clamp(depthM / 1.2, 0.0, 1.0));
@@ -125,6 +180,7 @@ const FRAGMENT_SHADER = /* glsl */ `
 
     gl_FragColor = vec4(color, clamp(alpha, 0.0, 1.0));
 
+    #include <fog_fragment>
     #include <colorspace_fragment>
   }
 `;
@@ -147,20 +203,33 @@ export class WaterSystem {
     this.geometry.rotateX(-Math.PI / 2);
 
     this.material = new THREE.ShaderMaterial({
+      // `fog: true` is what makes three inject the fog uniforms and defines that
+      // the #include chunks above depend on.
+      fog: true,
       uniforms: {
+        /*
+         * Spread three's fog uniforms in rather than using UniformsUtils.merge.
+         * Merge deep-clones every value, and `cloneUniforms` clones textures too —
+         * which would silently duplicate the water depth map onto the GPU and
+         * leave `dispose()` releasing the original while the clone leaked.
+         */
+        ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
         uTime: { value: 0 },
         uWaveScale: { value: settings.waterQuality === 'low' ? 0 : 1 },
-        uShallowColor: { value: new THREE.Color(0x4b6b4a) },
-        uDeepColor: { value: new THREE.Color(0x10251f) },
+        uShallowColor: { value: new THREE.Color(0x3f5738) },
+        uDeepColor: { value: new THREE.Color(0x0b1a16) },
         uSkyColor: { value: new THREE.Color(0x88a7c4) },
         uSunColor: { value: new THREE.Color(0xffe8c0) },
         uSunDirection: { value: new THREE.Vector3(0.4, 0.8, 0.3) },
         uCameraPos: { value: new THREE.Vector3() },
-        uReflectivity: { value: settings.waterQuality === 'high' ? 1 : 0.7 },
+        // Below 1: a fully reflective surface turns the whole mid-distance of
+        // the river into sky colour, which reads as milk rather than as water.
+        uReflectivity: { value: settings.waterQuality === 'high' ? 0.72 : 0.55 },
         uOpacity: { value: 0.9 },
         uRain: { value: 0 },
         uDepthMap: { value: depthMap },
         uWorldSize: { value: WORLD_SIZE },
+        uUnderwater: { value: 0 },
       },
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
@@ -196,6 +265,7 @@ export class WaterSystem {
     sunColor: THREE.Color,
     rain: number,
     waterLevel: number,
+    underwater: boolean,
   ): void {
     this.mesh.position.y = waterLevel;
     if (this.mesh.material === this.simpleMaterial) return;
@@ -206,6 +276,7 @@ export class WaterSystem {
     u.uSkyColor.value.copy(skyColor);
     u.uSunColor.value.copy(sunColor);
     u.uRain.value = rain;
+    u.uUnderwater.value = underwater ? 1 : 0;
   }
 
   setSettings(settings: GraphicsSettings): void {
@@ -213,7 +284,7 @@ export class WaterSystem {
     this.quality = settings.waterQuality;
     this.mesh.material = settings.waterQuality === 'low' ? this.simpleMaterial : this.material;
     this.material.uniforms.uWaveScale.value = settings.waterQuality === 'low' ? 0 : 1;
-    this.material.uniforms.uReflectivity.value = settings.waterQuality === 'high' ? 1 : 0.7;
+    this.material.uniforms.uReflectivity.value = settings.waterQuality === 'high' ? 0.72 : 0.55;
   }
 
   dispose(): void {
