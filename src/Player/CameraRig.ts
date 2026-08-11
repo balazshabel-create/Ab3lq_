@@ -102,27 +102,21 @@ export class CameraRig {
     this.targetDistance = clamp(this.targetDistance + delta, base * 0.55, base * 2.2);
   }
 
-  /** Where the player is looking, which the server uses for the attack arc. */
+  /**
+   * Where the player is looking.
+   *
+   * This steers *nothing*. Movement is body-relative — W drives along the
+   * animal's own facing and A/D turn it — so the camera is free to point
+   * anywhere, including straight back down the way you came, while the animal
+   * keeps running forwards. The attack arc uses the body's yaw too, so a bite
+   * always comes out of the animal's mouth rather than out of the camera.
+   */
   get lookYaw(): number {
     return this.yaw;
   }
 
   get lookPitch(): number {
     return this.pitch;
-  }
-
-  /**
-   * Forward direction on the ground plane.
-   * Movement input is relative to this, so "W" always means "away from camera".
-   */
-  getMoveBasis(out: { forwardX: number; forwardZ: number; rightX: number; rightZ: number }): void {
-    // The camera looks along -Z when yaw is 0, matching three's convention.
-    const sin = Math.sin(this.yaw);
-    const cos = Math.cos(this.yaw);
-    out.forwardX = -sin;
-    out.forwardZ = -cos;
-    out.rightX = cos;
-    out.rightZ = -sin;
   }
 
   /** Add a camera shake impulse (a bite landing, thunder, a hard landing). */

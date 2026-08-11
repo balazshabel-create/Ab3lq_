@@ -52,7 +52,7 @@ and writes screenshots to `screenshots/`.
 
 | | |
 |---|---|
-| **Move** | `WASD`, `Shift` to sprint, `Space` to jump |
+| **Move** | `W` forward, `A`/`D` turn, `S` about-turn, `Shift` sprint, `Space` jump |
 | **Whistle** | `Q` — **once a minute, or flies give you away** |
 | **Eat** | Hold `E` |
 | **Attack** | Left click — any animal can bite, but a herbivore's does little |
@@ -60,8 +60,23 @@ and writes screenshots to `screenshots/`.
 | **Climb** | `R` up, `F` down |
 | **Submerge** | `C` — crocodilians only, and only in deep water |
 | **Listen** | `G` (hunter only) |
-| **Look** | Move the mouse (the cursor is captured automatically) |
+| **Look** | Move the mouse — independently of where you are going |
 | **Debug overlay** | `F3` |
+
+### The camera does not steer you
+
+`W` drives your animal along *its own* facing and `A`/`D` turn it. The mouse only
+moves the camera. So you can look straight back over your shoulder to see what is
+chasing you while still running away from it — which used to be impossible,
+because "forward" meant "away from the camera" and glancing behind you turned the
+animal round and ran it into the thing you were fleeing.
+
+`S` turns you around and walks back the way you came, because animals reverse by
+turning rather than by walking backwards.
+
+How fast you turn is your species' business, not the input's: the client only
+asks for a heading, and the movement solver enforces the animal's own agility (and
+the Stiff Joints weakness) on the body.
 
 ### The mouse is captured automatically
 

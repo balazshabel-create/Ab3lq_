@@ -331,31 +331,53 @@ export class AudioSystem {
       this.layers.set('river', { gain, target: 0 });
     }
 
-    // --- Insects: a high shimmer that comes alive at dusk -----------------
+    /*
+     * --- Insects: a soft night-time bed -----------------------------------
+     *
+     * Filtered noise, not oscillators. The first version used three sawtooth
+     * oscillators around 3.1–3.9 kHz through bandpass filters at Q 12, which is a
+     * recipe for a *tone*, not for insects: a resonant filter that narrow rings at
+     * its centre frequency, so what came out was a steady electronic whine sitting
+     * right in the ear's most sensitive band. It was also never off — the daytime
+     * floor was 0.1 — so it whined continuously for the whole round, which is
+     * exactly the "annoying little whistling" a player would ask to have removed.
+     *
+     * Real cicadas are broadband: a rasp, not a pitch. Two wide bandpasses on the
+     * shared noise buffer, gently wobbled by a slow LFO, give the rasp with no
+     * ringing, and the level is a third of what it was. Combined with removing the
+     * daytime floor (see updateAmbience), daylight is now genuinely quiet and the
+     * insects arrive at dusk, which is also when they should.
+     */
     {
       const gain = ctx.createGain();
       gain.gain.value = 0;
       gain.connect(bus);
-      // Three detuned oscillators through a resonant filter reads convincingly
-      // as cicadas without any samples.
-      for (let i = 0; i < 3; i++) {
-        const osc = ctx.createOscillator();
-        osc.type = 'sawtooth';
-        osc.frequency.value = 3100 + i * 420;
-        const trem = ctx.createOscillator();
-        trem.frequency.value = 11 + i * 3.5;
-        const tremGain = ctx.createGain();
-        tremGain.gain.value = 0.35;
-        const voiceGain = ctx.createGain();
-        voiceGain.gain.value = 0.012;
-        trem.connect(tremGain).connect(voiceGain.gain);
+      for (let i = 0; i < 2; i++) {
+        const source = ctx.createBufferSource();
+        source.buffer = this.noiseBuffer;
+        source.loop = true;
+
         const filter = ctx.createBiquadFilter();
         filter.type = 'bandpass';
-        filter.frequency.value = 3600 + i * 500;
-        filter.Q.value = 12;
-        osc.connect(filter).connect(voiceGain).connect(gain);
-        osc.start();
-        trem.start();
+        filter.frequency.value = 2400 + i * 1500;
+        // Q around 1 is a broad band. This is the number that mattered most: at
+        // 12 it is a resonator, at 1 it is a texture.
+        filter.Q.value = 1.1;
+
+        // A gentle, slow swell rather than an 11 Hz tremolo. Fast amplitude
+        // modulation on a narrow band is what made the old version buzz.
+        const lfo = ctx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.value = 0.16 + i * 0.09;
+        const lfoDepth = ctx.createGain();
+        lfoDepth.gain.value = 0.3;
+        const voiceGain = ctx.createGain();
+        voiceGain.gain.value = 0.5;
+        lfo.connect(lfoDepth).connect(voiceGain.gain);
+
+        source.connect(filter).connect(voiceGain).connect(gain);
+        source.start();
+        lfo.start();
       }
       this.layers.set('insects', { gain, target: 0 });
     }
@@ -447,10 +469,18 @@ export class AudioSystem {
     set('rain', Math.max(clamp01(params.rain), storm * 1.15) * 0.5);
     set('wind', 0.06 + Math.max(clamp01(params.wind), storm) * 0.34);
     set('river', clamp01(params.nearWater) * 0.4 * (1 - storm * 0.6));
-    // Insects peak at dusk and stay up all night — and stop dead in the storm,
-    // which is the cue that tells you you have crossed the line even if you are
-    // looking the wrong way.
-    set('insects', lerp(0.1, 0.5, clamp01(params.nightFactor)) * (1 - params.rain * 0.5) * (1 - storm));
+    /*
+     * Insects arrive at dusk and stay up all night — and stop dead in the storm,
+     * which is the cue that tells you you have crossed the line even if you are
+     * looking the wrong way.
+     *
+     * The daytime end of this ramp is now zero, not 0.1. A floor of 0.1 meant the
+     * layer was audible every second of every round, and a continuous background
+     * layer nobody can turn off has to be *much* better than merely acceptable.
+     * Silence in the afternoon also gives the dusk arrival somewhere to arrive
+     * from, which the ambience director's distant calls now carry on their own.
+     */
+    set('insects', lerp(0, 0.34, clamp01(params.nightFactor)) * (1 - params.rain * 0.5) * (1 - storm));
     set('frogs', clamp01(params.nightFactor) * 0.32 * (0.4 + params.nearWater * 0.6) * (1 - storm));
     set('tension', Math.max(Math.pow(clamp01(params.whistleTension), 2), storm * 0.8) * 0.4);
 

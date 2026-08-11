@@ -38,7 +38,9 @@ import {
   type Snapshot,
 } from '../src/Networking/Protocol';
 import {
+  ATTACK_STRIKE_TIME,
   HUNGER_DECAY_RATE,
+  HUNTER_ATTACK_COOLDOWN,
   ROUND_DURATION,
   SIM_DT,
   WHISTLE_INTERVAL,
@@ -840,5 +842,87 @@ test('a crocodilian actually submerges and a capybara cannot', () => {
   assert.ok(
     capybara.depthBelowSurface < 0.4,
     `a capybara must stay at the surface, was ${capybara.depthBelowSurface.toFixed(2)}m below`,
+  );
+});
+
+test('every attack raises a fresh Attacking pulse, not a permanent flag', () => {
+  const sim = new Simulation(97531);
+  sim.addPlayer('a', 'A');
+  sim.startRound();
+  advance(sim, 10);
+  const player = sim.getPlayers()[0];
+
+  /*
+   * Click attack once, then run the cooldown out, counting rising edges.
+   *
+   * `seq` has to keep climbing across calls, not restart: applyInput drops any
+   * packet whose sequence number is behind the last one it saw, so a second swing
+   * numbered from zero again is silently discarded in its entirety. (Which is how
+   * this test first "failed" — the simulation was fine.)
+   */
+  let seq = 0;
+  const swing = (): { edges: number; peakTicks: number } => {
+    let edges = 0;
+    let peakTicks = 0;
+    let wasSet = (player.flags & ActorFlags.Attacking) !== 0;
+    const ticks = Math.round((HUNTER_ATTACK_COOLDOWN + 0.4) / TICK);
+    for (let i = 0; i < ticks; i++) {
+      // Hold the button only on the first tick, like one click.
+      sim.applyInput('a', {
+        seq: ++seq,
+        moveX: 0,
+        moveZ: 0,
+        yaw: 0,
+        pitch: 0,
+        actions: i === 0 ? InputAction.Attack : 0,
+      });
+      sim.update(TICK);
+      const set = (player.flags & ActorFlags.Attacking) !== 0;
+      if (set && !wasSet) edges++;
+      if (set) peakTicks++;
+      wasSet = set;
+    }
+    return { edges, peakTicks };
+  };
+
+  const first = swing();
+  assert.equal(first.edges, 1, 'the first attack must raise the flag exactly once');
+  assert.ok(
+    first.peakTicks >= 5 && first.peakTicks <= 10,
+    `the strike window should last about ${ATTACK_STRIKE_TIME}s, held for ${first.peakTicks} ticks`,
+  );
+  assert.equal(
+    player.flags & ActorFlags.Attacking,
+    0,
+    'the flag must fall again — a latched flag has one rising edge per round, so ' +
+      'the renderer would draw exactly one bite and then never another',
+  );
+
+  // And again: this is the part that was broken. A second click has to produce a
+  // second edge, which it cannot if nothing ever clears the flag.
+  const second = swing();
+  assert.equal(second.edges, 1, 'a second attack must raise the flag again');
+
+  const third = swing();
+  assert.equal(third.edges, 1, 'and a third');
+});
+
+test('a quick click is never dropped, whatever the frame rate', () => {
+  // The client latches a left click and consumes it on the next read, so a press
+  // and release that both land between two frames still reaches the server. The
+  // simulation side of that contract: a single tick carrying Attack must be
+  // enough to open a strike window.
+  const sim = new Simulation(13579);
+  sim.addPlayer('a', 'A');
+  sim.startRound();
+  advance(sim, 10);
+  const player = sim.getPlayers()[0];
+
+  sim.applyInput('a', { seq: 1, moveX: 0, moveZ: 0, yaw: 0, pitch: 0, actions: InputAction.Attack });
+  sim.update(TICK);
+  assert.notEqual(
+    player.flags & ActorFlags.Attacking,
+    0,
+    'one tick of Attack must be enough to start a strike',
   );
 });

@@ -16,6 +16,7 @@ import {
   AI_POPULATION,
   AI_SPECIES_COVER_MIN,
   ANIMAL_SPEED,
+  ATTACK_STRIKE_TIME,
   CLIENT_TIMEOUT,
   CLIMB_SPEED,
   CORPSE_LIFETIME,
@@ -28,7 +29,6 @@ import {
   HUNTER_ATTACK_ARC,
   HUNTER_ATTACK_COOLDOWN,
   HUNTER_ATTACK_RANGE,
-  HUNTER_ATTACK_WINDUP,
   HUNTER_DAMAGE,
   HUNTER_SPEED_BONUS,
   JUMP_SPEED,
@@ -1029,6 +1029,25 @@ export class Simulation implements AiContext {
 
     // --- Cooldowns -------------------------------------------------------
     player.attackCooldown = Math.max(0, player.attackCooldown - dt);
+    /*
+     * The strike window, and the Attacking flag that rides on it.
+     *
+     * This was broken in a way that only showed up as "the bite has no
+     * animation": `tryAttack` set ActorFlags.Attacking and nothing ever cleared
+     * it, so the flag latched on at the player's first swing and stayed on for
+     * the rest of the round. The renderer triggers the bite on the flag's *rising
+     * edge* — it has to, because the flag lasts a third of a second and snapshots
+     * arrive ten times a second, so reading the flag directly would miss any
+     * strike that fell between two of them. A flag that never falls has exactly
+     * one rising edge, so exactly one bite in the whole round was ever drawn.
+     *
+     * `attackWindup` was set and never decremented either, so the two bugs were
+     * really one: the strike had no duration. It does now, and the flag is a real
+     * pulse for that duration — the same shape the AI has always used.
+     */
+    player.attackWindup = Math.max(0, player.attackWindup - dt);
+    if (player.attackWindup > 0) player.flags |= ActorFlags.Attacking;
+    else player.flags &= ~ActorFlags.Attacking;
     player.listenCooldown = Math.max(0, player.listenCooldown - dt);
     player.listenTimer = Math.max(0, player.listenTimer - dt);
     player.focusCooldown = Math.max(0, player.focusCooldown - dt);
@@ -1366,8 +1385,11 @@ export class Simulation implements AiContext {
     const attackPower = (meatEater ? 1 : 0.34) * sizeFactor;
 
     player.attackCooldown = HUNTER_ATTACK_COOLDOWN;
+    // Open the strike window. The flag is also raised here rather than waiting
+    // for the next tick's timer pass, so the lunge is visible in this tick's
+    // snapshot instead of one snapshot late.
+    player.attackWindup = ATTACK_STRIKE_TIME;
     player.flags |= ActorFlags.Attacking;
-    player.attackWindup = HUNTER_ATTACK_WINDUP;
     cancelEating(player);
 
     this.emitNoise(

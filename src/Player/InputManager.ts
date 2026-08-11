@@ -35,10 +35,15 @@ const BINDING_ACTIONS = {
 } as const;
 
 export const DEFAULT_BINDINGS: Binding[] = [
-  { action: 'forward', keys: ['KeyW', 'ArrowUp'], label: 'W', description: 'Move forward' },
-  { action: 'back', keys: ['KeyS', 'ArrowDown'], label: 'S', description: 'Move back' },
-  { action: 'left', keys: ['KeyA', 'ArrowLeft'], label: 'A', description: 'Strafe left' },
-  { action: 'right', keys: ['KeyD', 'ArrowRight'], label: 'D', description: 'Strafe right' },
+  /*
+   * A and D *turn*, they do not strafe, and W is the animal's own forward rather
+   * than the camera's. That is what lets you look behind you while still running
+   * away — see `steer` in main.ts.
+   */
+  { action: 'forward', keys: ['KeyW', 'ArrowUp'], label: 'W', description: 'Walk forward' },
+  { action: 'back', keys: ['KeyS', 'ArrowDown'], label: 'S', description: 'Turn around and walk back' },
+  { action: 'left', keys: ['KeyA', 'ArrowLeft'], label: 'A', description: 'Turn left' },
+  { action: 'right', keys: ['KeyD', 'ArrowRight'], label: 'D', description: 'Turn right' },
   { action: 'sprint', keys: ['ShiftLeft', 'ShiftRight'], label: 'Shift', description: 'Sprint (costs stamina)' },
   { action: 'jump', keys: ['Space'], label: 'Space', description: 'Jump' },
   { action: 'whistle', keys: ['KeyQ'], label: 'Q', description: 'WHISTLE — do this every minute' },
@@ -70,6 +75,8 @@ export interface InputState {
 export class InputManager {
   private keys = new Set<string>();
   private mouseButtons = new Set<number>();
+  /** A left click seen since the last read, so no attack is ever dropped. */
+  private pendingAttack = false;
   private lookX = 0;
   private lookY = 0;
   private zoom = 0;
@@ -124,11 +131,24 @@ export class InputManager {
       // Losing focus must not leave the player sprinting forever.
       this.keys.clear();
       this.mouseButtons.clear();
+      this.pendingAttack = false;
     }) as EventListener);
 
     add(this.canvas, 'mousedown', ((e: MouseEvent) => {
       if (!this.enabled) return;
       this.mouseButtons.add(e.button);
+      /*
+       * Latch the press as well as recording the button state.
+       *
+       * Attack used to be read purely from `mouseButtons.has(0)`, which silently
+       * drops any click whose press *and* release both land between two reads —
+       * input is sampled once per frame, so at 60 fps that is a 16 ms window and a
+       * brisk click fits inside it. On a machine struggling for frame rate the
+       * window is ten times wider. The symptom is the worst kind: the attack works
+       * most of the time, so it reads as the game ignoring you rather than as a
+       * bug. A latch consumed by the next read cannot miss one.
+       */
+      if (e.button === 0) this.pendingAttack = true;
       if (e.button === 2) e.preventDefault();
       // Any click is a user gesture, which is the only moment a browser will
       // grant pointer lock — so every click is a chance to re-confine the mouse.
@@ -312,8 +332,10 @@ export class InputManager {
       if (this.isDown(downKeys)) actions |= InputAction.ClimbDown;
     }
 
-    // Mouse.
-    if (this.mouseButtons.has(0)) actions |= InputAction.Attack;
+    // Mouse. The latch covers clicks too quick to be seen as a held button;
+    // the held check is what lets holding the button keep attacking on cooldown.
+    if (this.pendingAttack || this.mouseButtons.has(0)) actions |= InputAction.Attack;
+    this.pendingAttack = false;
     if (this.mouseButtons.has(2)) actions |= InputAction.Focus;
 
     let forward = 0;

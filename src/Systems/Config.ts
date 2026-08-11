@@ -135,8 +135,21 @@ export const HUNTER_ATTACK_COOLDOWN = 2.2;
 export const HUNTER_ATTACK_RANGE = 3.4;
 export const HUNTER_ATTACK_ARC = Math.PI * 0.55;
 
-/** Windup before the bite lands, giving prey a chance to react. */
-export const HUNTER_ATTACK_WINDUP = 0.32;
+/**
+ * How long a strike is visibly in progress, in seconds.
+ *
+ * This is the duration the Attacking flag is held for, which is what the renderer
+ * uses to trigger the bite animation. Comfortably longer than the gap between
+ * snapshots (100 ms), so a strike can never fall between two of them and go
+ * undrawn.
+ *
+ * Named for what it does. It used to be called a "windup" and described as giving
+ * prey a chance to react, which it never did — the damage is applied in the same
+ * tick the attack is requested, so there is no delay to react inside. Making the
+ * bite land late would be a real design change; this constant only governs how
+ * long the animal is shown lunging.
+ */
+export const ATTACK_STRIKE_TIME = 0.34;
 
 /** Damage an AI apex predator deals to a player (less than a real hunter). */
 export const AI_PREDATOR_DAMAGE = 16;
@@ -172,6 +185,33 @@ export const TURN_RATE = 5.2;
 
 /** Vertical climb speed on tree trunks, for climbers (m/s). */
 export const CLIMB_SPEED = 2.6;
+
+/**
+ * How fast the player's *steering* heading can swing, in radians per second.
+ *
+ * Movement is body-relative: W drives along the animal's own facing and A/D steer
+ * it, so the camera can look anywhere — including straight backwards — without
+ * changing where the animal goes. The client integrates a steering heading from
+ * A/D and sends that as the wish direction.
+ *
+ * Deliberately far above any species' turn rate. The real limit on turning is
+ * meant to be the animal's own agility (and the Stiff Joints weakness), enforced
+ * by the movement solver; if this were the tighter of the two it would flatten
+ * every species to the same handling.
+ */
+export const STEER_RATE = 9;
+
+/**
+ * How far ahead of the body the steering heading may get, in radians.
+ *
+ * A tether, and it is doing real work. Without it, holding A against a body that
+ * cannot turn that fast — a tapir, or anything with Stiff Joints — winds the
+ * steering heading round and round while the animal lumbers after it, and letting
+ * go leaves the two pointing in unrelated directions. Clamping the lead means the
+ * heading always stays just ahead of the nose, so steering stops the instant you
+ * release the key.
+ */
+export const STEER_MAX_LEAD = 0.9;
 
 // ---------------------------------------------------------------------------
 // Perception — how easily animals and hunters notice each other

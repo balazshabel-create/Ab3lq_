@@ -49,8 +49,14 @@ import { ANIMALS, Species } from './Animals/AnimalTypes';
 import { WEAKNESSES, type WeaknessId } from './Gameplay/Weaknesses';
 import type { RoleCard, RoundResult, RoundStatus } from './Gameplay/RoundState';
 import { EVENTS } from './Gameplay/RandomEvents';
-import { CLIENT_INPUT_RATE, WATER_LEVEL, WHISTLE_INTERVAL } from './Systems/Config';
-import { clamp01 } from './Systems/Noise';
+import {
+  CLIENT_INPUT_RATE,
+  STEER_MAX_LEAD,
+  STEER_RATE,
+  WATER_LEVEL,
+  WHISTLE_INTERVAL,
+} from './Systems/Config';
+import { angleDelta, clamp, clamp01 } from './Systems/Noise';
 import {
   weatherEmoji,
   weatherLabel,
@@ -139,6 +145,14 @@ class Game {
   private lastLightningTime = -99;
   /** Tracks the attack cooldown edge, so a bite can be heard and felt. */
   private lastAttackReady = true;
+  /**
+   * The heading the player is steering towards, in the animal's own frame.
+   *
+   * Integrated from A/D and tethered to the body's real yaw — see `steer`.
+   */
+  private steerYaw = 0;
+  /** False until the first snapshot has given us a real yaw to seed from. */
+  private steerReady = false;
 
   constructor() {
     this.canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -453,6 +467,7 @@ class Game {
     this.state.roleCard = null;
     this.state.result = null;
     this.state.actorId = 0;
+    this.steerReady = false;
     await this.startLocalHost(Math.floor(Math.random() * 0x7fffffff), 0);
     this.showScreen('menu');
   }
@@ -489,6 +504,10 @@ class Game {
         this.state.species = packet.card.species;
         this.state.weakness = packet.card.weakness;
         this.state.actorId = packet.actorId;
+        // A new round means a new spawn and a new facing, so re-seed the
+        // steering heading from the first snapshot rather than carrying the
+        // previous round's over.
+        this.steerReady = false;
         this.state.dead = false;
         this.state.lastHealth = 100;
 
@@ -693,12 +712,7 @@ class Game {
     this.renderer.cameraRig.addLook(state.lookX, state.lookY);
     if (state.zoom !== 0) this.renderer.cameraRig.addZoom(state.zoom);
 
-    // Convert local input into a world-space direction using the camera basis,
-    // so "forward" always means "away from the camera".
-    const basis = { forwardX: 0, forwardZ: 0, rightX: 0, rightZ: 0 };
-    this.renderer.cameraRig.getMoveBasis(basis);
-    const moveX = basis.forwardX * state.moveForward + basis.rightX * state.moveRight;
-    const moveZ = basis.forwardZ * state.moveForward + basis.rightZ * state.moveRight;
+    const { moveX, moveZ } = this.steer(state.moveForward, state.moveRight, dt);
 
     // Play the local whistle immediately rather than waiting for the round trip:
     // the sound is feedback for a button press, and 100 ms of lag on it feels
@@ -739,6 +753,71 @@ class Game {
         this.transport?.send({ t: ClientMsg.Input, input });
       }
     }
+  }
+
+  /**
+   * Turn WASD into a wish direction in the animal's own frame.
+   *
+   * **The camera does not steer.** W drives along the animal's own facing, A and D
+   * turn it, and the mouse only moves the camera — so you can look straight
+   * backwards while still running forwards, which is the whole point. Previously
+   * the wish direction was built from the camera basis, so "forward" meant "away
+   * from the camera": glancing over your shoulder to check for a jaguar turned the
+   * animal round and ran you back into it.
+   *
+   * The heading is integrated on the client and sent as an ordinary world-space
+   * direction, so the server needs no changes and stays the sole authority on how
+   * fast a body can actually turn. Two details make that safe:
+   *
+   *  • It is seeded from, and tethered to, the animal's real yaw out of the
+   *    snapshot, so the client can never wind it somewhere the body is not.
+   *  • Turning on the spot still sends a *tiny* throttle rather than zero. The
+   *    movement solver only rotates a body when it has some throttle, so at
+   *    exactly zero the animal would refuse to turn at all; 2% is enough to
+   *    satisfy it and amounts to about eight centimetres a second of creep.
+   *
+   * S reverses the drive direction, which turns the animal around and walks it
+   * back the way it came. That is deliberate: animals reverse by turning, not by
+   * walking backwards, and the tether then carries the steering heading round with
+   * the body so W keeps meaning "the way I am now pointing".
+   */
+  private steer(forward: number, right: number, dt: number): { moveX: number; moveZ: number } {
+    const bodyYaw = this.localActorYaw();
+
+    if (bodyYaw !== null && !this.steerReady) {
+      this.steerYaw = bodyYaw;
+      this.steerReady = true;
+    }
+
+    // A/D steer. The animal faces +X at yaw 0 and its own right-hand side is +Z,
+    // so turning right is an increase in yaw.
+    if (Math.abs(right) > 0.01) this.steerYaw += right * STEER_RATE * dt;
+
+    if (bodyYaw !== null) {
+      const lead = angleDelta(bodyYaw, this.steerYaw);
+      this.steerYaw = bodyYaw + clamp(lead, -STEER_MAX_LEAD, STEER_MAX_LEAD);
+    }
+
+    const driving = Math.abs(forward) > 0.01;
+    const turning = Math.abs(right) > 0.01;
+    if (!driving && !turning) return { moveX: 0, moveZ: 0 };
+
+    const heading = forward < 0 ? this.steerYaw + Math.PI : this.steerYaw;
+    const magnitude = driving ? Math.abs(forward) : 0.02;
+    return {
+      moveX: Math.cos(heading) * magnitude,
+      moveZ: Math.sin(heading) * magnitude,
+    };
+  }
+
+  /** The local animal's authoritative facing, or null before the first snapshot. */
+  private localActorYaw(): number | null {
+    const snapshot = this.state.latestSnapshot;
+    if (!snapshot || this.state.actorId === 0) return null;
+    for (const actor of snapshot.actors) {
+      if (actor.id === this.state.actorId) return actor.yaw;
+    }
+    return null;
   }
 
   /** Is the local player's animal currently off the ground? */
