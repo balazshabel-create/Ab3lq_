@@ -17,11 +17,12 @@ import { TerrainMesh } from './TerrainMesh';
 import { WaterSystem, buildWaterDepthTexture } from './WaterSystem';
 import { SkySystem } from './SkySystem';
 import { FoliageRenderer } from './FoliageRenderer';
+import { BackdropSystem } from './BackdropSystem';
 import { AnimalRenderer } from './AnimalRenderer';
 import { EffectsRenderer, type FlySwarmInput } from './EffectsRenderer';
 import { CameraRig } from '../Player/CameraRig';
 import { SpatialGrid } from '../Systems/SpatialGrid';
-import { WATER_LEVEL } from '../Systems/Config';
+import { BACKDROP_RADIUS, WATER_LEVEL } from '../Systems/Config';
 import { clamp01, lerp } from '../Systems/Noise';
 
 /** A prop treated as a vertical cylinder the camera cannot pass through. */
@@ -44,6 +45,18 @@ export interface RenderWorldState {
   lightning: number;
 }
 
+/**
+ * Camera far plane.
+ *
+ * Has to clear the backdrop's mountains, which stand kilometres out — a far
+ * plane sized only for the view distance would clip them away entirely. The
+ * near plane stays at 10 cm: a 24-bit depth buffer handles a 0.1–5500 m range
+ * with millimetre precision in the near field, so the wide range costs nothing.
+ */
+function farPlaneFor(settings: GraphicsSettings): number {
+  return Math.max(settings.viewDistance * 3, BACKDROP_RADIUS * 1.3);
+}
+
 export class Renderer {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene: THREE.Scene;
@@ -54,6 +67,7 @@ export class Renderer {
   readonly terrainMesh: TerrainMesh;
   readonly water: WaterSystem;
   readonly foliage: FoliageRenderer;
+  readonly backdrop: BackdropSystem;
   readonly animals: AnimalRenderer;
   readonly effects: EffectsRenderer;
 
@@ -110,7 +124,7 @@ export class Renderer {
       72,
       canvas.clientWidth / Math.max(1, canvas.clientHeight),
       0.1,
-      settings.viewDistance * 3,
+      farPlaneFor(settings),
     );
     this.cameraRig = new CameraRig(this.camera, terrain);
 
@@ -123,6 +137,7 @@ export class Renderer {
     this.scene.add(this.water.mesh);
 
     this.foliage = new FoliageRenderer(this.scene, content, settings);
+    this.backdrop = new BackdropSystem(this.scene, terrain, settings);
     this.animals = new AnimalRenderer(this.scene, settings);
     this.effects = new EffectsRenderer(this.scene, settings);
 
@@ -300,6 +315,14 @@ export class Renderer {
 
     // --- World content ----------------------------------------------------
     this.foliage.update(cameraPos, this.time, world.wind);
+    // The backdrop is outside the scene fog and does its own aerial
+    // perspective, so it has to be handed the sky's colours explicitly.
+    this.backdrop.update(
+      skyState.horizonColor,
+      skyState.sunColor,
+      skyState.sunDirection,
+      skyState.night,
+    );
     this.animals.update(dt, cameraPos, this.time);
 
     // --- Effects ----------------------------------------------------------
@@ -344,10 +367,11 @@ export class Renderer {
       settings.shadowQuality === 'high' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     this.renderer.shadowMap.needsUpdate = true;
 
-    this.camera.far = settings.viewDistance * 3;
+    this.camera.far = farPlaneFor(settings);
     this.camera.updateProjectionMatrix();
 
     this.sky.setSettings(settings);
+    this.backdrop.setSettings(settings);
     this.water.setSettings(settings);
     this.animals.setSettings(settings);
     this.effects.setSettings(settings);
@@ -404,6 +428,7 @@ export class Renderer {
   dispose(): void {
     this.effects.dispose();
     this.animals.dispose();
+    this.backdrop.dispose();
     this.foliage.dispose();
     this.water.dispose();
     this.terrainMesh.dispose();

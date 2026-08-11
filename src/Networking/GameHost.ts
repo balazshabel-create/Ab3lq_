@@ -10,7 +10,6 @@
 import { MAX_PLAYERS, SIM_DT, SNAPSHOT_RATE } from '../Systems/Config';
 import { Simulation } from '../Core/Simulation';
 import { ActorKind, Role, RoundPhase, type Actor } from '../Core/Types';
-import { Species } from '../Animals/AnimalTypes';
 import { buildRoleCard, canStart } from '../Gameplay/RoundState';
 import { EVENTS } from '../Gameplay/RandomEvents';
 import {
@@ -24,6 +23,7 @@ import {
   type LobbyState,
   type ServerPacket,
   type Snapshot,
+  type ZoneWire,
 } from './Protocol';
 import { dist2D } from '../Core/Types';
 
@@ -41,7 +41,6 @@ export interface HostConnection {
 interface ClientRecord {
   conn: HostConnection;
   name: string;
-  species: Species | null;
   ready: boolean;
   joined: boolean;
 }
@@ -113,7 +112,6 @@ export class GameHost {
     this.clients.set(conn.id, {
       conn,
       name: 'Anonymous Capybara',
-      species: null,
       ready: false,
       joined: false,
     });
@@ -158,15 +156,6 @@ export class GameHost {
         record.name = sanitiseName(packet.name);
         record.joined = true;
         this.sim.addPlayer(clientId, record.name);
-        this.broadcastLobby();
-        break;
-      }
-
-      case ClientMsg.SetSpecies: {
-        // Only meaningful in the lobby: changing species mid-round would be an
-        // instant tell and a trivial way to escape being identified.
-        if (this.sim.round.phase !== RoundPhase.Lobby) return;
-        record.species = packet.species;
         this.broadcastLobby();
         break;
       }
@@ -217,9 +206,7 @@ export class GameHost {
       this.broadcast({ t: ServerMsg.Error, message: 'Not enough players yet.' });
       return;
     }
-    const prefs = new Map<string, Species | null>();
-    for (const [id, record] of this.clients) prefs.set(id, record.species);
-    this.sim.startRound(prefs);
+    this.sim.startRound();
     this.broadcastLobby();
   }
 
@@ -360,7 +347,21 @@ export class GameHost {
       duration: a.duration,
       justStarted: a.justStarted,
     }));
-    this.broadcast({ t: ServerMsg.RoundStatus, status, weather, events });
+    const z = this.sim.stormZone ? this.sim.zone : null;
+    const zone: ZoneWire | null = z
+      ? {
+          x: z.x,
+          z: z.z,
+          radius: z.radius,
+          stage: z.stage,
+          totalStages: z.totalStages,
+          shrinking: z.shrinking,
+          untilShrink: Number.isFinite(z.untilShrink) ? z.untilShrink : -1,
+          damageRate: z.damageRate,
+          next: z.next ? { x: z.next.x, z: z.next.z, radius: z.next.radius } : null,
+        }
+      : null;
+    this.broadcast({ t: ServerMsg.RoundStatus, status, weather, events, zone });
   }
 
   // -------------------------------------------------------------------------
@@ -386,7 +387,6 @@ export class GameHost {
       players.push({
         clientId: id,
         name: record.name,
-        species: record.species,
         ready: record.ready,
         isHost: id === this.hostClientId,
         connected: true,
@@ -411,7 +411,7 @@ export class GameHost {
   private broadcastKill(
     victim: Actor,
     killer: Actor | null,
-    cause: 'hunter' | 'predator' | 'starvation',
+    cause: 'hunter' | 'predator' | 'starvation' | 'storm',
   ): void {
     const victimWasPlayer = victim.kind === ActorKind.Player;
     // Only player deaths are newsworthy; an AI frog being eaten is not.

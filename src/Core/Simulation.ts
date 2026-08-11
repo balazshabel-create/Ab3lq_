@@ -55,7 +55,16 @@ import {
   TURN_RATE,
   WATER_LEVEL,
   WHISTLE_HEAR_RANGE,
+  ZONE_AI_DAMAGE_SCALE,
+  ZONE_ENABLED,
 } from '../Systems/Config';
+import {
+  evaluateZone,
+  isOutside,
+  planRings,
+  type ZoneRing,
+  type ZoneSnapshot,
+} from '../Gameplay/StormZone';
 import { Rng, hashString } from '../Systems/Rng';
 import { angleDelta, clamp01 } from '../Systems/Noise';
 import { SpatialGrid } from '../Systems/SpatialGrid';
@@ -147,7 +156,11 @@ import { InputAction, hasAction, type PlayerInput } from '../Networking/Protocol
 
 /** Events the simulation reports upward, for the server to broadcast. */
 export interface SimEvents {
-  onKill?: (victim: Actor, killer: Actor | null, cause: 'hunter' | 'predator' | 'starvation') => void;
+  onKill?: (
+    victim: Actor,
+    killer: Actor | null,
+    cause: 'hunter' | 'predator' | 'starvation' | 'storm',
+  ) => void;
   onEvent?: (def: EventDef) => void;
   onRoundEnd?: (result: RoundResult) => void;
   onRoundStart?: (assignments: RoleAssignment[]) => void;
@@ -185,6 +198,15 @@ export class Simulation implements AiContext {
   round: Round;
   weather: WeatherState;
   schedule: EventSchedule;
+
+  /**
+   * The sequence of storm circles for this round, and where the wall is now.
+   *
+   * `zone` is recomputed from `round.elapsed` every tick rather than integrated,
+   * so it cannot drift — see StormZone.ts for why that matters.
+   */
+  zoneRings: ZoneRing[] = [];
+  zone: ZoneSnapshot;
 
   /** Simulation time in seconds since this Simulation was constructed. */
   time = 0;
@@ -229,7 +251,18 @@ export class Simulation implements AiContext {
     this.round = createRound(seed);
     this.weather = createWeather(this.rng.fork('weather'));
     this.schedule = createSchedule(this.rng.fork('events'));
+    // Plan a circle straight away so the menu and lobby worlds have somewhere
+    // sensible to put animals, even before a round is dealt.
+    this.zoneRings = ZONE_ENABLED ? planRings(this.terrain, this.rng.fork('zone')) : [];
+    this.zone = evaluateZone(this.zoneRings, 0);
     this.buildObstacles();
+  }
+
+  /** The disc that spawns are drawn from: the opening circle of this round. */
+  private get spawnArea(): { x: number; z: number; radius: number } {
+    const first = this.zoneRings[0];
+    if (!first) return Terrain.WHOLE_MAP;
+    return { x: first.x, z: first.z, radius: first.radius };
   }
 
   // =========================================================================
@@ -247,6 +280,12 @@ export class Simulation implements AiContext {
   /** AiContext's view of the sky. */
   get weatherKind(): Weather {
     return this.weather.current;
+  }
+
+  /** AiContext's view of the storm circle. */
+  get stormZone(): { x: number; z: number; radius: number } | null {
+    if (this.zoneRings.length === 0) return null;
+    return this.zone;
   }
 
   forEachNearby(x: number, z: number, radius: number, fn: (actor: Actor) => void): void {
@@ -290,7 +329,20 @@ export class Simulation implements AiContext {
    * This is the single choke point for death in the game, so kill attribution,
    * corpse creation and statistics can never disagree with each other.
    */
-  damageActor(targetId: number, amount: number, attackerId: number): boolean {
+  damageActor(
+    targetId: number,
+    amount: number,
+    attackerId: number,
+    /**
+     * What is doing the damage, for sources with no attacker actor.
+     *
+     * Without this every attacker-less death was reported as starvation, which
+     * would have labelled everyone the storm killed as having starved. It also
+     * separates "something bit me" from environmental attrition, which matters
+     * because only the former is a near miss worth counting.
+     */
+    source: 'attack' | 'starvation' | 'storm' = 'attack',
+  ): boolean {
     const target = this.actors.get(targetId);
     if (!target || target.flags & ActorFlags.Dead) return false;
 
@@ -298,7 +350,10 @@ export class Simulation implements AiContext {
     if (target.kind === ActorKind.Player) {
       const p = target as PlayerActor;
       p.sinceDamage = 0;
-      p.stats.timesNearlyCaught++;
+      // Only a bite is a near miss. Ticking this for the storm would count
+      // twenty "closest calls" per second of standing in the rain and hand the
+      // award to whoever wandered out of the circle for longest.
+      if (source === 'attack') p.stats.timesNearlyCaught++;
       cancelEating(p);
     }
 
@@ -311,7 +366,7 @@ export class Simulation implements AiContext {
     this.emitNoise(target.pos.x, target.pos.z, NOISE_DEATH, NoiseKind.Death, target.id);
 
     // Attribute the kill.
-    let cause: 'hunter' | 'predator' | 'starvation' = 'predator';
+    let cause: 'hunter' | 'predator' | 'starvation' | 'storm' = 'predator';
     if (attacker && attacker.kind === ActorKind.Player) {
       const killer = attacker as PlayerActor;
       cause = killer.role === Role.Hunter ? 'hunter' : 'predator';
@@ -320,7 +375,7 @@ export class Simulation implements AiContext {
       const bestSize = killer.stats.bestKill ? ANIMALS[killer.stats.bestKill].size : -1;
       if (size > bestSize) killer.stats.bestKill = target.species;
     } else if (attackerId === 0) {
-      cause = 'starvation';
+      cause = source === 'storm' ? 'storm' : 'starvation';
     }
 
     if (target.kind === ActorKind.Player) {
@@ -475,12 +530,13 @@ export class Simulation implements AiContext {
   private spawnGroup(species: Species, count: number, rng: Rng): void {
     const def = ANIMALS[species];
     const aquatic = def.temperament.aquatic;
+    const area = this.spawnArea;
     const anchor =
       aquatic > 0.8
-        ? this.terrain.findWaterPosition(rng)
+        ? this.terrain.findWaterPosition(rng, area)
         : aquatic > 0.4
-          ? this.terrain.findShorePosition(rng)
-          : this.terrain.findLandPosition(rng);
+          ? this.terrain.findShorePosition(rng, area)
+          : this.terrain.findLandPosition(rng, area);
 
     let herd: Herd | null = null;
     if (def.temperament.social && count > 1) {
@@ -501,18 +557,22 @@ export class Simulation implements AiContext {
       const a = rng.range(0, Math.PI * 2);
       let x = anchor.x + Math.cos(a) * spread;
       let z = anchor.z + Math.sin(a) * spread;
-      if (!this.terrain.inBounds(x, z)) {
+      // Both constraints matter: inside the heightfield, and inside the circle.
+      // The scatter radius is wide enough to fling a solitary animal into the
+      // storm, and an animal that spawns there spends the round running for its
+      // life instead of behaving like scenery to hide among.
+      if (!this.terrain.inBounds(x, z) || Math.hypot(x - area.x, z - area.z) > area.radius * 0.94) {
         x = anchor.x;
         z = anchor.z;
       }
       // Do not strand a land animal in the river, or a fish on the bank.
       const deep = this.terrain.isDeepWater(x, z);
       if (deep && def.locomotion.swimSpeed < 0.4) {
-        const p = this.terrain.findLandPosition(rng);
+        const p = this.terrain.findLandPosition(rng, area);
         x = p.x;
         z = p.z;
       } else if (!deep && aquatic > 0.9) {
-        const p = this.terrain.findWaterPosition(rng);
+        const p = this.terrain.findWaterPosition(rng, area);
         x = p.x;
         z = p.z;
       }
@@ -569,7 +629,7 @@ export class Simulation implements AiContext {
   /** Add a player and return their actor. Called on join, before role dealing. */
   addPlayer(clientId: string, name: string): PlayerActor {
     const rng = this.rng.fork(`spawn:${clientId}`);
-    const spot = this.terrain.findShelteredPosition(rng);
+    const spot = this.terrain.findShelteredPosition(rng, this.spawnArea);
     const species = Species.Capybara; // placeholder until roles are dealt
     const def = ANIMALS[species];
 
@@ -695,9 +755,17 @@ export class Simulation implements AiContext {
   // =========================================================================
 
   /** Deal roles and start the intro countdown. */
-  startRound(preferred: Map<string, Species | null>): RoleAssignment[] {
+  startRound(): RoleAssignment[] {
     const ids = this.players.filter((p) => p.connected).map((p) => p.clientId);
-    const assignments = assignRoles(ids, preferred, this.rng.fork(`roles:${this.tick}`));
+    const assignments = assignRoles(ids, this.rng.fork(`roles:${this.tick}`));
+
+    // Draw this round's circle before anything is placed, since every spawn —
+    // players, herds, solitary animals — is sampled from inside it.
+    this.zoneRings = ZONE_ENABLED
+      ? planRings(this.terrain, this.rng.fork(`zone:${this.tick}`))
+      : [];
+    this.zone = evaluateZone(this.zoneRings, 0);
+    const area = this.spawnArea;
 
     for (const a of assignments) {
       const player = this.getPlayer(a.clientId);
@@ -737,8 +805,8 @@ export class Simulation implements AiContext {
        */
       const spot =
         aquatic > 0.8
-          ? this.terrain.findWaterPosition(rng)
-          : this.terrain.findShelteredPosition(rng);
+          ? this.terrain.findWaterPosition(rng, area)
+          : this.terrain.findShelteredPosition(rng, area);
       player.pos.x = spot.x;
       player.pos.z = spot.z;
       player.pos.y = this.terrain.surfaceAt(spot.x, spot.z);
@@ -808,6 +876,11 @@ export class Simulation implements AiContext {
     // --- Round phase -----------------------------------------------------
     this.updatePhase(dt);
 
+    // --- The storm circle ------------------------------------------------
+    // A pure function of elapsed round time, so this is a recompute rather than
+    // an integration and the wall is in exactly the same place on every machine.
+    this.zone = evaluateZone(this.zoneRings, this.round.elapsed);
+
     // --- Spatial index ---------------------------------------------------
     this.rebuildGrid();
 
@@ -816,6 +889,7 @@ export class Simulation implements AiContext {
     this.updateAnimals(dt, simulating);
     if (simulating) {
       for (const player of this.players) this.updatePlayer(player, dt);
+      this.applyStormToAnimals(dt);
     }
 
     // --- Housekeeping ----------------------------------------------------
@@ -917,6 +991,27 @@ export class Simulation implements AiContext {
     return animal.herdId >= 0 ? this.herds.get(animal.herdId) ?? null : null;
   }
 
+  /**
+   * The storm bites AI animals too, but gently.
+   *
+   * They already run for the middle of the circle (see the storm behaviour in
+   * AnimalAI), so most never take a scratch. The damage exists for the ones that
+   * get cornered against a cliff or a river they cannot cross: without it they
+   * would stand in the tornado forever, and a player could learn to read the
+   * storm's edge for a suspiciously calm crowd. A third of the player rate means
+   * a stuck animal dies in its own time instead of vanishing on cue.
+   */
+  private applyStormToAnimals(dt: number): void {
+    if (this.zoneRings.length === 0) return;
+    const rate = this.zone.damageRate * ZONE_AI_DAMAGE_SCALE * dt;
+    if (rate <= 0) return;
+    for (const animal of this.animals) {
+      if (animal.flags & ActorFlags.Dead) continue;
+      if (!isOutside(this.zone, animal.pos.x, animal.pos.z)) continue;
+      this.damageActor(animal.id, rate, 0, 'storm');
+    }
+  }
+
   // =========================================================================
   // Player update
   // =========================================================================
@@ -1010,6 +1105,18 @@ export class Simulation implements AiContext {
     // --- Eating ----------------------------------------------------------
     if (updateEating(player, dt, (x, z, v, k, id) => this.emitNoise(x, z, v, k, id))) {
       this.finishMeal(player, stats);
+    }
+
+    // --- The storm -------------------------------------------------------
+    // Damage is applied at the boundary the server computed this tick, and the
+    // client draws the wall from that same authoritative circle — so what you
+    // see is where it hurts.
+    if (this.zoneRings.length > 0 && isOutside(this.zone, player.pos.x, player.pos.z)) {
+      this.damageActor(player.id, this.zone.damageRate * dt, 0, 'storm');
+      // Being out here also resets regeneration, so you cannot heal in the storm
+      // by standing still: the only cure is getting back inside.
+      player.sinceDamage = 0;
+      if (player.flags & ActorFlags.Dead) return;
     }
 
     // --- Hunger, health --------------------------------------------------

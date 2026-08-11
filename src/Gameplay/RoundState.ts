@@ -132,35 +132,35 @@ export interface RoleAssignment {
 }
 
 /**
- * Deal roles for a new round.
+ * Deal roles and species for a new round.
  *
- * `preferredSpecies` honours what each player picked in the lobby, falling back
- * to a random playable species. The hunter is drawn from the players whose
- * choice can be a hunter; if nobody picked a predator, one player is
- * reassigned to a predator species — being handed a crocodile is itself the
- * tell-free way of saying "you are the hunter", since only that player knows.
+ * **Nobody chooses their animal.** Every player is dealt a random playable
+ * species, every round, and there is no lobby control to influence it.
+ *
+ * This is not a simplification, it is the point. If players could pick, they
+ * would pick, and they would pick the same thing every time — which destroys the
+ * game twice over. First it collapses the crowd: eight players who all chose
+ * capybara means the jungle is full of capybaras that are all people, and hiding
+ * among AI stops meaning anything. Second it hands the hunter a free read,
+ * because "that species is popular with humans" is exactly the kind of
+ * metagame knowledge that no amount of careful animal impersonation can beat.
+ *
+ * Being handed a random animal also *is* the round's opening challenge: you find
+ * out you are a sloth and have to work out how a sloth survives.
+ *
+ * The hunter is picked at random and then, only if their rolled species could
+ * not plausibly kill anything, swapped onto one that can. Survivors keep rolling
+ * from the full playable list — predators included — so being dealt a caiman is
+ * never by itself a tell that you are the hunter, or that somebody else is.
  */
-export function assignRoles(
-  clientIds: string[],
-  preferredSpecies: Map<string, Species | null>,
-  rng: Rng,
-): RoleAssignment[] {
+export function assignRoles(clientIds: string[], rng: Rng): RoleAssignment[] {
   if (clientIds.length === 0) return [];
 
-  // Resolve each player's species first.
   const species = new Map<string, Species>();
-  for (const id of clientIds) {
-    const pick = preferredSpecies.get(id) ?? null;
-    species.set(id, pick && PLAYABLE_SPECIES.includes(pick) ? pick : rng.pick(PLAYABLE_SPECIES));
-  }
+  for (const id of clientIds) species.set(id, rng.pick(PLAYABLE_SPECIES));
 
-  // Pick the hunter. Prefer somebody who already chose a predator so we do not
-  // have to override anyone's choice.
-  const shuffled = rng.shuffle([...clientIds]);
-  let hunterId = shuffled.find((id) => ANIMALS[species.get(id)!].canBeHunter);
-  if (!hunterId) {
-    // Nobody chose a predator: promote one player and swap their species.
-    hunterId = shuffled[0];
+  const hunterId = rng.pick(clientIds);
+  if (!ANIMALS[species.get(hunterId)!].canBeHunter) {
     species.set(hunterId, rng.pick(HUNTER_SPECIES));
   }
 

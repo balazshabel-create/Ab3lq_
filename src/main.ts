@@ -210,7 +210,6 @@ class Game {
         // happens to click again.
         if (target === 'hud') void this.input.requestLock();
       },
-      onSetSpecies: (species) => this.transport?.send({ t: ClientMsg.SetSpecies, species }),
       onSetReady: (ready) => this.transport?.send({ t: ClientMsg.SetReady, ready }),
       onStartRound: () => {
         this.transport?.send({ t: ClientMsg.StartRound });

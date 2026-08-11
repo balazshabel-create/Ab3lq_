@@ -22,7 +22,7 @@ import type { RoleCard, RoundResult, RoundStatus } from '../Gameplay/RoundState'
 import type { EventId } from '../Gameplay/RandomEvents';
 import type { NoiseKind } from '../Core/Types';
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 // ---------------------------------------------------------------------------
 // Message type tags
@@ -30,7 +30,6 @@ export const PROTOCOL_VERSION = 3;
 
 export enum ClientMsg {
   Join = 'join',
-  SetSpecies = 'set_species',
   SetReady = 'set_ready',
   StartRound = 'start_round',
   Input = 'input',
@@ -100,7 +99,6 @@ export function hasAction(actions: number, action: InputAction): boolean {
 
 export type ClientPacket =
   | { t: ClientMsg.Join; name: string; version: number }
-  | { t: ClientMsg.SetSpecies; species: Species | null }
   | { t: ClientMsg.SetReady; ready: boolean }
   | { t: ClientMsg.StartRound }
   | { t: ClientMsg.Input; input: PlayerInput }
@@ -114,8 +112,6 @@ export type ClientPacket =
 export interface LobbyPlayer {
   clientId: string;
   name: string;
-  /** The species they picked, or null for "surprise me". */
-  species: Species | null;
   ready: boolean;
   isHost: boolean;
   connected: boolean;
@@ -136,10 +132,38 @@ export interface KillFeedEntry {
   /** True if the victim was a person, which everybody finds out immediately. */
   victimWasPlayer: boolean;
   /** How it died. */
-  cause: 'hunter' | 'predator' | 'starvation' | 'left';
+  cause: 'hunter' | 'predator' | 'starvation' | 'storm' | 'left';
   /** Rough distance from the receiving player, for "that was close" framing. */
   distance: number;
   time: number;
+}
+
+/**
+ * The storm circle, as sent to clients.
+ *
+ * The client could recompute this from the ring plan and the round clock — it is
+ * a pure function of both — but the plan is re-drawn every round while the world
+ * seed is not, so there is no value the client already has that identifies this
+ * round's circles. Sending the evaluated wall costs about a hundred bytes at the
+ * status rate and removes any possibility of the drawn boundary disagreeing with
+ * the one that does damage.
+ */
+export interface ZoneWire {
+  x: number;
+  z: number;
+  radius: number;
+  stage: number;
+  totalStages: number;
+  shrinking: boolean;
+  /**
+   * Seconds until the next shrink begins, or -1 when the circle is done closing.
+   * Not Infinity: `JSON.stringify` turns that into `null` and the field would
+   * arrive with the wrong type.
+   */
+  untilShrink: number;
+  damageRate: number;
+  /** Where the wall is heading, for the preview ring on the map. */
+  next: { x: number; z: number; radius: number } | null;
 }
 
 export type ServerPacket =
@@ -158,6 +182,7 @@ export type ServerPacket =
       status: RoundStatus;
       weather: { current: Weather; rain: number; fog: number; wind: number; hour: number };
       events: { id: EventId; timeLeft: number; duration: number; justStarted: boolean }[];
+      zone: ZoneWire | null;
     }
   | { t: ServerMsg.Event; id: EventId; announcement: string; detail: string; emoji: string }
   | { t: ServerMsg.KillFeed; entry: KillFeedEntry }

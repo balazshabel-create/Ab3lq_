@@ -46,6 +46,13 @@ export interface Clearing {
   radius: number;
 }
 
+/** A disc that spawn sampling is restricted to. */
+export interface SpawnArea {
+  x: number;
+  z: number;
+  radius: number;
+}
+
 const HALF = WORLD_SIZE / 2;
 
 export class Terrain {
@@ -69,6 +76,23 @@ export class Terrain {
   private readonly detailNoise: Noise2D;
   private readonly foliageNoise: Noise2D;
 
+  /**
+   * River segments bucketed into a coarse grid.
+   *
+   * The bake asks "how far is the nearest river?" once per grid vertex, which at
+   * this world size is a hundred thousand queries against roughly a hundred and
+   * forty segments. Testing every segment every time is fourteen million
+   * point-to-segment distances and turns world generation into a visible stall.
+   * Since a river only influences terrain within a couple of channel widths, each
+   * segment is registered in the cells it can possibly reach and a query only
+   * examines its own cell — a handful of segments instead of all of them.
+   */
+  private readonly riverSegs: { ax: number; az: number; bx: number; bz: number; width: number }[] =
+    [];
+  private riverBuckets: number[][] = [];
+  private readonly riverCell = 40;
+  private riverCols = 1;
+
   constructor(seed: number) {
     this.seed = seed;
     this.baseNoise = new Noise2D(seed ^ 0x1111);
@@ -77,6 +101,7 @@ export class Terrain {
 
     const rng = new Rng(seed ^ 0x4444);
     this.generateRivers(rng);
+    this.buildRiverIndex();
     this.generateClearings(rng);
 
     const n = TERRAIN_GRID * TERRAIN_GRID;
@@ -172,30 +197,75 @@ export class Terrain {
     }
   }
 
-  /** Distance from a point to the nearest river centre-line, in metres. */
-  private distanceToRiver(x: number, z: number): { dist: number; width: number } {
-    let best = Infinity;
-    let bestWidth = 12;
+  /**
+   * Flatten every river into segments and register each one in the grid cells it
+   * can influence.
+   *
+   * "Can influence" is the bank distance — `width * 2.6` — since beyond that
+   * `rawHeight` ignores the river entirely. Registering a segment in a slightly
+   * generous box is harmless; missing one would carve a visible notch out of a
+   * riverbank, so the box is expanded by a whole cell for safety.
+   */
+  private buildRiverIndex(): void {
     for (const river of this.rivers) {
       const pts = river.points;
       for (let i = 0; i < pts.length - 1; i++) {
-        const ax = pts[i].x;
-        const az = pts[i].z;
-        const bx = pts[i + 1].x;
-        const bz = pts[i + 1].z;
-        const abx = bx - ax;
-        const abz = bz - az;
-        const lenSq = abx * abx + abz * abz || 1e-6;
-        // Project the point onto the segment, clamped to its extent.
-        let t = ((x - ax) * abx + (z - az) * abz) / lenSq;
-        t = clamp01(t);
-        const cx = ax + abx * t;
-        const cz = az + abz * t;
-        const d = Math.hypot(x - cx, z - cz);
-        if (d < best) {
-          best = d;
-          bestWidth = river.width;
+        this.riverSegs.push({
+          ax: pts[i].x,
+          az: pts[i].z,
+          bx: pts[i + 1].x,
+          bz: pts[i + 1].z,
+          width: river.width,
+        });
+      }
+    }
+
+    this.riverCols = Math.ceil(WORLD_SIZE / this.riverCell) + 1;
+    this.riverBuckets = Array.from({ length: this.riverCols * this.riverCols }, () => []);
+
+    for (let s = 0; s < this.riverSegs.length; s++) {
+      const seg = this.riverSegs[s];
+      const reach = seg.width * 2.6 + this.riverCell;
+      const minX = Math.min(seg.ax, seg.bx) - reach;
+      const maxX = Math.max(seg.ax, seg.bx) + reach;
+      const minZ = Math.min(seg.az, seg.bz) - reach;
+      const maxZ = Math.max(seg.az, seg.bz) + reach;
+      const i0 = this.riverCellIndex(minX);
+      const i1 = this.riverCellIndex(maxX);
+      const j0 = this.riverCellIndex(minZ);
+      const j1 = this.riverCellIndex(maxZ);
+      for (let j = j0; j <= j1; j++) {
+        for (let i = i0; i <= i1; i++) {
+          this.riverBuckets[j * this.riverCols + i].push(s);
         }
+      }
+    }
+  }
+
+  private riverCellIndex(v: number): number {
+    return clamp(Math.floor((v + HALF) / this.riverCell), 0, this.riverCols - 1);
+  }
+
+  /** Distance from a point to the nearest river centre-line, in metres. */
+  private distanceToRiver(x: number, z: number): { dist: number; width: number } {
+    const i = this.riverCellIndex(x);
+    const j = this.riverCellIndex(z);
+    const bucket = this.riverBuckets[j * this.riverCols + i];
+    let best = Infinity;
+    let bestWidth = 12;
+    for (let k = 0; k < bucket.length; k++) {
+      const seg = this.riverSegs[bucket[k]];
+      const abx = seg.bx - seg.ax;
+      const abz = seg.bz - seg.az;
+      const lenSq = abx * abx + abz * abz || 1e-6;
+      // Project the point onto the segment, clamped to its extent.
+      const t = clamp01(((x - seg.ax) * abx + (z - seg.az) * abz) / lenSq);
+      const cx = seg.ax + abx * t;
+      const cz = seg.az + abz * t;
+      const d = Math.hypot(x - cx, z - cz);
+      if (d < best) {
+        best = d;
+        bestWidth = seg.width;
       }
     }
     return { dist: best, width: bestWidth };
@@ -390,6 +460,16 @@ export class Terrain {
   }
 
   /**
+   * A disc to draw spawn positions from.
+   *
+   * Passed down from the round's storm circle so that nothing — no player, no AI
+   * animal — is ever spawned into the storm. Spawning outside the circle is not
+   * a slightly worse start, it is a death sentence delivered before the player
+   * has pressed a key.
+   */
+  static readonly WHOLE_MAP: SpawnArea = { x: 0, z: 0, radius: HALF * 0.86 };
+
+  /**
    * Find a position matching a predicate by rejection sampling.
    * Deterministic given the rng, and always returns something.
    */
@@ -397,21 +477,29 @@ export class Terrain {
     rng: Rng,
     predicate: (x: number, z: number) => boolean,
     attempts = 90,
+    area: SpawnArea = Terrain.WHOLE_MAP,
   ): { x: number; z: number } {
-    let fallback = { x: 0, z: 0 };
+    // Keep clear of the very edge of the disc so an animal that wanders a few
+    // metres in the first seconds is not immediately in the storm.
+    const radius = Math.min(area.radius * 0.92, HALF * 0.86);
+    let fallback = { x: area.x, z: area.z };
     for (let i = 0; i < attempts; i++) {
-      const p = rng.inCircle(HALF * 0.86);
-      if (i === 0) fallback = { x: p.x, z: p.y };
-      if (predicate(p.x, p.y)) return { x: p.x, z: p.y };
+      const p = rng.inCircle(radius);
+      const x = area.x + p.x;
+      const z = area.z + p.y;
+      if (i === 0) fallback = { x, z };
+      if (predicate(x, z)) return { x, z };
     }
     return fallback;
   }
 
   /** A dry, gently sloped spot — used for land-animal spawns. */
-  findLandPosition(rng: Rng): { x: number; z: number } {
+  findLandPosition(rng: Rng, area?: SpawnArea): { x: number; z: number } {
     return this.findPosition(
       rng,
       (x, z) => !this.isWater(x, z) && this.slopeAt(x, z) < 0.5 && this.inBounds(x, z),
+      90,
+      area,
     );
   }
 
@@ -424,7 +512,7 @@ export class Terrain {
    * empty field rather than a rainforest. Requiring foliage means you always
    * start the round already hidden, with something to orient by.
    */
-  findShelteredPosition(rng: Rng): { x: number; z: number } {
+  findShelteredPosition(rng: Rng, area?: SpawnArea): { x: number; z: number } {
     // Two passes: insist on real cover first, then relax rather than fail.
     const strict = this.findPosition(
       rng,
@@ -434,22 +522,39 @@ export class Terrain {
         this.inBounds(x, z) &&
         this.foliageAt(x, z) > 0.45,
       120,
+      area,
     );
     if (this.foliageAt(strict.x, strict.z) > 0.45) return strict;
-    return this.findLandPosition(rng);
+    return this.findLandPosition(rng, area);
   }
 
   /** A point in deep water — used for crocodiles, fish and anacondas. */
-  findWaterPosition(rng: Rng): { x: number; z: number } {
-    return this.findPosition(rng, (x, z) => this.isDeepWater(x, z) && this.inBounds(x, z));
+  findWaterPosition(rng: Rng, area?: SpawnArea): { x: number; z: number } {
+    const found = this.findPosition(
+      rng,
+      (x, z) => this.isDeepWater(x, z) && this.inBounds(x, z),
+      120,
+      area,
+    );
+    // A circle can legitimately contain only shallow water. Rather than drop a
+    // caiman on a hillside, fall back to the shoreline and then to dry land.
+    if (this.isDeepWater(found.x, found.z)) return found;
+    const shore = this.findShorePosition(rng, area);
+    if (this.waterDepthAt(shore.x, shore.z) > 0.05) return shore;
+    return this.findLandPosition(rng, area);
   }
 
   /** A point on the water's edge — where most jungle life congregates. */
-  findShorePosition(rng: Rng): { x: number; z: number } {
-    return this.findPosition(rng, (x, z) => {
-      const d = this.waterDepthAt(x, z);
-      return d > 0.05 && d < DEEP_WATER_DEPTH && this.inBounds(x, z);
-    });
+  findShorePosition(rng: Rng, area?: SpawnArea): { x: number; z: number } {
+    return this.findPosition(
+      rng,
+      (x, z) => {
+        const d = this.waterDepthAt(x, z);
+        return d > 0.05 && d < DEEP_WATER_DEPTH && this.inBounds(x, z);
+      },
+      90,
+      area,
+    );
   }
 
   /** Expose the baked heights so the renderer can build a mesh without rebaking. */

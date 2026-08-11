@@ -34,6 +34,7 @@ import {
   NOISE_SPLASH,
   NOISE_WALK,
   TURN_RATE,
+  ZONE_AI_FLEE_MARGIN,
 } from '../Systems/Config';
 import { ANIMALS, BodyPlan, Diet, Species } from '../Animals/AnimalTypes';
 import { canPrey, threatLevel } from '../Animals/FoodChain';
@@ -166,12 +167,46 @@ export function updateAnimal(
     chooseBehavior(animal, ctx, herd, prey, def.diet);
   }
 
+  /*
+   * ---- The storm overrides everything ----------------------------------
+   *
+   * Deliberately applied *after* behaviour selection, so it wins over grazing,
+   * sleeping and even fleeing a jaguar. An animal does not finish its meal
+   * because a predator is the more pressing concern than a tornado; it runs.
+   *
+   * Each animal aims at its own point well inside the circle rather than at the
+   * exact centre — derived from its personality, so it is stable frame to frame.
+   * Aiming everything at one pixel produced a tight knot of animals standing on
+   * top of each other in the middle of the map, which is both hideous and a
+   * gigantic free hint about where the circle is going.
+   */
+  const zone = ctx.stormZone;
+  if (zone) {
+    const outward = Math.hypot(animal.pos.x - zone.x, animal.pos.z - zone.z) - zone.radius;
+    if (outward > -ZONE_AI_FLEE_MARGIN) {
+      const spread = zone.radius * (0.25 + animal.personality * 0.45);
+      const a = animal.personality * Math.PI * 2;
+      animal.behavior = AiBehavior.FleeStorm;
+      animal.behaviorTimer = 0.6;
+      animal.target.x = zone.x + Math.cos(a) * spread;
+      animal.target.z = zone.z + Math.sin(a) * spread;
+    }
+  }
+
   // ---- Behaviour execution ---------------------------------------------
   resetIntent();
   // Eating is re-asserted every tick by whichever behaviour is feeding, so it
   // always reflects this tick rather than lingering from the last one.
   animal.flags &= ~ActorFlags.Eating;
   switch (animal.behavior) {
+    case AiBehavior.FleeStorm:
+      // Reusing doSeek keeps the panic looking like ordinary travel — wander
+      // wobble and all — which is what a player copying the crowd needs.
+      doSeek(animal, ctx, 1);
+      // Sprint only once the storm has actually caught us. An animal that is
+      // merely near the edge trots; one standing in a tornado runs flat out.
+      intent.sprint = zone !== null && isInStorm(animal, zone);
+      break;
     case AiBehavior.Flee:
       doFlee(animal, ctx);
       break;
@@ -381,6 +416,11 @@ function chooseBehavior(
 // ---------------------------------------------------------------------------
 // Behaviour implementations
 // ---------------------------------------------------------------------------
+
+/** Has the storm already reached this animal, as opposed to being nearby? */
+function isInStorm(animal: AiAnimal, zone: { x: number; z: number; radius: number }): boolean {
+  return Math.hypot(animal.pos.x - zone.x, animal.pos.z - zone.z) > zone.radius;
+}
 
 function resetIntent(): void {
   intent.dirX = 0;

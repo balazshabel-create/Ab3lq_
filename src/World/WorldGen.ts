@@ -28,6 +28,16 @@ export enum PropKind {
   FruitBush = 10,
   LilyPad = 11,
   Flower = 12,
+  /** Tall blades standing in the shallows at the water's edge. */
+  Reed = 13,
+  /**
+   * Weed rooted in the river bed, reaching up towards the surface.
+   *
+   * Only visible from under the water, which is the entire reason it exists: a
+   * submerged crocodile needs somewhere to actually hide, and before this the
+   * river bed was a bare brown plane with nothing on it.
+   */
+  Waterweed = 14,
 }
 
 /** One placed piece of scenery. */
@@ -328,17 +338,68 @@ export function generateWorld(
         variant: rng.int(0, 1),
       });
     });
-    placeScattered(terrain, cosmeticRng, Math.round(WORLD_PROPS.clearings * 24 * d), 0, (x, z, y, rng) => {
+    /*
+     * Flowers.
+     *
+     * Placed with `minDensity` 0 so they reach into clearings and onto the
+     * riverbanks, which is exactly where they should be: the open, sunlit ground
+     * is where a rainforest actually flowers, and it is also the ground that
+     * looks emptiest without them.
+     */
+    placeScattered(terrain, cosmeticRng, Math.round(WORLD_PROPS.flowers * d), 0, (x, z, y, rng) => {
       content.cosmetic.push({
         kind: PropKind.Flower,
         x,
         y,
         z,
         rot: rng.range(0, Math.PI * 2),
-        scale: rng.range(0.6, 1.2),
-        variant: rng.int(0, 2),
+        scale: rng.range(0.6, 1.3),
+        variant: rng.int(0, 4),
       });
     });
+
+    // --- Reeds: the waterline, where the jungle meets the river -----------
+    const reedCount = Math.round(WORLD_PROPS.reeds * d);
+    for (let i = 0; i < reedCount; i++) {
+      const p = terrain.findShorePosition(cosmeticRng);
+      const depth = terrain.waterDepthAt(p.x, p.z);
+      if (depth <= 0.02) continue;
+      content.cosmetic.push({
+        kind: PropKind.Reed,
+        // Rooted on the bed, so a reed in deeper water stands taller out of it.
+        x: p.x,
+        y: terrain.heightAt(p.x, p.z),
+        z: p.z,
+        rot: cosmeticRng.range(0, Math.PI * 2),
+        scale: cosmeticRng.range(0.75, 1.7),
+        variant: cosmeticRng.int(0, 2),
+      });
+    }
+
+    /*
+     * --- Underwater weed: the crocodile's cover -------------------------
+     *
+     * Rooted on the river bed and scaled to the local depth, so a bed of weed
+     * reaches roughly to the surface without poking through it. Placement wants
+     * genuinely deep water — weed in the shallows would be visible from the bank
+     * and would not hide anything.
+     */
+    const weedCount = Math.round(WORLD_PROPS.underwaterPlants * d);
+    for (let i = 0; i < weedCount; i++) {
+      const p = terrain.findWaterPosition(cosmeticRng);
+      const depth = terrain.waterDepthAt(p.x, p.z);
+      if (depth < 0.9) continue;
+      content.cosmetic.push({
+        kind: PropKind.Waterweed,
+        x: p.x,
+        y: terrain.heightAt(p.x, p.z),
+        z: p.z,
+        rot: cosmeticRng.range(0, Math.PI * 2),
+        // Scale is the fraction of the depth this clump fills.
+        scale: depth * cosmeticRng.range(0.5, 0.95),
+        variant: cosmeticRng.int(0, 2),
+      });
+    }
 
     // Vines hang from the bigger trees.
     const vineCount = Math.round(WORLD_PROPS.vines * d);

@@ -247,6 +247,8 @@ export enum AiBehavior {
   Follow = 9,
   Patrol = 10,
   Vocalise = 11,
+  /** Running for the middle of the storm circle. Overrides everything else. */
+  FleeStorm = 12,
 }
 
 /** A transient noise in the world. The hunter's "listen" sense reads these. */
@@ -338,5 +340,19 @@ export interface AiContext {
   /** Report a noise into the world. */
   emitNoise(x: number, z: number, volume: number, kind: NoiseKind, sourceId: number): void;
   /** Deal damage to an actor. Returns true if it died. */
-  damageActor(targetId: number, amount: number, attackerId: number): boolean;
+  damageActor(
+    targetId: number,
+    amount: number,
+    attackerId: number,
+    source?: 'attack' | 'starvation' | 'storm',
+  ): boolean;
+  /**
+   * The storm circle as it stands this tick, or null if the round has none.
+   *
+   * Animals need to know about it for the same reason players do: an animal that
+   * stands placidly in a tornado is a tell. If the crowd outside the wall behaves
+   * normally while the crowd inside runs, the wall stops being frightening and
+   * starts being scenery.
+   */
+  readonly stormZone: { x: number; z: number; radius: number } | null;
 }

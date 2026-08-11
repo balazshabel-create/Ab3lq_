@@ -41,6 +41,10 @@ import {
   ROUND_DURATION,
   SIM_DT,
   WHISTLE_INTERVAL,
+  WORLD_SIZE,
+  ZONE_FIRST_SHRINK_AT,
+  ZONE_INITIAL_RADIUS,
+  ZONE_SHRINK_DURATION,
 } from '../src/Systems/Config';
 import type { RoundResult } from '../src/Gameplay/RoundState';
 
@@ -123,12 +127,8 @@ test('role dealing produces exactly one hunter, always a predator, never weakene
   for (let trial = 0; trial < 40; trial++) {
     const n = 1 + (trial % 12);
     const ids = Array.from({ length: n }, (_, i) => `c${i}`);
-    const prefs = new Map<string, Species | null>();
-    // Half the trials: everybody picks a harmless herbivore, so the dealer has
-    // to promote somebody to a predator species.
-    for (const id of ids) prefs.set(id, trial % 2 === 0 ? Species.Capybara : null);
 
-    const assignments = assignRoles(ids, prefs, rng);
+    const assignments = assignRoles(ids, rng);
     const hunters = assignments.filter((a) => a.role === Role.Hunter);
     assert.equal(hunters.length, 1, `expected 1 hunter for ${n} players`);
     assert.equal(hunters[0].weakness, null, 'the hunter must never carry a weakness');
@@ -147,8 +147,7 @@ test('role dealing produces exactly one hunter, always a predator, never weakene
 test('the hunter is always an animal with AI cover of its own species', () => {
   const sim = new Simulation(2024);
   for (let i = 0; i < 4; i++) sim.addPlayer(`p${i}`, `Player ${i}`);
-  const prefs = new Map<string, Species | null>();
-  sim.startRound(prefs);
+  sim.startRound();
 
   const hunter = sim.getPlayers().find((p) => p.role === Role.Hunter);
   assert.ok(hunter, 'a hunter must exist');
@@ -166,7 +165,7 @@ test('the hunter is always an animal with AI cover of its own species', () => {
 test('every player species gets AI cover to hide among', () => {
   const sim = new Simulation(31337);
   for (let i = 0; i < 6; i++) sim.addPlayer(`p${i}`, `P${i}`);
-  sim.startRound(new Map());
+  sim.startRound();
 
   for (const player of sim.getPlayers()) {
     let count = 0;
@@ -180,7 +179,7 @@ test('every player species gets AI cover to hide among', () => {
 test('a round terminates cleanly and produces a full reveal', () => {
   const sim = new Simulation(555);
   for (let i = 0; i < 4; i++) sim.addPlayer(`p${i}`, `P${i}`);
-  sim.startRound(new Map());
+  sim.startRound();
 
   assert.equal(sim.round.phase, RoundPhase.Intro);
   advance(sim, 10);
@@ -214,7 +213,7 @@ test('a round terminates cleanly and produces a full reveal', () => {
 test('the round-over screen gives way to the lobby', () => {
   const sim = new Simulation(556);
   sim.addPlayer('a', 'A');
-  sim.startRound(new Map());
+  sim.startRound();
   advance(sim, 10);
 
   // Force an immediate end by killing the only player.
@@ -231,7 +230,7 @@ test('a survivor who never whistles becomes covered in flies', () => {
   const sim = new Simulation(8080);
   sim.addPlayer('a', 'A');
   sim.addPlayer('b', 'B');
-  sim.startRound(new Map());
+  sim.startRound();
   advance(sim, 9); // clear the intro
 
   const survivor = sim.getPlayers().find((p) => p.role === Role.Survivor);
@@ -248,7 +247,7 @@ test('a survivor who never whistles becomes covered in flies', () => {
 test('the hunter never accumulates flies', () => {
   const sim = new Simulation(9090);
   for (let i = 0; i < 3; i++) sim.addPlayer(`p${i}`, `P${i}`);
-  sim.startRound(new Map());
+  sim.startRound();
   advance(sim, 9);
 
   const hunter = sim.getPlayers().find((p) => p.role === Role.Hunter)!;
@@ -259,7 +258,7 @@ test('the hunter never accumulates flies', () => {
 test('hunger drains at the rate the species table specifies', () => {
   const sim = new Simulation(1212);
   sim.addPlayer('a', 'A');
-  sim.startRound(new Map());
+  sim.startRound();
   advance(sim, 9);
 
   const player = sim.getPlayers()[0];
@@ -299,7 +298,7 @@ test('hunger is a real clock: an average animal empties inside one round', () =>
 test('reaching zero hunger kills the player', () => {
   const sim = new Simulation(1213);
   sim.addPlayer('a', 'A');
-  sim.startRound(new Map());
+  sim.startRound();
   advance(sim, 9);
 
   const player = sim.getPlayers()[0];
@@ -321,7 +320,7 @@ test('species hunger rates differ as designed', () => {
 test('AI animals actually move around', () => {
   const sim = new Simulation(6161);
   sim.addPlayer('a', 'A');
-  sim.startRound(new Map());
+  sim.startRound();
   advance(sim, 9);
 
   const before: { id: number; x: number; z: number }[] = [];
@@ -343,7 +342,7 @@ test('AI animals actually move around', () => {
 test('animals stay inside the world bounds', () => {
   const sim = new Simulation(4321);
   sim.addPlayer('a', 'A');
-  sim.startRound(new Map());
+  sim.startRound();
   advance(sim, 60);
 
   let outOfBounds = 0;
@@ -352,7 +351,11 @@ test('animals stay inside the world bounds', () => {
       outOfBounds++;
       return;
     }
-    if (Math.max(Math.abs(a.pos.x), Math.abs(a.pos.z)) > 320) outOfBounds++;
+    // Derived from WORLD_SIZE rather than hardcoded: clampToBounds keeps actors
+    // inside HALF * 0.89, and a literal here silently becomes wrong the moment
+    // the world is resized — which is exactly what happened.
+    const limit = (WORLD_SIZE / 2) * 0.9;
+    if (Math.max(Math.abs(a.pos.x), Math.abs(a.pos.z)) > limit) outOfBounds++;
   });
   assert.equal(outOfBounds, 0, 'no animal may leave the map or reach a NaN position');
 });
@@ -429,7 +432,7 @@ test('snapshot encoding round-trips without losing meaningful precision', () => 
 test('snapshots never leak another player role, weakness or hunger', () => {
   const sim = new Simulation(31415);
   for (let i = 0; i < 4; i++) sim.addPlayer(`p${i}`, `P${i}`);
-  sim.startRound(new Map());
+  sim.startRound();
   advance(sim, 12);
 
   const victim = sim.getPlayers().find((p) => p.role === Role.Survivor)!;
@@ -470,7 +473,7 @@ test('snapshots never leak another player role, weakness or hunger', () => {
 test('players and AI of the same species are indistinguishable on the wire', () => {
   const sim = new Simulation(2718);
   sim.addPlayer('a', 'A');
-  sim.startRound(new Map());
+  sim.startRound();
   advance(sim, 12);
 
   const player = sim.getPlayers()[0];
@@ -514,7 +517,7 @@ test('withdrawn species never appear anywhere in the game', () => {
   // And none of them should be in a populated world.
   const sim = new Simulation(4711);
   for (let i = 0; i < 4; i++) sim.addPlayer(`p${i}`, `P${i}`);
-  sim.startRound(new Map());
+  sim.startRound();
   advance(sim, 12);
 
   const seen = new Set<Species>();
@@ -530,7 +533,7 @@ test('a predator can actually kill the AI prey it hunts', () => {
   // predators could never feed and the attack felt broken.
   const sim = new Simulation(1357);
   sim.addPlayer('a', 'A');
-  sim.startRound(new Map());
+  sim.startRound();
   advance(sim, 10);
 
   const hunter = sim.getPlayers()[0];
@@ -573,7 +576,7 @@ test('a bite on another player is survivable', () => {
   const sim = new Simulation(2468);
   sim.addPlayer('a', 'A');
   sim.addPlayer('b', 'B');
-  sim.startRound(new Map());
+  sim.startRound();
   advance(sim, 10);
 
   const hunter = sim.getPlayers().find((p) => p.role === Role.Hunter)!;
@@ -606,7 +609,7 @@ test('a bite on another player is survivable', () => {
 test('a simulation tick stays well inside the frame budget', () => {
   const sim = new Simulation(6789);
   for (let i = 0; i < 8; i++) sim.addPlayer(`p${i}`, `P${i}`);
-  sim.startRound(new Map());
+  sim.startRound();
   advance(sim, 9);
 
   // Warm up, then measure.

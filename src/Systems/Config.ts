@@ -234,8 +234,19 @@ export const RAIN_NOISE_DAMPING = 0.62;
 // World generation
 // ---------------------------------------------------------------------------
 
-/** Playable area is WORLD_SIZE x WORLD_SIZE metres, centred on the origin. */
-export const WORLD_SIZE = 620;
+/**
+ * Simulated area is WORLD_SIZE x WORLD_SIZE metres, centred on the origin.
+ *
+ * Considerably larger than the circle anyone actually plays in, which is the
+ * point: the storm zone is drawn at a random spot inside this, so no two rounds
+ * take place on the same ground. Beyond WORLD_SIZE the renderer continues the
+ * jungle out to the horizon as non-interactive scenery, so the world never
+ * visibly ends.
+ *
+ * The snapshot packs positions as int16 at 1/8 m, giving a ±4096 m budget — this
+ * is nowhere near it, so the world can grow further without a protocol change.
+ */
+export const WORLD_SIZE = 1000;
 
 /** Vertical scale of the terrain. */
 export const TERRAIN_HEIGHT = 26;
@@ -247,34 +258,121 @@ export const WATER_LEVEL = 2.2;
 export const DEEP_WATER_DEPTH = 1.6;
 
 /** Resolution of the collision/height lookup grid (cells per side). */
-export const TERRAIN_GRID = 256;
+export const TERRAIN_GRID = 320;
 
 /** Resolution of the visible terrain mesh per graphics preset. */
-export const TERRAIN_MESH_SEGMENTS = { low: 96, medium: 160, high: 224 } as const;
+export const TERRAIN_MESH_SEGMENTS = { low: 112, medium: 192, high: 272 } as const;
 
-/** Prop budget for the jungle. Scaled down on lower graphics presets. */
+/**
+ * How far past the world edge the cosmetic backdrop reaches, and how high the
+ * ring of mountains that closes off the basin stands.
+ *
+ * None of this is simulated — there is no collision, no props with logic, no AI
+ * out here. It exists so that looking outward reads as "the rainforest goes on
+ * for a hundred kilometres", which is what an Amazon basin actually looks like,
+ * instead of "the level ends in fog".
+ */
+export const BACKDROP_RADIUS = 4200;
+export const BACKDROP_MOUNTAIN_HEIGHT = 620;
+/** Cosmetic canopy trees scattered between the world edge and the mountains. */
+export const BACKDROP_TREES = { low: 1400, medium: 3200, high: 6000 } as const;
+
+/**
+ * Prop budget for the jungle. Scaled down on lower graphics presets.
+ *
+ * Scaled up with the world so density holds, and then pushed well past that for
+ * ground cover: grass, flowers and ferns are what make a rainforest floor read
+ * as a rainforest floor rather than a green heightfield, and they are the
+ * cheapest props we have — one instanced draw per chunk, no collision, no AI.
+ */
 export const WORLD_PROPS = {
-  trees: 1500,
-  bushes: 2600,
-  grassPatches: 9000,
-  rocks: 420,
-  logs: 260,
-  ferns: 1800,
-  vines: 520,
-  huts: 7,
-  bridges: 5,
-  caves: 6,
-  clearings: 9,
-  fruitBushes: 190,
-  fishingSpots: 90,
+  trees: 4200,
+  bushes: 7600,
+  grassPatches: 42000,
+  flowers: 9000,
+  rocks: 900,
+  logs: 620,
+  ferns: 6400,
+  vines: 1300,
+  /** Reeds and lilies at the waterline, and weed on the river bed. */
+  reeds: 5200,
+  underwaterPlants: 4200,
+  huts: 11,
+  bridges: 8,
+  caves: 10,
+  clearings: 14,
+  fruitBushes: 420,
+  fishingSpots: 190,
 } as const;
+
+// ---------------------------------------------------------------------------
+// The storm zone — the shrinking circle the round is played inside
+// ---------------------------------------------------------------------------
+
+/**
+ * A circle is drawn at a random spot in the jungle at the start of each round,
+ * and it closes in every couple of minutes. Outside it the weather is not
+ * weather any more: a standing wall of storm, tornadoes and continuous
+ * lightning. Staying out there kills you.
+ *
+ * Why a game about hiding wants this: hiding has a failure mode where the
+ * correct play is to walk to a far corner, stand in a bush and wait out ten
+ * minutes. That is unbeatable and extremely boring, for the hider as much as
+ * for the hunter. A shrinking circle removes the corner. By the last stage
+ * everyone left is inside a clearing-sized space, still pretending to be an
+ * animal, and the hunter knows they are all in there somewhere.
+ */
+export const ZONE_ENABLED = true;
+
+/** Radius of the first circle, and of the last one. */
+export const ZONE_INITIAL_RADIUS = 300;
+export const ZONE_FINAL_RADIUS = 36;
+
+/** When the first shrink starts, and the gap between shrinks (seconds). */
+export const ZONE_FIRST_SHRINK_AT = 120;
+export const ZONE_SHRINK_INTERVAL = 120;
+
+/** How long the wall takes to travel to its new position. */
+export const ZONE_SHRINK_DURATION = 42;
+
+/** The HUD starts warning this long before a shrink begins. */
+export const ZONE_WARNING_TIME = 20;
+
+/**
+ * Damage per second in the storm, indexed by how many shrinks have happened.
+ *
+ * The first ring is survivable — you can cut a corner through the storm to get
+ * back, and that is a real, useful, frightening option. By the last one it is
+ * simply fatal, because at that point being outside means refusing to play.
+ */
+export const ZONE_DAMAGE_RATE = [2.4, 4.5, 7.5, 12, 20] as const;
+
+/** AI animals take a fraction of that — they flee inward instead of dying. */
+export const ZONE_AI_DAMAGE_SCALE = 0.35;
+
+/** How urgently AI animals outside the circle run for the middle. */
+export const ZONE_AI_FLEE_MARGIN = 18;
+
+/**
+ * The circle is re-drawn until it contains this much water, so a crocodile is
+ * never handed a round with nowhere to swim. The river is the aquatic species'
+ * entire habitat and half the map's cover.
+ */
+export const ZONE_MIN_WATER_FRACTION = 0.045;
 
 // ---------------------------------------------------------------------------
 // AI population
 // ---------------------------------------------------------------------------
 
-/** Total AI animals alive in the world at once. */
-export const AI_POPULATION = 190;
+/**
+ * Total AI animals alive in the world at once.
+ *
+ * They are spawned inside the opening circle rather than across the whole
+ * world, which is both cheaper and better: the crowd is where the players are,
+ * and as the circle closes the density climbs on its own, exactly like real
+ * animals crowding away from a storm front.
+ */
+export const AI_POPULATION = 220;
 
 /**
  * Guaranteed minimum number of AI animals of the same species as each player.

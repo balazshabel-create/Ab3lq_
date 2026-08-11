@@ -7,12 +7,7 @@
  * image: animals walk past behind the logo, it rains, the light changes.
  */
 
-import {
-  ANIMALS,
-  PLAYABLE_SPECIES,
-  Species,
-  type AnimalDef,
-} from '../Animals/AnimalTypes';
+import { ANIMALS, PLAYABLE_SPECIES, type AnimalDef } from '../Animals/AnimalTypes';
 import { Role } from '../Core/Types';
 import { WEAKNESSES } from '../Gameplay/Weaknesses';
 import {
@@ -47,7 +42,6 @@ export interface ScreenActions {
   onPlayOnline: (serverUrl: string, roomCode: string) => void;
   onOpenSettings: () => void;
   onCloseSettings: () => void;
-  onSetSpecies: (species: Species | null) => void;
   onSetReady: (ready: boolean) => void;
   onStartRound: () => void;
   onLeaveLobby: () => void;
@@ -570,11 +564,10 @@ export class LobbyScreen {
   private startButton: HTMLButtonElement;
   private statusLine: HTMLElement;
 
-  private selectedSpecies: Species | null = null;
   private ready = false;
   private myClientId = '';
 
-  constructor(private actions: ScreenActions) {
+  constructor(actions: ScreenActions) {
     this.root = el('div', { id: 'screen-lobby', class: 'screen panel-screen' });
 
     const panel = el('div', { class: 'panel' });
@@ -603,14 +596,25 @@ export class LobbyScreen {
     this.statusLine.style.marginTop = '14px';
     left.appendChild(this.statusLine);
 
-    // --- Right: animal picker -------------------------------------------
+    /*
+     * --- Right: the bestiary ---------------------------------------------
+     *
+     * Read-only. You are dealt an animal at random when the round starts and
+     * there is no way to influence it — see assignRoles for why choosing would
+     * wreck both the crowd and the deduction.
+     *
+     * The list stays, though, because the information is exactly what a player
+     * needs while waiting: hover a species and learn how it eats, how fast it
+     * starves and what it can do, so that when the card flips over and says
+     * "sloth" you already have some idea what that means.
+     */
     const right = el('div');
-    right.appendChild(el('div', { class: 'section-title' }, 'Choose your animal'));
+    right.appendChild(el('div', { class: 'section-title' }, 'The jungle'));
     right.appendChild(
       el(
         'div',
         { class: 'hint-text' },
-        'Pick one, or leave it to chance. Whatever you choose, the world will be full of AI animals just like you.',
+        'You do not choose. When the round starts you are dealt one of these at random, and the world fills with AI animals of your kind to hide among. Read up while you wait.',
       ),
     );
     this.speciesGrid = el('div', { class: 'species-grid' });
@@ -647,56 +651,37 @@ export class LobbyScreen {
   private buildSpeciesGrid(): void {
     clearChildren(this.speciesGrid);
 
-    // "Surprise me" first — a genuinely good option, since a random species
-    // means you have not signalled anything to anyone.
-    const random = el('div', { class: 'species-card selected' });
-    random.append(
-      el('span', { class: 'emoji' }, '🎲'),
-      el('div', { class: 'name' }, 'Surprise me'),
-      el('div', { class: 'diet' }, 'random'),
-    );
-    random.addEventListener('click', () => {
-      audioSystem.playUiClick();
-      this.selectSpecies(null, random);
-    });
-    this.speciesGrid.appendChild(random);
-
     for (const species of PLAYABLE_SPECIES) {
       const def = ANIMALS[species];
-      const card = el('div', { class: 'species-card' });
+      const card = el('div', { class: 'species-card readonly' });
       card.append(
         el('span', { class: 'emoji' }, def.emoji),
         el('div', { class: 'name' }, def.name),
         el('div', { class: 'diet' }, def.diet),
       );
-      card.addEventListener('click', () => {
-        audioSystem.playUiClick();
-        this.selectSpecies(species, card);
-      });
-      card.addEventListener('mouseenter', () => this.showSpeciesDetail(def));
+      // Both events, because a card is a reference entry rather than a control:
+      // hovering reads it on a mouse, tapping reads it on a touchscreen.
+      const show = () => this.showSpeciesDetail(def);
+      card.addEventListener('mouseenter', show);
+      card.addEventListener('click', show);
       this.speciesGrid.appendChild(card);
     }
-  }
-
-  private selectSpecies(species: Species | null, card: HTMLElement): void {
-    this.selectedSpecies = species;
-    for (const child of Array.from(this.speciesGrid.children)) {
-      child.classList.toggle('selected', child === card);
-    }
-    this.showSpeciesDetail(species ? ANIMALS[species] : null);
-    this.actions.onSetSpecies(species);
   }
 
   private showSpeciesDetail(def: AnimalDef | null): void {
     clearChildren(this.speciesDetail);
     if (!def) {
       this.speciesDetail.append(
-        el('h4', {}, '🎲 Surprise me'),
-        el('div', { class: 'tagline' }, 'The dealer picks. Nobody can read anything into your choice.'),
+        el('h4', {}, '🎲 You will be dealt one at random'),
+        el(
+          'div',
+          { class: 'tagline' },
+          'Nobody picks their animal, so nobody can read anything into what you are.',
+        ),
         el(
           'div',
           { class: 'hint-text' },
-          'Note: if nobody in the lobby picks a predator, somebody will be handed one — because the hunter has to be an animal that could plausibly kill.',
+          'One of you will be dealt the hunter role instead, on a species that could plausibly kill — but survivors get those species too, so being a caiman proves nothing either way.',
         ),
       );
       return;
@@ -759,13 +744,9 @@ export class LobbyScreen {
       row.append(el('div', { class: 'ready-dot' }));
       // Names come from other players, so they go in as text, never markup.
       row.append(el('div', { class: 'player-name' }, player.name));
-      row.append(
-        el(
-          'div',
-          { class: 'player-species' },
-          player.species ? `${ANIMALS[player.species].emoji} ${ANIMALS[player.species].name}` : '🎲 Random',
-        ),
-      );
+      // No species column: nobody has one until the round is dealt, and the
+      // moment it is dealt it becomes the most secret thing on the screen.
+      row.append(el('div', { class: 'player-species' }, '🎲 Unknown'));
       if (player.isHost) row.append(el('div', { class: 'host-badge' }, 'Host'));
       this.playerList.appendChild(row);
     }
@@ -779,9 +760,7 @@ export class LobbyScreen {
     this.startButton.disabled = !lobby.canStart;
   }
 
-  get species(): Species | null {
-    return this.selectedSpecies;
-  }
+
 
   resetReady(): void {
     this.ready = false;

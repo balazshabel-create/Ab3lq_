@@ -22,9 +22,21 @@ import { PropKind, type Prop, type WorldContent } from '../World/WorldGen';
 import { WORLD_SIZE } from '../Systems/Config';
 import type { GraphicsSettings } from '../Graphics/QualitySettings';
 
-/** Chunks per side. 10 → 62 m chunks in a 620 m world. */
-const CHUNK_GRID = 10;
-const CHUNK_SIZE = WORLD_SIZE / CHUNK_GRID;
+/**
+ * Chunk resolution, per prop kind.
+ *
+ * One grid for everything does not work, because the useful chunk size is set by
+ * the kind's draw distance. Grass is culled at forty metres, so hundred-metre
+ * chunks mean loading a chunk to show a tenth of it — most of what is submitted
+ * is behind the cull distance and wasted. Trees are visible to the fog line, so
+ * *fine* chunks mean hundreds of draw calls for the same canopy.
+ *
+ * So: ground cover is chunked finely and the canopy coarsely. `COARSE` is the
+ * grid used for anything visible to the horizon, `FINE` for anything that only
+ * exists near the camera.
+ */
+const COARSE_GRID = 10; // 100 m chunks in a 1000 m world
+const FINE_GRID = 24; // ~42 m chunks — matches the grass cull distance
 
 /** Per-prop-kind rendering rules. */
 interface KindConfig {
@@ -35,7 +47,29 @@ interface KindConfig {
   /** Does the wind shader affect it? */
   wind: number;
   castShadow: boolean;
+  /** Chunk grid resolution. Defaults to COARSE_GRID. */
+  chunkGrid?: number;
+  /**
+   * How the per-instance colour is chosen.
+   *
+   * `foliage` is the green brightness/warmth jitter that stops a canopy reading
+   * as one flat colour. `flower` picks from a palette instead, which is the only
+   * way to get five different flower colours out of one InstancedMesh — the
+   * geometry is shared, so the variety has to live in the colour attribute.
+   */
+  tint?: 'foliage' | 'flower' | 'none';
+  /**
+   * Non-uniform instance scaling.
+   *
+   * Underwater weed needs it: its `scale` carries the water depth at that spot in
+   * metres, so a clump in three metres of water should be three metres tall — but
+   * not three metres wide, which uniform scaling would give.
+   */
+  scaleAxes?: (prop: Prop, out: THREE.Vector3) => void;
 }
+
+/** Flower colours. Tropical, but not so saturated they read as plastic. */
+const FLOWER_PALETTE = [0xe4483f, 0xe8c33a, 0xf0eee4, 0xa964c4, 0xe87ba8];
 
 const KIND_CONFIG: Partial<Record<PropKind, KindConfig>> = {
   [PropKind.Tree]: {
@@ -59,22 +93,46 @@ const KIND_CONFIG: Partial<Record<PropKind, KindConfig>> = {
     castShadow: true,
   },
   [PropKind.Fern]: {
-    distance: (s) => Math.min(s.viewDistance, 70),
+    distance: (s) => Math.min(s.viewDistance, 80),
     density: (s) => s.foliageDensity,
     wind: 1.3,
     castShadow: false,
+    chunkGrid: FINE_GRID,
   },
   [PropKind.Grass]: {
     distance: (s) => s.grassDistance,
     density: (s) => s.foliageDensity,
     wind: 1.8,
     castShadow: false,
+    chunkGrid: FINE_GRID,
   },
   [PropKind.Flower]: {
-    distance: (s) => Math.min(s.grassDistance, 45),
+    distance: (s) => Math.min(s.grassDistance, 55),
     density: (s) => s.foliageDensity,
     wind: 1.6,
     castShadow: false,
+    chunkGrid: FINE_GRID,
+    tint: 'flower',
+  },
+  [PropKind.Reed]: {
+    distance: (s) => Math.min(s.viewDistance, 100),
+    density: (s) => s.foliageDensity,
+    wind: 2.2, // reeds are the most wind-responsive thing in the world
+    castShadow: false,
+    chunkGrid: FINE_GRID,
+  },
+  [PropKind.Waterweed]: {
+    distance: (s) => Math.min(s.viewDistance, 65),
+    density: (s) => s.foliageDensity,
+    // Swayed by current rather than wind, but the same vertex displacement sells
+    // it — slower and wider, which the shader gets from the strength alone.
+    wind: 1.5,
+    castShadow: false,
+    chunkGrid: FINE_GRID,
+    scaleAxes: (prop, out) => {
+      // `scale` is the depth to fill; width stays plant-sized.
+      out.set(0.8 + (prop.variant % 3) * 0.25, Math.max(0.4, prop.scale), 0.8 + (prop.variant % 2) * 0.3);
+    },
   },
   [PropKind.Rock]: {
     distance: (s) => s.viewDistance,
@@ -207,7 +265,7 @@ export class FoliageRenderer {
         byChunk = new Map();
         buckets.set(prop.kind, byChunk);
       }
-      const key = chunkKey(prop.x, prop.z);
+      const key = chunkKey(prop.x, prop.z, config.chunkGrid ?? COARSE_GRID);
       let list = byChunk.get(key);
       if (!list) {
         list = [];
@@ -266,11 +324,14 @@ export class FoliageRenderer {
         let minZ = Infinity;
         let maxZ = -Infinity;
 
+        const tintMode = config.tint ?? 'foliage';
+
         for (let i = 0; i < keep.length; i++) {
           const p = keep[i];
           position.set(p.x, p.y, p.z);
           quaternion.setFromAxisAngle(axis, p.rot);
-          scale.setScalar(p.scale);
+          if (config.scaleAxes) config.scaleAxes(p, scale);
+          else scale.setScalar(p.scale);
           matrix.compose(position, quaternion, scale);
           mesh.setMatrixAt(i, matrix);
 
@@ -286,15 +347,21 @@ export class FoliageRenderer {
            * identical on every client.
            */
           const jitter = hashPosition(p.x, p.z);
-          const brightness = 0.8 + jitter.a * 0.4;
-          // A warm/cool axis on top of brightness: sun-bleached leaves next to
-          // ones in shade.
-          const warmth = (jitter.b - 0.5) * 0.14;
-          tint.setRGB(
-            brightness + warmth,
-            brightness,
-            brightness - warmth * 0.6,
-          );
+          if (tintMode === 'flower') {
+            // The geometry's petals are white, so this multiplier *is* the
+            // flower's colour rather than a nudge to it.
+            tint.setHex(FLOWER_PALETTE[p.variant % FLOWER_PALETTE.length]);
+            // Still jitter the brightness, so a drift of one colour has depth.
+            tint.multiplyScalar(0.82 + jitter.a * 0.32);
+          } else if (tintMode === 'none') {
+            tint.setRGB(1, 1, 1);
+          } else {
+            const brightness = 0.8 + jitter.a * 0.4;
+            // A warm/cool axis on top of brightness: sun-bleached leaves next to
+            // ones in shade.
+            const warmth = (jitter.b - 0.5) * 0.14;
+            tint.setRGB(brightness + warmth, brightness, brightness - warmth * 0.6);
+          }
           mesh.setColorAt(i, tint);
 
           minX = Math.min(minX, p.x);
@@ -313,7 +380,7 @@ export class FoliageRenderer {
           kind,
           mesh,
           center: new THREE.Vector3(cx, 0, cz),
-          radius: Math.hypot(maxX - minX, maxZ - minZ) * 0.5 + CHUNK_SIZE * 0.2,
+          radius: Math.hypot(maxX - minX, maxZ - minZ) * 0.5,
         });
         this.group.add(mesh);
       }
@@ -430,6 +497,12 @@ function buildPropGeometry(kind: PropKind, settings: GraphicsSettings): PropAsse
       break;
     case PropKind.Flower:
       assets = buildFlower();
+      break;
+    case PropKind.Reed:
+      assets = buildReed();
+      break;
+    case PropKind.Waterweed:
+      assets = buildWaterweed();
       break;
     case PropKind.Rock:
       assets = buildRock(detail);
@@ -635,32 +708,151 @@ function buildFern(detail: number): PropAssets {
   return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
 }
 
-/** Grass: a few crossed blades. Deliberately minimal — there are thousands. */
-function buildGrass(): PropAssets {
-  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
-  for (let i = 0; i < 3; i++) {
-    const blade = new THREE.PlaneGeometry(0.34, 0.85);
-    blade.translate(0, 0.42, 0);
-    blade.rotateY((i / 3) * Math.PI);
-    parts.push({ geometry: blade, color: new THREE.Color(i === 0 ? 0x4a7a2c : 0x3d6824) });
+/**
+ * One grass blade: a tapered, leaning strip.
+ *
+ * Built by hand rather than from a PlaneGeometry because the taper is what makes
+ * it read as grass at all — a rectangle reads as a rectangle. Six triangles for
+ * four segments, and the lean is baked in so a tuft is not a set of identical
+ * vertical slabs. Cheap enough that a tuft can afford five of them: grass is
+ * culled at a few dozen metres, so only a small fraction is ever submitted.
+ */
+function bladeGeometry(width: number, height: number, lean: number, segments = 4): THREE.BufferGeometry {
+  const positions: number[] = [];
+  for (let s = 0; s < segments; s++) {
+    const t0 = s / segments;
+    const t1 = (s + 1) / segments;
+    // Taper to a point, and curve over further towards the tip.
+    const w0 = (width * (1 - t0 * 0.85)) / 2;
+    const w1 = (width * (1 - t1 * 0.85)) / 2;
+    const y0 = height * t0;
+    const y1 = height * t1;
+    const x0 = lean * t0 * t0;
+    const x1 = lean * t1 * t1;
+    positions.push(x0 - w0, y0, 0, x0 + w0, y0, 0, x1 + w1, y1, 0);
+    positions.push(x0 - w0, y0, 0, x1 + w1, y1, 0, x1 - w1, y1, 0);
   }
-  return {
-    geometry: merge(parts),
-    material: vertexColorMaterial({ side: THREE.DoubleSide }),
-  };
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.computeVertexNormals();
+  return g;
 }
 
-/** A flower, for the sunlit clearings. */
+/** Grass: a tuft of leaning blades fanned around the origin. */
+function buildGrass(): PropAssets {
+  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  const blades = 5;
+  for (let i = 0; i < blades; i++) {
+    // Golden-angle fan so five blades never line up, at any rotation.
+    const a = i * 2.399963;
+    const blade = bladeGeometry(0.11, 0.5 + (i % 3) * 0.22, 0.16 + (i % 2) * 0.12);
+    blade.rotateY(a);
+    blade.translate(Math.cos(a) * 0.05, 0, Math.sin(a) * 0.05);
+    // Alternate shades so a tuft has depth even before the per-instance tint.
+    parts.push({
+      geometry: blade,
+      color: new THREE.Color(i % 3 === 0 ? 0x538530 : i % 3 === 1 ? 0x3d6824 : 0x477329),
+    });
+  }
+  return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
+}
+
+/**
+ * A flower: a stem, a couple of leaves and a ring of petals.
+ *
+ * The petals are deliberately near-white. The instance tint multiplies the
+ * vertex colour, so leaving them white is what lets one shared geometry produce
+ * red, yellow, purple and pink flowers across the map — see FLOWER_PALETTE.
+ */
 function buildFlower(): PropAssets {
   const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
-  const stem = new THREE.CylinderGeometry(0.015, 0.02, 0.4, 3);
-  stem.translate(0, 0.2, 0);
+
+  const stem = new THREE.CylinderGeometry(0.012, 0.02, 0.42, 3);
+  stem.translate(0, 0.21, 0);
   parts.push({ geometry: stem, color: new THREE.Color(0x3f6a24) });
-  const head = new THREE.SphereGeometry(0.09, 5, 4);
-  head.scale(1, 0.6, 1);
-  head.translate(0, 0.42, 0);
-  parts.push({ geometry: head, color: new THREE.Color(0xe0b93c) });
-  return { geometry: merge(parts), material: vertexColorMaterial() };
+
+  // Two low leaves, so the flower has something at ground level.
+  for (const side of [-1, 1]) {
+    const leaf = bladeGeometry(0.09, 0.2, 0.13 * side);
+    leaf.rotateY(side > 0 ? 0.6 : 2.4);
+    parts.push({ geometry: leaf, color: new THREE.Color(0x477a28) });
+  }
+
+  // Petals: five flat blades splayed outwards from the top of the stem.
+  const petals = 5;
+  for (let i = 0; i < petals; i++) {
+    const a = (i / petals) * Math.PI * 2;
+    const petal = new THREE.PlaneGeometry(0.075, 0.11);
+    petal.translate(0, 0.055, 0);
+    petal.rotateX(-1.15); // tip up and outwards
+    petal.rotateY(a);
+    petal.translate(Math.cos(a) * 0.035, 0.43, Math.sin(a) * 0.035);
+    parts.push({ geometry: petal, color: new THREE.Color(0xffffff) });
+  }
+
+  // A darker centre keeps the head from reading as a flat disc.
+  const centre = new THREE.SphereGeometry(0.028, 5, 4);
+  centre.translate(0, 0.45, 0);
+  parts.push({ geometry: centre, color: new THREE.Color(0x8a7326) });
+
+  return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
+}
+
+/**
+ * Reeds: a tight clump of tall blades standing in the shallows.
+ *
+ * Rooted on the river bed, so the visible height depends on how deep the water
+ * is where they grew — which is what makes a shoreline read as a gradient
+ * instead of a hard line between "water" and "jungle".
+ */
+function buildReed(): PropAssets {
+  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  const blades = 7;
+  for (let i = 0; i < blades; i++) {
+    const a = i * 2.399963;
+    const blade = bladeGeometry(0.055, 1.5 + (i % 4) * 0.4, 0.1 + (i % 3) * 0.09, 3);
+    blade.rotateY(a);
+    blade.translate(Math.cos(a) * 0.09, 0, Math.sin(a) * 0.09);
+    parts.push({
+      geometry: blade,
+      color: new THREE.Color(i % 2 === 0 ? 0x6b7b34 : 0x55672a),
+    });
+  }
+  // A seed head on the tallest few, which is the detail that says "reed".
+  for (let i = 0; i < 3; i++) {
+    const a = i * 2.399963;
+    const head = new THREE.CylinderGeometry(0.03, 0.015, 0.26, 4);
+    head.translate(Math.cos(a) * 0.09 + 0.1, 2.35, Math.sin(a) * 0.09);
+    parts.push({ geometry: head, color: new THREE.Color(0x8a7442) });
+  }
+  return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
+}
+
+/**
+ * Underwater weed: a fan of broad, limp fronds reaching up from the bed.
+ *
+ * Built at unit height so the instance's Y scale can be the water depth — see
+ * the `scaleAxes` hook. Broader and darker than grass: this is meant to be a
+ * murky mass that a four-metre caiman can genuinely disappear into, which is the
+ * only reason a crocodile player has anywhere to hide under water at all.
+ */
+function buildWaterweed(): PropAssets {
+  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  const fronds = 9;
+  for (let i = 0; i < fronds; i++) {
+    const a = i * 2.399963;
+    // Unit height, so scaleAxes maps Y directly to metres of depth.
+    const frond = bladeGeometry(0.3, 1, 0.42 + (i % 3) * 0.16, 4);
+    frond.rotateY(a);
+    frond.translate(Math.cos(a) * 0.16, 0, Math.sin(a) * 0.16);
+    parts.push({
+      geometry: frond,
+      // Deep, desaturated greens: underwater light loses red first, and weed
+      // that is as bright as grass looks like grass someone flooded.
+      color: new THREE.Color(i % 3 === 0 ? 0x244a2f : i % 3 === 1 ? 0x1b3d29 : 0x2b5236),
+    });
+  }
+  return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
 }
 
 /** A rock: a lumpy low-poly sphere. */
@@ -802,10 +994,16 @@ function hashPosition(x: number, z: number): { a: number; b: number } {
   return { a: s - Math.floor(s), b: t - Math.floor(t) };
 }
 
-/** Chunk index for a world position. */
-function chunkKey(x: number, z: number): number {
+/**
+ * Chunk index for a world position at a given grid resolution.
+ *
+ * The resolution is folded into the key, so two kinds on different grids can
+ * never collide in the same bucket map.
+ */
+function chunkKey(x: number, z: number, grid: number): number {
   const half = WORLD_SIZE / 2;
-  const cx = Math.min(CHUNK_GRID - 1, Math.max(0, Math.floor((x + half) / CHUNK_SIZE)));
-  const cz = Math.min(CHUNK_GRID - 1, Math.max(0, Math.floor((z + half) / CHUNK_SIZE)));
-  return cz * CHUNK_GRID + cx;
+  const size = WORLD_SIZE / grid;
+  const cx = Math.min(grid - 1, Math.max(0, Math.floor((x + half) / size)));
+  const cz = Math.min(grid - 1, Math.max(0, Math.floor((z + half) / size)));
+  return grid * 100000 + cz * grid + cx;
 }
