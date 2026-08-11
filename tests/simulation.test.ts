@@ -20,6 +20,7 @@ import {
   isEnabled,
 } from '../src/Animals/AnimalTypes';
 import { canPrey } from '../src/Animals/FoodChain';
+import { canSwim } from '../src/Animals/AnimalTypes';
 import { Terrain } from '../src/World/Terrain';
 import { Rng } from '../src/Systems/Rng';
 import {
@@ -538,9 +539,20 @@ test('players and AI of the same species are indistinguishable on the wire', () 
 });
 
 test('withdrawn species never appear anywhere in the game', () => {
-  // The four flying species were withdrawn. Their table entries must remain (the
-  // wire format indexes into ALL_SPECIES) but they must never reach the world.
-  const withdrawn = [Species.Parrot, Species.Eagle, Species.Heron, Species.Bat];
+  /*
+   * All four flying species were withdrawn at one point, because a *playable*
+   * flyer reads poorly: it sees the whole clearing, nothing can reach it, and the
+   * hiding game stops being a game. That reasoning is about being playable, not
+   * about flying — so the parrot and the heron are back as ambient-only life,
+   * where birds crossing the canopy are exactly what the world was missing.
+   *
+   * The eagle and the bat stay withdrawn: both are predators, so re-enabling them
+   * would put a hunter in the air.
+   *
+   * Their table entries must remain either way — the wire format indexes into
+   * ALL_SPECIES — but a withdrawn species must never reach the world.
+   */
+  const withdrawn = [Species.Eagle, Species.Bat];
 
   for (const species of withdrawn) {
     assert.equal(isEnabled(species), false, `${species} should be withdrawn`);
@@ -982,12 +994,25 @@ test('the AI population respects its budget, however many players turn up', () =
     for (let i = 0; i < playerCount; i++) sim.addPlayer(`p${i}`, `P${i}`);
     sim.startRound();
 
-    const count = sim.getAnimalCount();
+    /*
+     * Counted over playable species only.
+     *
+     * Ambient life — fish, ants, butterflies, birds — is spawned off its own
+     * budget precisely so that it does not compete for these six slots, so
+     * `getAnimalCount()` (which includes all of it) is the wrong number here and
+     * reported nearly two hundred.
+     */
+    const count = sim.getCoverAnimalCount();
     assert.ok(
       count <= AI_POPULATION,
-      `${playerCount} players produced ${count} AI animals, over the budget of ${AI_POPULATION}`,
+      `${playerCount} players produced ${count} cover animals, over the budget of ${AI_POPULATION}`,
     );
     assert.ok(count > 0, 'a round with no AI animals at all is not a jungle');
+    // ...and the world should still be full of ambient life.
+    assert.ok(
+      sim.getAnimalCount() > count,
+      'the world has no ambient creatures in it at all',
+    );
   }
 });
 
@@ -1103,4 +1128,152 @@ test('the river is deep enough to submerge in across its width', () => {
       `seed ${seed}: only ${(landFraction * 100).toFixed(0)}% of the map is dry land`,
     );
   }
+});
+
+test('exactly six species are playable, and they are the intended six', () => {
+  /*
+   * The roster is the design. Anything drifting into or out of it changes what
+   * the game is, so it is asserted by name rather than by count alone.
+   */
+  const expected = [
+    Species.Capybara,
+    Species.Crocodile,
+    Species.Turtle,
+    Species.Tiger,
+    Species.Leopard,
+    Species.Gorilla,
+  ];
+  assert.deepEqual(
+    [...PLAYABLE_SPECIES].sort(),
+    [...expected].sort(),
+    'the playable roster has drifted',
+  );
+
+  // Every one of them must be able to roll a weakness and be dealt a role.
+  for (const s of expected) {
+    assert.ok(eligibleWeaknesses(s).length > 0, `${s} has no eligible weakness`);
+  }
+  // The herbivores must not be dealt the hunter role.
+  assert.ok(!HUNTER_SPECIES.includes(Species.Capybara), 'the capybara cannot be the hunter');
+  assert.ok(!HUNTER_SPECIES.includes(Species.Turtle), 'the tortoise cannot be the hunter');
+});
+
+test('the roster plays the way the design says it does', () => {
+  const croc = ANIMALS[Species.Crocodile];
+  const tiger = ANIMALS[Species.Tiger];
+  const tortoise = ANIMALS[Species.Turtle];
+  const leopard = ANIMALS[Species.Leopard];
+  const gorilla = ANIMALS[Species.Gorilla];
+  const capy = ANIMALS[Species.Capybara];
+
+  // Crocodile: owns the water, and is the only one that can vanish under it.
+  assert.ok(croc.locomotion.canSubmerge, 'the crocodile must be able to submerge');
+  assert.ok(
+    croc.locomotion.swimSpeed > tiger.locomotion.swimSpeed,
+    'the crocodile must swim faster than the tiger',
+  );
+
+  // Leopard: fastest alive, and it must beat the tiger on both speed and sprint.
+  for (const other of [tiger, croc, gorilla, capy, tortoise]) {
+    assert.ok(
+      leopard.locomotion.landSpeed >= other.locomotion.landSpeed,
+      `the leopard must not be slower than the ${other.name}`,
+    );
+  }
+  assert.ok(
+    leopard.locomotion.sprintMultiplier > tiger.locomotion.sprintMultiplier,
+    'the leopard must out-sprint the tiger',
+  );
+  // ...and pay for it in hunger, while hitting softer than the tiger.
+  assert.ok(leopard.hungerRate > tiger.hungerRate * 2, 'the leopard must starve much faster');
+  assert.ok(
+    (leopard.attackPower ?? 0) < (tiger.attackPower ?? 0),
+    'the leopard must hit softer than the tiger',
+  );
+
+  // Tiger: barely hungers.
+  assert.ok(tiger.hungerRate < capy.hungerRate, 'the tiger must hunger less than the capybara');
+
+  // Tortoise: most health, slowest, barely hungers, cannot enter deep water.
+  for (const other of [tiger, croc, leopard, gorilla, capy]) {
+    assert.ok(
+      tortoise.healthMultiplier >= other.healthMultiplier,
+      `the tortoise must not have less health than the ${other.name}`,
+    );
+    assert.ok(
+      tortoise.locomotion.landSpeed <= other.locomotion.landSpeed,
+      `the tortoise must not be faster than the ${other.name}`,
+    );
+  }
+  assert.equal(canSwim(Species.Turtle), false, 'the tortoise must not be able to swim');
+
+  // Gorilla: hardest hitter, and drowns.
+  for (const other of [tiger, croc, leopard, capy, tortoise]) {
+    assert.ok(
+      (gorilla.attackPower ?? 0) > (other.attackPower ?? 0),
+      `the gorilla must hit harder than the ${other.name}`,
+    );
+  }
+  assert.equal(canSwim(Species.Gorilla), false, 'the gorilla must not be able to swim');
+
+  // Capybara: very fast, feeble bite, never starves.
+  assert.ok(
+    capy.locomotion.landSpeed > tiger.locomotion.landSpeed,
+    'the capybara must outrun the tiger',
+  );
+  assert.ok((capy.attackPower ?? 1) < 0.2, 'the capybara must barely do damage');
+  assert.ok(canSwim(Species.Capybara), 'the capybara must be able to swim');
+});
+
+test('a capybara cannot kill a tiger', () => {
+  /*
+   * Not "takes a long time to" — cannot. A feeble-but-nonzero bite plus enough
+   * patience is still a kill, so the guarantee needs a term that scales with the
+   * size difference. This runs the real attack path rather than the arithmetic.
+   */
+  const sim = new Simulation(60421);
+  sim.addPlayer('capy', 'Capy');
+  sim.addPlayer('tiger', 'Tiger');
+  sim.startRound();
+  advance(sim, 10);
+
+  const [a, b] = sim.getPlayers();
+  a.species = Species.Capybara;
+  a.role = Role.Survivor;
+  sim.refreshStats(a);
+  b.species = Species.Tiger;
+  b.role = Role.Survivor;
+  sim.refreshStats(b);
+  b.health = b.maxHealth;
+
+  // Park the capybara right on top of the tiger and let it bite for a full round.
+  let seq = 0;
+  const ticks = Math.round(ROUND_DURATION / TICK);
+  for (let i = 0; i < ticks; i++) {
+    a.pos.x = b.pos.x + 0.2;
+    a.pos.z = b.pos.z;
+    a.yaw = 0;
+    b.yaw = Math.PI;
+    a.attackCooldown = 0;
+    sim.applyInput('capy', {
+      seq: ++seq,
+      moveX: 0,
+      moveZ: 0,
+      yaw: 0,
+      pitch: 0,
+      actions: InputAction.Attack,
+    });
+    sim.update(TICK);
+    if (b.health <= 0) break;
+  }
+
+  assert.ok(
+    b.health > 0,
+    `the tiger died to a capybara after ${(seq * TICK).toFixed(0)}s of continuous biting`,
+  );
+  // The reverse must not be true: a tiger has to be able to finish a capybara.
+  assert.ok(
+    (ANIMALS[Species.Tiger].attackPower ?? 0) > (ANIMALS[Species.Capybara].attackPower ?? 0) * 8,
+    'the tiger must hit vastly harder than the capybara',
+  );
 });

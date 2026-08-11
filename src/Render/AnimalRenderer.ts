@@ -71,6 +71,15 @@ interface RenderActor {
   wasAttacking: boolean;
   /** In-water state last frame, so entering the water can be detected. */
   wasInWater: boolean;
+  /**
+   * Seconds since this actor died, or 0 while it is alive.
+   *
+   * A death needs a *timeline*, not a pose. Snapping straight to "lying on its
+   * side" told the player something had happened somewhere off screen; a collapse
+   * they can watch is the single most readable event in the game, because it also
+   * tells them roughly when and which way the animal was facing.
+   */
+  deathTime: number;
 }
 
 const MODEL_DETAIL_NEAR = 1;
@@ -199,6 +208,7 @@ export class AnimalRenderer {
           biteTimer: 0,
           wasAttacking: false,
           wasInWater: false,
+          deathTime: 0,
         };
         this.actors.set(s.id, actor);
       }
@@ -367,13 +377,10 @@ export class AnimalRenderer {
     const airborne = (actor.flags & ActorFlags.Airborne) !== 0;
 
     if (dead) {
-      // Roll onto one side and stop animating. A carcass is a landmark, and a
-      // very informative one.
-      root.rotation.x = Math.PI * 0.42;
-      root.rotation.z = 0;
-      root.position.y -= def.silhouette.height * 0.35;
+      this.animateDeath(actor, model, def, dt);
       return;
     }
+    actor.deathTime = 0;
 
     /*
      * ---- Follow the ground -----------------------------------------------
@@ -701,6 +708,113 @@ export class AnimalRenderer {
   // -------------------------------------------------------------------------
   // Pooling
   // -------------------------------------------------------------------------
+
+  /**
+   * The death animation.
+   *
+   * ## Why this is a timeline and not a pose
+   *
+   * It used to be three lines: set the roll to 76°, drop the body, return. That
+   * is a *carcass*, and a carcass is fine — but the moment of dying is the single
+   * most informative event in this game. A player who sees an animal go down
+   * learns that something killed it, roughly where, and which way it was facing
+   * when it happened. A snap to the final pose throws all of that away, and reads
+   * as the animal being deleted and replaced by a prop.
+   *
+   * Four stages, driven off `deathTime`:
+   *
+   *  1. **Buckle** (0 – 0.28 s). The legs give out and the body sinks straight
+   *     down while the head goes back. Nothing rotates yet, because a real
+   *     collapse starts with the legs failing, not with the body tipping.
+   *  2. **Topple** (0.28 – 1.0 s). The roll comes on with an ease-out and a small
+   *     overshoot, so the body drops onto its side and rocks back rather than
+   *     rotating at constant speed like a hinge.
+   *  3. **Twitch** (1.0 – 1.7 s). One decaying spasm through the legs and tail.
+   *     This is the stage that stops it looking like furniture, and it is cheap:
+   *     a damped sine on joints that are already there.
+   *  4. **Rest**. Everything limp and still, jaw slightly open.
+   *
+   * `deathTime` keeps counting past the end so a corpse that comes into view late
+   * is already settled rather than starting its collapse the moment you look at
+   * it — the animal did not wait for an audience.
+   */
+  private animateDeath(
+    actor: RenderActor,
+    model: AnimalModel,
+    def: (typeof ANIMALS)[Species],
+    dt: number,
+  ): void {
+    actor.deathTime += dt;
+    const t = actor.deathTime;
+    const root = model.root;
+    const height = def.silhouette.height;
+
+    // --- Stage 1: the legs buckle ----------------------------------------
+    const buckle = clamp01(t / 0.28);
+    // --- Stage 2: the topple ---------------------------------------------
+    const rollT = clamp01((t - 0.28) / 0.72);
+    // Ease-out with a decaying overshoot: lands, rocks back, settles.
+    const eased = 1 - Math.pow(1 - rollT, 3);
+    const overshoot = rollT < 1 ? Math.sin(rollT * Math.PI) * 0.12 * (1 - rollT) : 0;
+    const roll = (Math.PI * 0.46 + overshoot) * eased;
+
+    /*
+     * Roll about X, which is the body's long axis.
+     *
+     * The models are built head-first along +X, so rotating about X lays the
+     * animal on its flank. Getting this axis wrong stands the corpse on its nose,
+     * which is exactly what an earlier version of this did.
+     */
+    root.rotation.x = roll;
+    root.rotation.z = 0;
+    // Sink as the legs fold, then a little further as it comes to rest on its side.
+    root.position.y -= height * (0.18 * buckle + 0.2 * eased);
+
+    // --- Stage 3: one decaying twitch ------------------------------------
+    const twitch = t > 1.0 && t < 1.7 ? Math.sin((t - 1.0) * 22) * Math.exp(-(t - 1.0) * 4) : 0;
+
+    // Legs: splay outward as they give, then go limp with a spasm through them.
+    for (let i = 0; i < model.legs.length; i++) {
+      const leg = model.legs[i];
+      leg.visible = true;
+      const dir = i % 2 === 0 ? 1 : -1;
+      // Fold forward/back alternately, so the legs do not all point one way.
+      leg.rotation.z = lerp(leg.rotation.z, dir * 0.5 * buckle + twitch * 0.5, Math.min(1, dt * 9));
+      const knee = model.knees[i];
+      if (knee) {
+        const fold = (knee.userData.fold as number | undefined) ?? -1;
+        // Curled up tight — a dead animal's legs are drawn in, not straight.
+        knee.rotation.z = lerp(knee.rotation.z, fold * (1.1 * buckle + twitch * 0.3), Math.min(1, dt * 9));
+      }
+    }
+
+    // Head: thrown back as it goes, then hanging.
+    model.head.rotation.z = lerp(
+      model.head.rotation.z,
+      -0.5 * buckle + 0.25 * eased + twitch * 0.4,
+      Math.min(1, dt * 7),
+    );
+    // Jaw falls open and stays there.
+    if (model.jaw) {
+      model.jaw.rotation.z = lerp(model.jaw.rotation.z, -0.3 * eased, Math.min(1, dt * 5));
+    }
+
+    // Tail and body segments: limp, with the twitch travelling down them.
+    for (let i = 0; i < model.tail.length; i++) {
+      const seg = model.tail[i];
+      const lag = Math.exp(-i * 0.35);
+      seg.rotation.y = lerp(seg.rotation.y, twitch * 0.7 * lag, Math.min(1, dt * 8));
+      seg.rotation.z = lerp(seg.rotation.z, 0.12 * eased * lag, Math.min(1, dt * 8));
+    }
+    for (let i = 0; i < model.segments.length; i++) {
+      const seg = model.segments[i];
+      seg.rotation.y = lerp(seg.rotation.y, twitch * 0.5 * Math.exp(-i * 0.2), Math.min(1, dt * 8));
+    }
+    // Wings drop.
+    for (const wing of model.wings) {
+      wing.rotation.z = lerp(wing.rotation.z, -0.7 * eased, Math.min(1, dt * 6));
+    }
+  }
 
   private poolKey(species: Species, detail: number): string {
     return `${species}:${detail}`;

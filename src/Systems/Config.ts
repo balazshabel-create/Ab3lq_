@@ -440,7 +440,21 @@ export const ZONE_MIN_WATER_FRACTION = 0.045;
  * That is the design the numbers below are now tuned for. Requested explicitly;
  * recorded here because a future reader will otherwise "fix" it back.
  */
-export const AI_POPULATION = 5;
+export const AI_POPULATION = 6;
+
+/**
+ * Ambient creatures, on a budget of their own.
+ *
+ * Fish, ants, butterflies and birds are scenery: they are not animals you could
+ * be mistaken for, so they must not compete for the six slots that decide how
+ * crowded the hiding game is. Keeping them on a separate budget is what lets the
+ * world feel alive at a population of six — a jungle with six animals in it and
+ * nothing else is a diorama.
+ *
+ * They are also cheap in a way the real animals are not: no hunger, no fleeing,
+ * no combat, and they never enter the interest set as threats.
+ */
+export const AMBIENT_POPULATION = 190;
 
 /**
  * Guaranteed minimum number of AI animals of the same species as each player.

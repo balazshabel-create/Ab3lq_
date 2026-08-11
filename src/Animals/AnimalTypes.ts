@@ -37,6 +37,18 @@ export enum Species {
   Butterfly = 'butterfly',
   Chameleon = 'chameleon',
   Caiman = 'caiman',
+  /*
+   * The playable roster, added last on purpose.
+   *
+   * The snapshot format encodes a species as its index in ALL_SPECIES, so new
+   * entries have to go on the end — inserting one anywhere else would silently
+   * renumber every species after it and make old clients draw the wrong animal.
+   */
+  Tiger = 'tiger',
+  Leopard = 'leopard',
+  Gorilla = 'gorilla',
+  /** Ambient only: a column of ants crossing the forest floor. */
+  Ant = 'ant',
 }
 
 /** What an animal eats. Drives the food chain and what it can hunt. */
@@ -170,6 +182,18 @@ export interface AnimalDef {
   healthMultiplier: number;
   /** Footstep/movement noise multiplier — big feet are loud. */
   noiseMultiplier: number;
+  /**
+   * How hard this species hits, as a multiplier on HUNTER_DAMAGE.
+   *
+   * Explicit data rather than something derived from diet and size class, which
+   * is what it used to be. The derivation could not express the roster: a leopard
+   * is a large carnivore that is *supposed* to hit softly, and a gorilla is an
+   * omnivore that is supposed to hit hardest of all. Guessing from the food chain
+   * produced the opposite of both.
+   *
+   * Defaults to 0.5 when omitted, which is where the incidental species sit.
+   */
+  attackPower?: number;
   /** What food tiers it can consume. */
   eats: FoodTier[];
   /** Species it will hunt as an AI, and can eat as a player. */
@@ -269,6 +293,8 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     hungerRate: 0.72,
     healthMultiplier: 1,
     noiseMultiplier: 0.9,
+    // It can bite. That is about all that can be said for it.
+    attackPower: 0.12,
     eats: ['plant', 'fruit'],
     preys: [],
     playable: true,
@@ -276,7 +302,14 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     ability: AbilityId.HerdBlend,
     pros: ['Slow hunger drain', 'Excellent swimmer', 'Hides well in bushes', 'Big AI herds to blend into'],
     cons: ['Cannot fight back', 'Prey for everything with teeth'],
-    locomotion: loco({ landSpeed: 1.0, swimSpeed: 1.15, sprintMultiplier: 1.55, agility: 1.1 }),
+    locomotion: loco({ /*
+       * Fast enough to outrun a tiger, not a leopard.
+       *
+       * That gap is the capybara's entire defence: it cannot fight (attackPower
+       * 0.12) and it cannot hide especially well, so escape has to be real against
+       * most of the roster and hopeless against the one animal built for chasing.
+       */
+      landSpeed: 1.32, swimSpeed: 1.15, sprintMultiplier: 2.1, agility: 1.1 }),
     silhouette: {
       length: 1.15,
       height: 0.6,
@@ -299,6 +332,8 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     hungerRate: 1.0,
     healthMultiplier: 1.35,
     noiseMultiplier: 0.7,
+    // A death roll on anything it gets hold of — in the water.
+    attackPower: 1.7,
     eats: ['fish', 'smallAnimal', 'largeAnimal', 'carrion'],
     preys: [Species.Capybara, Species.Piranha, Species.Turtle, Species.Frog, Species.Heron, Species.Peccary],
     playable: true,
@@ -347,7 +382,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 1.15,
     eats: ['fruit', 'plant', 'smallAnimal'],
     preys: [Species.Butterfly, Species.Frog],
-    playable: true,
+    playable: false,
     canBeHunter: false,
     ability: AbilityId.BranchLeap,
     pros: ['Climbs and leaps', 'Travels through the canopy', 'Very agile', 'Hard to corner'],
@@ -384,6 +419,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Sloth]: {
     species: Species.Sloth,
     name: 'Three-toed Sloth',
+    enabled: false,
     emoji: '🦥',
     tagline: 'Speedrunning nothing.',
     diet: Diet.Herbivore,
@@ -393,7 +429,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 0.35,
     eats: ['plant', 'fruit'],
     preys: [],
-    playable: true,
+    playable: false,
     canBeHunter: false,
     ability: AbilityId.DeadHang,
     pros: ['Barely ever hungry', 'Almost silent', 'Lives in the canopy', 'Indistinguishable when still'],
@@ -428,6 +464,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Jaguar]: {
     species: Species.Jaguar,
     name: 'Jaguar',
+    enabled: false,
     emoji: '🐆',
     tagline: 'The reason everything else is nervous.',
     diet: Diet.Carnivore,
@@ -445,8 +482,8 @@ export const ANIMALS: Record<Species, AnimalDef> = {
       Species.Iguana,
       Species.Tapir,
     ],
-    playable: true,
-    canBeHunter: true,
+    playable: false,
+    canBeHunter: false,
     ability: AbilityId.Pounce,
     pros: ['Explosive sprint', 'Pounces from cover', 'Climbs trees', 'Swims well for a cat'],
     cons: ['Starves fast', 'Every animal flees on sight', 'Few AI jaguars to hide among'],
@@ -482,6 +519,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Anaconda]: {
     species: Species.Anaconda,
     name: 'Green Anaconda',
+    enabled: false,
     emoji: '🐍',
     tagline: 'You will not hear it coming.',
     diet: Diet.Carnivore,
@@ -491,8 +529,8 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 0.15,
     eats: ['smallAnimal', 'largeAnimal', 'fish', 'carrion'],
     preys: [Species.Capybara, Species.Peccary, Species.Turtle, Species.Heron, Species.Frog],
-    playable: true,
-    canBeHunter: true,
+    playable: false,
+    canBeHunter: false,
     ability: AbilityId.SilentSlither,
     pros: ['Effectively silent', 'Vanishes in undergrowth', 'Ambush attacks', 'Strong swimmer'],
     cons: ['Slow in the open', 'Long body is hard to hide in short grass'],
@@ -526,6 +564,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Caiman]: {
     species: Species.Caiman,
     name: 'Spectacled Caiman',
+    enabled: false,
     emoji: '🐊',
     tagline: 'Smaller cousin, same bad intentions.',
     diet: Diet.Piscivore,
@@ -535,8 +574,8 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 0.7,
     eats: ['fish', 'smallAnimal', 'carrion'],
     preys: [Species.Piranha, Species.Frog, Species.Turtle],
-    playable: true,
-    canBeHunter: true,
+    playable: false,
+    canBeHunter: false,
     ability: AbilityId.Submerge,
     pros: ['Fast in water', 'Small enough to hide', 'Many AI caimans about'],
     cons: ['Weaker bite than a black caiman', 'Clumsy on land'],
@@ -563,6 +602,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Ocelot]: {
     species: Species.Ocelot,
     name: 'Ocelot',
+    enabled: false,
     emoji: '🐈',
     tagline: 'Pocket-sized apex predator.',
     diet: Diet.Carnivore,
@@ -572,8 +612,8 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 0.45,
     eats: ['smallAnimal', 'carrion'],
     preys: [Species.Iguana, Species.Frog, Species.Armadillo, Species.Parrot],
-    playable: true,
-    canBeHunter: true,
+    playable: false,
+    canBeHunter: false,
     ability: AbilityId.Pounce,
     pros: ['Quiet and quick', 'Small target', 'Climbs', 'Easy to mistake for scenery at dusk'],
     cons: ['Fragile', 'Cannot take down large prey', 'Hungry'],
@@ -619,8 +659,8 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 0.3,
     eats: ['smallAnimal', 'carrion'],
     preys: [Species.Monkey, Species.Sloth, Species.Parrot, Species.Iguana],
-    playable: true,
-    canBeHunter: true,
+    playable: false,
+    canBeHunter: false,
     ability: AbilityId.Glide,
     pros: ['Flies', 'Sees the whole clearing', 'Diving attack', 'Untouchable in the air'],
     cons: ['Very fragile', 'Obvious in an empty sky', 'Must land to eat'],
@@ -649,7 +689,6 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     species: Species.Parrot,
     name: 'Scarlet Macaw',
     // Withdrawn: the flying body plan reads poorly in play.
-    enabled: false,
     emoji: '🦜',
     tagline: 'Loud, gorgeous, terrible at hiding.',
     diet: Diet.Herbivore,
@@ -659,7 +698,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 1.3,
     eats: ['fruit', 'plant'],
     preys: [],
-    playable: true,
+    playable: false,
     canBeHunter: false,
     ability: AbilityId.Glide,
     pros: ['Can fly short distances', 'Escapes ground predators', 'Flocks are everywhere'],
@@ -688,6 +727,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Iguana]: {
     species: Species.Iguana,
     name: 'Green Iguana',
+    enabled: false,
     emoji: '🦎',
     tagline: 'Professional sunbather.',
     diet: Diet.Herbivore,
@@ -697,7 +737,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 0.5,
     eats: ['plant', 'fruit'],
     preys: [],
-    playable: true,
+    playable: false,
     canBeHunter: false,
     ability: AbilityId.ColorShift,
     pros: ['Low hunger', 'Blends into foliage', 'Climbs', 'Swims'],
@@ -725,6 +765,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Peccary]: {
     species: Species.Peccary,
     name: 'Collared Peccary',
+    enabled: false,
     emoji: '🐗',
     tagline: 'Travels in gangs. Holds grudges.',
     diet: Diet.Omnivore,
@@ -734,7 +775,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 1.35,
     eats: ['plant', 'fruit', 'carrion'],
     preys: [],
-    playable: true,
+    playable: false,
     canBeHunter: false,
     pros: ['Sturdy', 'Big noisy herds to hide in', 'Decent sprint'],
     cons: ['Very loud', 'Poor swimmer', 'Cannot climb'],
@@ -754,6 +795,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Tapir]: {
     species: Species.Tapir,
     name: 'Lowland Tapir',
+    enabled: false,
     emoji: '🐖',
     tagline: 'A nose that happens to have a body.',
     diet: Diet.Herbivore,
@@ -763,7 +805,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 1.4,
     eats: ['plant', 'fruit'],
     preys: [],
-    playable: true,
+    playable: false,
     canBeHunter: false,
     pros: ['High health', 'Strong swimmer', 'Can shrug off one hit'],
     cons: ['Huge and loud', 'Cannot hide anywhere', 'Slow to turn'],
@@ -783,6 +825,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Armadillo]: {
     species: Species.Armadillo,
     name: 'Giant Armadillo',
+    enabled: false,
     emoji: '🦔',
     tagline: 'Rolls to disagree.',
     diet: Diet.Insectivore,
@@ -792,7 +835,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 0.8,
     eats: ['plant', 'smallAnimal'],
     preys: [],
-    playable: true,
+    playable: false,
     canBeHunter: false,
     ability: AbilityId.CurlUp,
     pros: ['Armour plating', 'Curls up to survive a hit', 'Low profile'],
@@ -813,6 +856,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Anteater]: {
     species: Species.Anteater,
     name: 'Giant Anteater',
+    enabled: false,
     emoji: '🐜',
     tagline: 'Vacuum cleaner with claws.',
     diet: Diet.Insectivore,
@@ -822,7 +866,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 1,
     eats: ['plant', 'smallAnimal'],
     preys: [],
-    playable: true,
+    playable: false,
     canBeHunter: false,
     pros: ['Finds food almost anywhere', 'Surprisingly tough', 'Common enough to blend in'],
     cons: ['Very poor eyesight', 'Slow', 'Distinctive silhouette'],
@@ -846,16 +890,38 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     tagline: 'Has nowhere to be.',
     diet: Diet.Herbivore,
     size: SizeClass.Small,
-    hungerRate: 0.4,
-    healthMultiplier: 1.2,
+    /*
+     * Barely hungers and very hard to kill: the tortoise's whole proposition.
+     *
+     * The health multiplier has to clear every predator on the roster (the tiger
+     * is 1.35), or "very high HP" is just a sentence in the tagline. It buys
+     * time, not safety — nothing here lets it escape, only survive being found.
+     */
+    hungerRate: 0.25,
+    healthMultiplier: 2.4,
     noiseMultiplier: 0.3,
+    // A beak nip. The tortoise wins by not dying, not by fighting.
+    attackPower: 0.18,
     eats: ['plant', 'fruit'],
     preys: [],
     playable: true,
     canBeHunter: false,
     pros: ['Barely hungry', 'Shell absorbs damage', 'Almost silent', 'Nobody suspects the tortoise'],
     cons: ['Extremely slow', 'No escape at all'],
-    locomotion: loco({ landSpeed: 0.3, swimSpeed: 0.65, canJump: false, sprintMultiplier: 1.15, agility: 0.5 }),
+    locomotion: loco({
+      landSpeed: 0.3,
+      /*
+       * Cannot enter deep water at all.
+       *
+       * `canSwim` is defined as swimSpeed > 0.15 and the movement solver refuses
+       * to walk a non-swimmer into deep water, so zero here is what makes the
+       * river a wall for the tortoise rather than a slow crossing.
+       */
+      swimSpeed: 0,
+      canJump: false,
+      sprintMultiplier: 1.15,
+      agility: 0.5,
+    }),
     silhouette: {
       length: 0.6,
       height: 0.28,
@@ -871,6 +937,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Frog]: {
     species: Species.Frog,
     name: 'Poison Dart Frog',
+    enabled: false,
     emoji: '🐸',
     tagline: 'Small. Bright. Deeply unpleasant to bite.',
     diet: Diet.Insectivore,
@@ -880,7 +947,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 0.2,
     eats: ['plant', 'smallAnimal'],
     preys: [Species.Butterfly],
-    playable: true,
+    playable: false,
     canBeHunter: false,
     pros: ['Tiny and easily missed', 'Big hops', 'Toxic — predators think twice'],
     cons: ['Dies to almost anything', 'Bright warning colours'],
@@ -907,7 +974,6 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     species: Species.Heron,
     name: 'Cocoi Heron',
     // Withdrawn: the flying body plan reads poorly in play.
-    enabled: false,
     emoji: '🪶',
     tagline: 'Standing perfectly still, judging you.',
     diet: Diet.Piscivore,
@@ -917,7 +983,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 0.5,
     eats: ['fish', 'smallAnimal'],
     preys: [Species.Piranha, Species.Frog],
-    playable: true,
+    playable: false,
     canBeHunter: false,
     ability: AbilityId.Glide,
     pros: ['Can fly', 'Fishes the shallows safely', 'Natural at standing still'],
@@ -945,6 +1011,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Chameleon]: {
     species: Species.Chameleon,
     name: 'Jungle Chameleon',
+    enabled: false,
     emoji: '🦎',
     tagline: 'Technically not from here. Nobody has noticed.',
     diet: Diet.Insectivore,
@@ -954,7 +1021,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 0.15,
     eats: ['plant', 'smallAnimal'],
     preys: [Species.Butterfly],
-    playable: true,
+    playable: false,
     canBeHunter: false,
     ability: AbilityId.ColorShift,
     pros: ['Best camouflage in the game', 'Silent', 'Climbs'],
@@ -994,7 +1061,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     noiseMultiplier: 1.5,
     eats: ['fruit', 'plant'],
     preys: [],
-    playable: true,
+    playable: false,
     canBeHunter: false,
     ability: AbilityId.BranchLeap,
     pros: ['Canopy travel', 'Constant AI howling masks your noise', 'Climbs fast'],
@@ -1109,6 +1176,207 @@ export const ANIMALS: Record<Species, AnimalDef> = {
       tail: 0,
     },
     temperament: temper({ skittishness: 0.9, stillness: 0.2 }),
+  },
+
+  // === The playable six ====================================================
+  //
+  // These are the only species a player is ever dealt. Each one is meant to play
+  // differently enough that knowing what you are changes how you play, so the
+  // numbers below are deliberately spiky rather than balanced into a mush:
+  //
+  //   crocodile  owns the water and is helpless away from it
+  //   tiger      the all-rounder — fast, tough, patient
+  //   tortoise   cannot be killed quickly and cannot go anywhere quickly
+  //   leopard    fastest thing alive, always hungry, hits like a slap
+  //   gorilla    lethal on land, drowns in water
+  //   capybara   cannot fight, cannot starve, can outrun almost anything
+  //
+  // Crocodile and Turtle already have entries above (Black Caiman and
+  // Yellow-footed Tortoise); the three new predators and the ambient ants are
+  // defined here.
+
+  [Species.Tiger]: {
+    species: Species.Tiger,
+    name: 'Tiger',
+    emoji: '🐅',
+    tagline: 'Patient, tireless, and never in a hurry to eat.',
+    diet: Diet.Carnivore,
+    size: SizeClass.Large,
+    // Barely hungers: the tiger can afford to sit and watch, which is exactly
+    // the playstyle it is meant to reward.
+    hungerRate: 0.55,
+    healthMultiplier: 1.35,
+    noiseMultiplier: 0.65,
+    // A heavy, committed bite.
+    attackPower: 1.5,
+    eats: ['smallAnimal', 'largeAnimal', 'carrion', 'fish'],
+    preys: [Species.Capybara, Species.Turtle, Species.Gorilla, Species.Leopard],
+    playable: true,
+    canBeHunter: true,
+    ability: AbilityId.Pounce,
+    pros: ['Deep stamina', 'Hardly ever hungry', 'Heavy bite', 'Swims when it must'],
+    cons: ['Slower than a leopard', 'Big and easy to see', 'Loud in undergrowth'],
+    locomotion: loco({
+      landSpeed: 1.24,
+      swimSpeed: 0.9,
+      canClimb: true,
+      climbSpeed: 0.85,
+      jumpPower: 1.25,
+      sprintMultiplier: 1.95,
+      agility: 1.1,
+    }),
+    silhouette: {
+      length: 2.1,
+      height: 0.95,
+      width: 0.62,
+      colors: { body: 0xd18434, belly: 0xefe0c4, accent: 0x241a12, eye: 0xd8c95c },
+      bodyPlan: BodyPlan.Feline,
+      legPairs: 2,
+      tail: 0.62,
+    },
+    temperament: temper({
+      skittishness: 0.05,
+      aggression: 0.95,
+      aquatic: 0.4,
+      stillness: 0.4,
+      sight: 1.35,
+      hearing: 1.3,
+    }),
+  },
+
+  [Species.Leopard]: {
+    species: Species.Leopard,
+    name: 'Leopard',
+    emoji: '🐆',
+    tagline: 'The fastest thing in the jungle, and the hungriest.',
+    diet: Diet.Carnivore,
+    size: SizeClass.Medium,
+    // The cost of all that speed: a leopard that stops hunting starves.
+    hungerRate: 2.3,
+    healthMultiplier: 0.85,
+    noiseMultiplier: 0.5,
+    // Built for speed, not for power: it wins chases, not fights.
+    attackPower: 0.75,
+    eats: ['smallAnimal', 'largeAnimal', 'carrion', 'fish'],
+    preys: [Species.Capybara, Species.Turtle],
+    playable: true,
+    canBeHunter: true,
+    ability: AbilityId.Pounce,
+    pros: ['Fastest animal alive', 'Huge stamina', 'Climbs anything', 'Nearly silent'],
+    cons: ['Starves fast', 'Weak bite for a cat', 'Thin hide'],
+    locomotion: loco({
+      landSpeed: 1.5,
+      swimSpeed: 0.7,
+      canClimb: true,
+      climbSpeed: 1.3,
+      jumpPower: 1.45,
+      sprintMultiplier: 2.35,
+      agility: 1.4,
+    }),
+    silhouette: {
+      length: 1.6,
+      height: 0.74,
+      width: 0.44,
+      colors: { body: 0xd8b055, belly: 0xf2e7c8, accent: 0x2a2016, eye: 0xc9d95a },
+      bodyPlan: BodyPlan.Feline,
+      legPairs: 2,
+      tail: 0.78,
+    },
+    temperament: temper({
+      skittishness: 0.12,
+      aggression: 0.85,
+      aquatic: 0.2,
+      arboreal: 0.45,
+      stillness: 0.25,
+      sight: 1.4,
+      hearing: 1.35,
+    }),
+  },
+
+  [Species.Gorilla]: {
+    species: Species.Gorilla,
+    name: 'Silverback Gorilla',
+    emoji: '🦍',
+    tagline: 'Unstoppable on land. Do not go near the water.',
+    diet: Diet.Omnivore,
+    size: SizeClass.Large,
+    hungerRate: 1.0,
+    healthMultiplier: 1.1,
+    noiseMultiplier: 1.1,
+    // Strongest attack in the game, by design.
+    attackPower: 2.1,
+    eats: ['fruit', 'plant', 'smallAnimal', 'carrion'],
+    preys: [Species.Capybara, Species.Leopard],
+    playable: true,
+    canBeHunter: true,
+    ability: AbilityId.HerdBlend,
+    pros: ['Strongest attack in the game', 'Stands up to look around', 'Climbs well'],
+    cons: ['Cannot swim — deep water drowns it', 'Noisy', 'Only average speed'],
+    /*
+     * swimSpeed 0 is load-bearing, not a rounding of "swims badly".
+     *
+     * `canSwim` is defined as swimSpeed > 0.15, and the movement solver refuses
+     * to let an animal that cannot swim walk into deep water at all — which is
+     * what makes the river a wall for a gorilla rather than a hazard it can
+     * blunder into and die in.
+     */
+    locomotion: loco({
+      landSpeed: 1.05,
+      swimSpeed: 0,
+      canClimb: true,
+      climbSpeed: 1.0,
+      jumpPower: 0.9,
+      sprintMultiplier: 1.7,
+      agility: 0.85,
+    }),
+    silhouette: {
+      length: 1.5,
+      height: 1.05,
+      width: 0.72,
+      colors: { body: 0x2e2b2c, belly: 0x4a4547, accent: 0x8e8a86, eye: 0x3a2a18 },
+      bodyPlan: BodyPlan.Primate,
+      legPairs: 2,
+      tail: 0,
+    },
+    temperament: temper({
+      skittishness: 0.1,
+      aggression: 1.0,
+      aquatic: 0,
+      arboreal: 0.35,
+      stillness: 0.35,
+      sight: 1.15,
+      hearing: 1.1,
+    }),
+  },
+
+  [Species.Ant]: {
+    species: Species.Ant,
+    name: 'Leafcutter Ant',
+    emoji: '🐜',
+    tagline: 'A column of them crossing the trail.',
+    diet: Diet.Herbivore,
+    size: SizeClass.Tiny,
+    hungerRate: 0,
+    healthMultiplier: 0.05,
+    noiseMultiplier: 0,
+    eats: ['plant'],
+    preys: [],
+    playable: false,
+    canBeHunter: false,
+
+    pros: [],
+    cons: [],
+    locomotion: loco({ landSpeed: 0.16, swimSpeed: 0, agility: 1.4 }),
+    silhouette: {
+      length: 0.09,
+      height: 0.04,
+      width: 0.05,
+      colors: { body: 0x3a1f12, belly: 0x24140c, accent: 0x5a3520, eye: 0x000000 },
+      bodyPlan: BodyPlan.Insect,
+      legPairs: 3,
+      tail: 0,
+    },
+    temperament: temper({ skittishness: 0.95, social: true, stillness: 0.05 }),
   },
 };
 

@@ -70,7 +70,7 @@ const LOD_DISTANCE = 25;
  * bigger makes it worse. So the tufts are small — about fifteen centimetres — and
  * there are a lot of them.
  */
-const TUFT_DENSITY = 7.5;
+const TUFT_DENSITY = 11;
 
 /*
  * Density and reach no longer trade against each other, and that is the point of
@@ -189,20 +189,38 @@ export class GrassField {
       return d <= LOD_DISTANCE + hysteresis ? 'near' : 'far';
     };
 
-    // --- Retire what has gone out of range, or wants a different LOD -------
+    /*
+     * --- Retire what has gone out of range ---------------------------------
+     *
+     * Out-of-range chunks can be dropped on the spot: they are past the cull
+     * distance, so nobody sees them go.
+     *
+     * An LOD change is a different matter and must never be handled this way.
+     * The first version deleted the chunk and let the ordinary build queue
+     * replace it, which meant the replacement competed for a bounded per-frame
+     * budget — and as the player walks, the LOD boundary sweeps through a whole
+     * ring of chunks at once. Every one of them vanished and came back several
+     * frames later, so there was a permanent bare annulus about 25 m out that
+     * followed the camera around. That is the gap in the grass.
+     *
+     * So LOD changes are collected and swapped *in place* below: build the
+     * replacement first, then release the old mesh. The ground is never empty.
+     */
+    const relod: GrassChunk[] = [];
     for (const [key, chunk] of this.chunks) {
       const cx = (chunk.cx + 0.5) * CHUNK;
       const cz = (chunk.cz + 0.5) * CHUNK;
       const dx = cx - cameraPos.x;
       const dz = cz - cameraPos.z;
-      const outOfRange = dx * dx + dz * dz > keepSq;
-      // Keep an existing chunk at its current level within a 6 m dead band.
-      const wants = lodFor(chunk.cx, chunk.cz, chunk.lod === 'near' ? 6 : -6);
-      if (outOfRange || wants !== chunk.lod) {
+      if (dx * dx + dz * dz > keepSq) {
         this.group.remove(chunk.mesh);
         this.pool[chunk.lod].push(chunk.mesh);
         this.chunks.delete(key);
+        continue;
       }
+      // Keep an existing chunk at its current level within a 6 m dead band.
+      const wants = lodFor(chunk.cx, chunk.cz, chunk.lod === 'near' ? 6 : -6);
+      if (wants !== chunk.lod) relod.push(chunk);
     }
 
     // --- Queue what is missing --------------------------------------------
@@ -238,6 +256,29 @@ export class GrassField {
     const budget = this.pending.length > 24 ? BUILDS_PER_FRAME * 5 : BUILDS_PER_FRAME;
     for (let n = 0; n < Math.min(budget, this.pending.length); n++) {
       this.build(this.pending[n].cx, this.pending[n].cz, this.pending[n].lod);
+    }
+
+    /*
+     * --- Swap LOD levels in place ------------------------------------------
+     *
+     * Nearest first, and only a few a frame, because each one is a full chunk
+     * rebuild. `build` registers the new chunk over the old key, so the old mesh
+     * has to be released afterwards — and only afterwards, which is the whole
+     * point: at no instant is there no grass at that spot.
+     */
+    if (relod.length > 0) {
+      relod.sort((a, b) => {
+        const da = Math.hypot((a.cx + 0.5) * CHUNK - cameraPos.x, (a.cz + 0.5) * CHUNK - cameraPos.z);
+        const db = Math.hypot((b.cx + 0.5) * CHUNK - cameraPos.x, (b.cz + 0.5) * CHUNK - cameraPos.z);
+        return da - db;
+      });
+      for (let n = 0; n < Math.min(BUILDS_PER_FRAME * 2, relod.length); n++) {
+        const old = relod[n];
+        const wants: Lod = old.lod === 'near' ? 'far' : 'near';
+        this.build(old.cx, old.cz, wants);
+        this.group.remove(old.mesh);
+        this.pool[old.lod].push(old.mesh);
+      }
     }
 
     // --- Wind -------------------------------------------------------------
@@ -302,7 +343,15 @@ export class GrassField {
          */
         const density = this.terrain.foliageAt(x, z);
         const h2 = hash2(cx * 17 + i, cz * 29 + j, 7);
-        if (h2.u > 0.55 + (1 - clamp01(density)) * 0.4) continue;
+        /*
+         * The floor was 0.55, which threw away nearly half the grid under closed
+         * canopy — and thinning a field by rejecting cells does not read as
+         * "sparser grass", it reads as holes, because the survivors keep their
+         * full size and the gaps between them are tuft-sized. Raised to 0.86 so
+         * the lean towards open ground is a slight thinning rather than a
+         * puncture; the *colour* drift below is what actually communicates shade.
+         */
+        if (h2.u > 0.86 + (1 - clamp01(density)) * 0.14) continue;
 
         this.position.set(x, ground, z);
         this.quaternion.setFromAxisAngle(this.axis, h.u * Math.PI * 2);

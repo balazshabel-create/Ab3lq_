@@ -15,6 +15,7 @@ import {
   AI_LOD_TICK_DIVISOR,
   AI_POPULATION,
   AI_SPECIES_COVER_MIN,
+  AMBIENT_POPULATION,
   ANIMAL_SPEED,
   ATTACK_STRIKE_TIME,
   CLIENT_TIMEOUT,
@@ -71,10 +72,10 @@ import { SpatialGrid } from '../Systems/SpatialGrid';
 import { Terrain } from '../World/Terrain';
 import { generateWorld, type FoodSource, type WorldContent } from '../World/WorldGen';
 import {
+  AMBIENT_SPECIES,
   ANIMALS,
   AbilityId,
-  Diet,
-  SPAWNABLE_SPECIES,
+  PLAYABLE_SPECIES,
   Species,
   SizeClass,
   isEnabled,
@@ -508,29 +509,46 @@ export class Simulation implements AiContext {
       budget -= count;
     }
 
-    // 2. Fill the rest with a believable spread of the whole ecosystem.
-    // Weight towards common, harmless species so predators stay special.
-    // SPAWNABLE_SPECIES rather than ALL_SPECIES: withdrawn species keep their
-    // table entry (the wire format indexes into it) but must never be spawned.
-    const fillers = SPAWNABLE_SPECIES.filter((s) => !unique.includes(s));
-    const weights = fillers.map((s) => {
-      const def = ANIMALS[s];
-      let w = 10;
-      if (def.size >= SizeClass.Large) w = 2.5; // apex predators are rare
-      if (!def.playable) w = 8; // ambient life is common
-      if (def.temperament.social) w *= 1.5;
-      return w;
-    });
+    /*
+     * 2. Fill the rest of the six with animals a player could be mistaken for.
+     *
+     * PLAYABLE_SPECIES rather than SPAWNABLE_SPECIES: the six-animal budget is
+     * what decides how hard the hiding game is, and spending a slot on a
+     * butterfly buys nothing — nobody is going to wonder whether that butterfly
+     * is a player. Ambient life is spawned separately below, off this budget.
+     */
+    const fillers = PLAYABLE_SPECIES.filter((s) => !unique.includes(s));
+    if (fillers.length > 0) {
+      const weights = fillers.map((s) => (ANIMALS[s].size >= SizeClass.Large ? 2.5 : 10));
+      while (budget > 0) {
+        const species = rng.pickWeighted(fillers, weights);
+        const def = ANIMALS[species];
+        const groupSize = def.temperament.social
+          ? rng.int(HERD_SIZE_MIN, HERD_SIZE_MAX)
+          : 1;
+        const n = Math.min(budget, groupSize);
+        this.spawnGroup(species, n, rng);
+        budget -= n;
+      }
+    }
 
-    while (budget > 0 && fillers.length > 0) {
-      const species = rng.pickWeighted(fillers, weights);
-      const def = ANIMALS[species];
-      const groupSize = def.temperament.social
-        ? rng.int(HERD_SIZE_MIN, HERD_SIZE_MAX)
-        : rng.int(1, 2);
-      const n = Math.min(budget, groupSize);
-      this.spawnGroup(species, n, rng);
-      budget -= n;
+    /*
+     * 3. Ambient life: fish in the river, ants and butterflies on land, birds.
+     *
+     * Off the main budget entirely — see AMBIENT_POPULATION. Spawned in small
+     * groups because that is how you meet them: a shoal, an ant column, a pair
+     * of macaws, never one of each evenly spread over the map.
+     */
+    const ambient = AMBIENT_SPECIES.filter(isEnabled);
+    if (ambient.length > 0) {
+      let ambientBudget = AMBIENT_POPULATION;
+      const weights = ambient.map((s) => (ANIMALS[s].size <= SizeClass.Tiny ? 14 : 6));
+      while (ambientBudget > 0) {
+        const species = rng.pickWeighted(ambient, weights);
+        const n = Math.min(ambientBudget, rng.int(3, 12));
+        this.spawnGroup(species, n, rng);
+        ambientBudget -= n;
+      }
     }
 
     this.rebuildGrid();
@@ -575,13 +593,30 @@ export class Simulation implements AiContext {
         x = anchor.x;
         z = anchor.z;
       }
-      // Do not strand a land animal in the river, or a fish on the bank.
+      /*
+       * Put every animal in the habitat it belongs to.
+       *
+       * Keyed on the species' water *preference*, not on whether it is physically
+       * able to swim — which is the bug this replaces. A tiger swims perfectly
+       * well (swimSpeed 0.9), so the old `swimSpeed < 0.4` test never moved one
+       * out of the river, and rounds opened with a tiger paddling in midstream.
+       * A crocodile has the mirror-image problem: capability says nothing about
+       * where it wants to be, and the old threshold of `aquatic > 0.9` was so
+       * tight that the caiman's own 0.92 barely cleared it.
+       *
+       * Three bands, from the temperament table:
+       *   >= 0.85  lives in the water (caiman, piranha) — must be in the river
+       *   <  0.5   lives on land (tiger, leopard, gorilla, tortoise) — must not be
+       *   between  amphibious (capybara, heron) — either is fine, leave it
+       */
       const deep = this.terrain.isDeepWater(x, z);
-      if (deep && def.locomotion.swimSpeed < 0.4) {
+      const wantsWater = aquatic >= 0.85;
+      const avoidsWater = aquatic < 0.5;
+      if (deep && avoidsWater) {
         const p = this.terrain.findLandPosition(rng, area);
         x = p.x;
         z = p.z;
-      } else if (!deep && aquatic > 0.9) {
+      } else if (!deep && wantsWater) {
         const p = this.terrain.findWaterPosition(rng, area);
         x = p.x;
         z = p.z;
@@ -718,6 +753,19 @@ export class Simulation implements AiContext {
 
   getAnimalCount(): number {
     return this.animals.length;
+  }
+
+  /**
+   * AI animals of a *playable* species — the ones a player could be mistaken for.
+   *
+   * Separate from `getAnimalCount` because ambient life (fish, ants, butterflies,
+   * birds) is spawned off its own budget and is not part of the hiding game. The
+   * population cap that matters is this one; the total is dominated by scenery.
+   */
+  getCoverAnimalCount(): number {
+    let n = 0;
+    for (const a of this.animals) if (ANIMALS[a.species].playable) n++;
+    return n;
   }
 
   /** Recompute a player's stat block after a role or species change. */
@@ -1387,12 +1435,15 @@ export class Simulation implements AiContext {
      * predator's, and body size scales it further, so a tiny herbivore is doing
      * little more than making a point.
      */
-    const meatEater =
-      def.diet === Diet.Carnivore ||
-      def.diet === Diet.Piscivore ||
-      def.diet === Diet.Omnivore;
-    const sizeFactor = [0.22, 0.5, 0.8, 1.0, 1.15][def.size] ?? 0.8;
-    const attackPower = (meatEater ? 1 : 0.34) * sizeFactor;
+    /*
+     * Attack strength is now per-species data, not inferred.
+     *
+     * It used to be `(meatEater ? 1 : 0.34) * sizeFactor`, which cannot express
+     * the roster: the leopard is a large carnivore that is meant to hit softly and
+     * the gorilla is an omnivore that is meant to hit hardest, so the inference
+     * got both exactly backwards. See AnimalDef.attackPower.
+     */
+    const attackPower = def.attackPower ?? 0.5;
 
     player.attackCooldown = HUNTER_ATTACK_COOLDOWN;
     // Open the strike window. The flag is also raised here rather than waiting
@@ -1451,15 +1502,30 @@ export class Simulation implements AiContext {
      * taking natural prey therefore kills outright, exactly as it does when the
      * AI hunts. Anything else it can reach still takes a heavy hit.
      */
+    /*
+     * Size resistance: hitting something much bigger than you barely registers.
+     *
+     * Without this, a capybara could grind a tiger down given enough bites — its
+     * bite is feeble but nonzero, and nothing stopped the arithmetic from getting
+     * there eventually. "A capybara must not kill a tiger" is a statement about
+     * what is *possible*, not about how long it takes, so it needs a term that
+     * scales with the gap in size rather than a smaller constant.
+     *
+     * Two size classes up (capybara Medium -> tiger Large is one, and the tiger's
+     * 1.35 health multiplier does the rest) already cuts the bite to a fifth.
+     */
+    const sizeGap = ANIMALS[victim.species].size - def.size;
+    const resistance = sizeGap > 0 ? 1 / (1 + sizeGap * 2) : 1;
+
     let damage: number;
     if (victim.kind === ActorKind.Player) {
       const roleScale = player.role === Role.Hunter ? 1 : 0.55;
-      damage = HUNTER_DAMAGE * roleScale * attackPower;
+      damage = HUNTER_DAMAGE * roleScale * attackPower * resistance;
     } else if (canPrey(player.species, victim.species)) {
       // A predator taking its natural prey succeeds outright, as the AI does.
       damage = victim.maxHealth;
     } else {
-      damage = HUNTER_DAMAGE * 1.8 * attackPower;
+      damage = HUNTER_DAMAGE * 1.8 * attackPower * resistance;
     }
 
     this.damageActor(victim.id, armoured ? damage * 0.3 : damage, player.id);
