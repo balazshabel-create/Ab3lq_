@@ -22,6 +22,7 @@ import { BackdropSystem } from './BackdropSystem';
 import { StormRenderer, type StormCircle } from './StormRenderer';
 import { AnimalRenderer } from './AnimalRenderer';
 import { EffectsRenderer, type FlySwarmInput } from './EffectsRenderer';
+import { PostProcessing } from './PostProcessing';
 import { CameraRig } from '../Player/CameraRig';
 import { SpatialGrid } from '../Systems/SpatialGrid';
 import { BACKDROP_RADIUS, WATER_LEVEL } from '../Systems/Config';
@@ -81,6 +82,7 @@ export class Renderer {
   readonly storm: StormRenderer;
   readonly animals: AnimalRenderer;
   readonly effects: EffectsRenderer;
+  readonly post: PostProcessing;
 
   private terrain: Terrain;
   /** Public so the verification tools can read the live preset values. */
@@ -131,6 +133,16 @@ export class Renderer {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
+    /*
+     * Accumulate render stats manually.
+     *
+     * `renderer.info` resets itself on every `render()` call, and a post-processing
+     * chain calls render once per pass — so the debug overlay ended up reporting
+     * the single full-screen quad of the last pass and declaring that the world
+     * was not being drawn. Resetting once per frame instead makes the counters
+     * cover the whole frame, passes included.
+     */
+    this.renderer.info.autoReset = false;
 
     this.scene = new THREE.Scene();
     // Exponential fog: the jungle should close in around you, and it is also
@@ -159,6 +171,7 @@ export class Renderer {
     this.storm = new StormRenderer(this.scene, settings);
     this.animals = new AnimalRenderer(this.scene, settings);
     this.effects = new EffectsRenderer(this.scene, settings);
+    this.post = new PostProcessing(this.renderer, this.scene, this.camera, settings);
 
     this.buildCameraBlockers(content);
     this.cameraRig.setBlockerTest((x, y, z) => this.isBlocked(x, y, z));
@@ -292,6 +305,7 @@ export class Renderer {
    * only means less smooth interpolation, never a gameplay difference.
    */
   render(dt: number, world: RenderWorldState): void {
+    this.renderer.info.reset();
     this.time += dt;
     this.waterLevel = world.waterLevel;
 
@@ -425,6 +439,17 @@ export class Renderer {
     // Splashes first, so a ring spawned this frame is drawn this frame.
     this.animals.collectSplashes(this.splashes);
     this.effects.spawnSplash(this.splashes);
+    // Rain dimples the river. Skipped underwater, where the surface is above you
+    // and its rings would be drawn from the wrong side.
+    if (!underwater) {
+      this.effects.spawnRainDimples(
+        world.rain,
+        cameraPos.x,
+        cameraPos.z,
+        (x, z) => this.terrain.isWater(x, z),
+        dt,
+      );
+    }
     this.effects.updateRipples(this.wakes, world.waterLevel, dt);
     this.animals.collectFlySwarms(this.swarms);
     this.effects.update(
@@ -447,7 +472,13 @@ export class Renderer {
       this.camera.updateProjectionMatrix();
     }
 
-    this.renderer.render(this.scene, this.camera);
+    /*
+     * Draw. Through the composer when post-processing is on, straight to the
+     * canvas when it is not — see PostProcessing for why an inactive chain is
+     * absent rather than merely disabled.
+     */
+    if (this.post.active) this.post.render();
+    else this.renderer.render(this.scene, this.camera);
 
     // Rolling frame-time window for the debug overlay.
     this.frameTimes.push(dt);
@@ -474,6 +505,7 @@ export class Renderer {
     this.water.setSettings(settings);
     this.animals.setSettings(settings);
     this.effects.setSettings(settings);
+    this.post.setSettings(settings);
 
     // Foliage and terrain rebuilds are expensive, so only do them when the
     // setting that actually drives them has changed.
@@ -497,6 +529,9 @@ export class Renderer {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();
+    // The composer's targets are sized independently of the canvas, so they have
+    // to be told too or post-processing renders at the old resolution.
+    this.post?.setSize(width, height);
   }
 
   /** How exposed the camera is to the storm, 0..1. Read by the HUD. */
@@ -531,6 +566,7 @@ export class Renderer {
   }
 
   dispose(): void {
+    this.post.dispose();
     this.grass.dispose();
     this.storm.dispose();
     this.effects.dispose();

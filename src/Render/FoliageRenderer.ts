@@ -580,81 +580,255 @@ export function vertexColorMaterial(options: { transparent?: boolean; side?: THR
   });
 }
 
-/** A rainforest tree: bare trunk with the canopy high up. */
+/**
+ * One leaf: a tapered blade, four triangles, lying in its own local XZ plane.
+ *
+ * This is the building block that replaced the smooth spheres the canopy and the
+ * bushes used to be made of, and it is worth spelling out why, because the change
+ * made the jungle both better looking *and* cheaper.
+ *
+ * A low-poly sphere is a terrible leaf mass. Its silhouette is a polygon, its
+ * shading is a smooth gradient, and the eye reads it instantly as a ball painted
+ * green — no amount of colour variation fixes a shape that has no leaves in it.
+ * It is also expensive: a 7×5 sphere is about seventy triangles, and a bush was
+ * four of them, so ~280 triangles to draw one shrub badly.
+ *
+ * A cluster of twenty leaf cards is ~80 triangles, has a ragged silhouette, and
+ * catches light differently on every card. Better and a third of the cost.
+ */
+function leafGeometry(length: number, width: number, droop: number): THREE.BufferGeometry {
+  // Five points: base, two shoulders, two tip-side points, meeting at the tip.
+  const h = width * 0.5;
+  const positions = [
+    // Base triangle pair, widening out.
+    0, 0, 0, length * 0.35, -droop * 0.15, -h, length * 0.35, -droop * 0.15, h,
+    // Middle, at full width.
+    length * 0.35, -droop * 0.15, -h, length * 0.72, -droop * 0.55, -h * 0.8, length * 0.35, -droop * 0.15, h,
+    length * 0.72, -droop * 0.55, -h * 0.8, length * 0.72, -droop * 0.55, h * 0.8, length * 0.35, -droop * 0.15, h,
+    // Tip.
+    length * 0.72, -droop * 0.55, -h * 0.8, length, -droop, 0, length * 0.72, -droop * 0.55, h * 0.8,
+  ];
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * A mass of leaves filling a rough ellipsoid.
+ *
+ * Cards are placed on a Fibonacci sphere so they spread evenly at any count, then
+ * each is tilted outward-and-down like a real leaf hanging off a twig. Every card
+ * gets its own colour from a small palette, which is what turns the cluster into
+ * something with depth instead of a single-tone shape.
+ */
+function leafCluster(
+  parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[],
+  options: {
+    count: number;
+    radius: number;
+    flatten: number;
+    leafLength: number;
+    leafWidth: number;
+    centre: [number, number, number];
+    palette: number[];
+  },
+): void {
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < options.count; i++) {
+    // Fibonacci sphere: even coverage without a lattice pattern.
+    const y = 1 - (i / Math.max(1, options.count - 1)) * 2;
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const a = i * golden;
+    const dirX = Math.cos(a) * r;
+    const dirY = y;
+    const dirZ = Math.sin(a) * r;
+
+    const leaf = leafGeometry(options.leafLength, options.leafWidth, options.leafLength * 0.3);
+    // Point the leaf outwards along its own +X, then tip it down a little.
+    leaf.rotateZ(-0.35 - (i % 3) * 0.18);
+    leaf.rotateY(-Math.atan2(dirZ, dirX));
+    // Splay the whole card towards its direction on the sphere.
+    leaf.rotateZ(Math.asin(Math.max(-1, Math.min(1, dirY))) * 0.55);
+    leaf.translate(
+      options.centre[0] + dirX * options.radius * 0.72,
+      options.centre[1] + dirY * options.radius * options.flatten * 0.72,
+      options.centre[2] + dirZ * options.radius * 0.72,
+    );
+    parts.push({
+      geometry: leaf,
+      color: new THREE.Color(options.palette[i % options.palette.length]),
+    });
+  }
+}
+
+/** A rainforest tree: bare trunk, real branches, and a canopy of leaves. */
 function buildTree(detail: number): PropAssets {
   const segments = detail >= 2 ? 7 : detail >= 1 ? 5 : 4;
   const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
 
-  // Trunk — tall and clean, as rainforest trunks are.
-  const trunk = new THREE.CylinderGeometry(0.32, 0.5, 13, segments);
-  trunk.translate(0, 6.5, 0);
-  parts.push({ geometry: trunk, color: new THREE.Color(0x453322) });
+  // Trunk — tall and clean, as rainforest trunks are. Two stacked sections with
+  // different tapers read as a real trunk rather than as a pole.
+  const lower = new THREE.CylinderGeometry(0.42, 0.56, 7, segments);
+  lower.translate(0, 3.5, 0);
+  parts.push({ geometry: lower, color: new THREE.Color(0x4b3826) });
+  const upper = new THREE.CylinderGeometry(0.26, 0.42, 6.4, segments);
+  upper.translate(0, 10.1, 0);
+  parts.push({ geometry: upper, color: new THREE.Color(0x554027) });
 
   // Buttress roots, the signature of a big Amazon tree.
   if (detail >= 1) {
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2;
-      const root = new THREE.ConeGeometry(0.42, 2.6, 4);
-      root.translate(Math.cos(a) * 0.5, 1.1, Math.sin(a) * 0.5);
-      parts.push({ geometry: root, color: new THREE.Color(0x3b2c1d) });
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const root = new THREE.ConeGeometry(0.4, 2.8, 4);
+      root.rotateZ(0.13);
+      root.rotateY(a);
+      root.translate(Math.cos(a) * 0.55, 1.2, Math.sin(a) * 0.55);
+      parts.push({ geometry: root, color: new THREE.Color(0x3f2f1f) });
     }
   }
 
-  // Canopy: three overlapping domes at different heights, so tree tops form an
-  // uneven roof rather than a row of identical blobs.
-  const canopyColors = [0x2c5c22, 0x35692a, 0x3f7830];
-  const heights = [12.4, 14.2, 15.6];
-  const radii = [4.6, 3.7, 2.6];
-  for (let i = 0; i < 3; i++) {
-    const dome = new THREE.SphereGeometry(radii[i], segments + 2, Math.max(3, segments - 1));
-    dome.scale(1, 0.62, 1);
-    dome.translate((i - 1) * 0.7, heights[i], (i % 2 === 0 ? 1 : -1) * 0.5);
-    parts.push({ geometry: dome, color: new THREE.Color(canopyColors[i]) });
+  /*
+   * Branches, reaching up and out into the canopy.
+   *
+   * These do real work beyond decoration: they are what visually *supports* the
+   * leaf mass. Leaf clusters floating with nothing underneath them read as
+   * green clouds, which is what the three smooth domes here used to look like.
+   */
+  const branchCount = detail >= 2 ? 5 : detail >= 1 ? 4 : 3;
+  const branchTips: [number, number, number][] = [];
+  for (let i = 0; i < branchCount; i++) {
+    const a = (i / branchCount) * Math.PI * 2 + 0.4;
+    const lean = 0.62 + (i % 2) * 0.16;
+    const len = 3.6 + (i % 3) * 0.9;
+    const baseY = 11.4 + (i % 3) * 0.9;
+    const branch = new THREE.CylinderGeometry(0.07, 0.17, len, 4);
+    // Stand it up, tip it out, then swing it round to its bearing.
+    branch.translate(0, len * 0.5, 0);
+    branch.rotateZ(lean);
+    branch.rotateY(-a);
+    branch.translate(0, baseY, 0);
+    parts.push({ geometry: branch, color: new THREE.Color(0x483623) });
+    // Where the leaves for this branch belong.
+    const reach = Math.sin(lean) * len;
+    branchTips.push([
+      Math.cos(a) * reach,
+      baseY + Math.cos(lean) * len,
+      Math.sin(a) * reach,
+    ]);
   }
 
-  // A couple of bare branches for silhouette interest.
-  if (detail >= 2) {
-    for (let i = 0; i < 3; i++) {
-      const a = (i / 3) * Math.PI * 2 + 0.4;
-      const branch = new THREE.CylinderGeometry(0.09, 0.16, 3.4, 4);
-      branch.rotateZ(Math.PI * 0.32);
-      branch.rotateY(a);
-      branch.translate(Math.cos(a) * 1.2, 10 + i * 0.8, Math.sin(a) * 1.2);
-      parts.push({ geometry: branch, color: new THREE.Color(0x40301f) });
-    }
+  /*
+   * The canopy: one leaf cluster per branch tip, plus a crown on top.
+   *
+   * Uneven on purpose — real tree tops form a lumpy roof, and a row of identical
+   * blobs is the single most obvious tell of a procedural forest.
+   */
+  const palette = [0x2f6224, 0x376e29, 0x40802f, 0x2a5620, 0x487f35];
+  const perCluster = detail >= 2 ? 13 : detail >= 1 ? 9 : 5;
+  for (let i = 0; i < branchTips.length; i++) {
+    leafCluster(parts, {
+      count: perCluster,
+      radius: 2.5 + (i % 3) * 0.55,
+      flatten: 0.78,
+      leafLength: 1.5,
+      leafWidth: 0.66,
+      centre: branchTips[i],
+      palette,
+    });
   }
+  leafCluster(parts, {
+    count: perCluster + 4,
+    radius: 3.1,
+    flatten: 0.62,
+    leafLength: 1.7,
+    leafWidth: 0.72,
+    centre: [0, 15.4, 0],
+    palette,
+  });
 
-  return { geometry: merge(parts), material: vertexColorMaterial() };
+  return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
 }
 
 /**
- * A bush: overlapping spheres. The primary hiding place in the game.
+ * A bush: stems and a mass of leaves. The primary hiding place in the game.
  *
- * The albedo here is much brighter than a photograph of a shade-grown shrub, and
- * that is deliberate. sRGB 0x2f5423 — which looks like a perfectly reasonable
- * bush green in a colour picker — is only 0.088 in linear light. Multiply that by
- * a canopy-shadowed sun and push it through ACES tone mapping and the bush comes
- * out as a black hexagon with one lit facet: it stops reading as the thing you
- * hide in and starts reading as a hole in the ground.
+ * The most important prop in the world to get right — there are eight thousand of
+ * them and the whole game is about being inside one — and until now it was four
+ * overlapping spheres, which is to say four green balls. Now it is a few woody
+ * stems with leaf cards clustered around them: a ragged outline, light catching
+ * individual leaves, and about a third of the triangles.
+ *
+ * The albedo is much brighter than a photograph of a shade-grown shrub, and that
+ * is deliberate. sRGB 0x2f5423 — which looks like a perfectly reasonable bush
+ * green in a colour picker — is only 0.088 in linear light. Multiply that by a
+ * canopy-shadowed sun and push it through ACES tone mapping and the bush comes out
+ * as a black hexagon with one lit facet: it stops reading as the thing you hide in
+ * and starts reading as a hole in the ground.
  */
 function buildBush(detail: number, color: number): PropAssets {
-  const segments = detail >= 2 ? 7 : 5;
   const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
-  const blobs = detail >= 1 ? 4 : 2;
   const base = new THREE.Color(color);
-  for (let i = 0; i < blobs; i++) {
-    const a = (i / blobs) * Math.PI * 2;
-    const r = 0.55 + (i % 2) * 0.2;
-    const blob = new THREE.SphereGeometry(r, segments, Math.max(3, segments - 2));
-    blob.scale(1, 0.85, 1);
-    blob.translate(Math.cos(a) * 0.35, 0.5 + (i % 2) * 0.22, Math.sin(a) * 0.35);
-    // Vary the shade per blob so the bush has internal depth.
-    // A wider lightness spread than looks right in isolation: the darker blobs
-    // sit in the bush's own shadow and need somewhere to fall to.
-    const shade = base.clone().offsetHSL(0, 0, (i % 2 === 0 ? 0.07 : -0.06));
-    parts.push({ geometry: blob, color: shade });
+
+  // A palette spread around the base colour. The spread is wider than looks
+  // right in isolation, because leaves deep in the bush sit in its own shadow and
+  // need somewhere darker to fall to.
+  const palette = [
+    base.clone().offsetHSL(0, 0.03, 0.08).getHex(),
+    base.getHex(),
+    base.clone().offsetHSL(0.02, -0.02, -0.07).getHex(),
+    base.clone().offsetHSL(-0.02, 0.05, 0.03).getHex(),
+    base.clone().offsetHSL(0, -0.04, -0.12).getHex(),
+  ];
+
+  // Woody stems fanning up out of the ground, so the leaves hang off something.
+  const stems = detail >= 1 ? 4 : 2;
+  for (let i = 0; i < stems; i++) {
+    const a = (i / stems) * Math.PI * 2 + 0.3;
+    const stem = new THREE.CylinderGeometry(0.018, 0.038, 0.62, 3);
+    stem.translate(0, 0.31, 0);
+    stem.rotateZ(0.28);
+    stem.rotateY(-a);
+    parts.push({ geometry: stem, color: new THREE.Color(0x4a3a24) });
   }
-  return { geometry: merge(parts), material: vertexColorMaterial() };
+
+  /*
+   * Three overlapping leaf masses, and a lot of leaves in each.
+   *
+   * The count is high deliberately. A bush is the primary hiding place in the
+   * game, so it has to read as a *solid mass* — the first pass at this used
+   * fifteen small cards and the result was loose confetti you could see straight
+   * through, which is worse than the spheres it replaced however much better an
+   * individual leaf looked. The leaves are also bigger relative to the bush than
+   * feels right in isolation, because overlap is what makes a mass.
+   *
+   * Still cheaper than what it replaced: forty-odd cards at four triangles each is
+   * under two hundred triangles, against roughly two hundred and eighty for four
+   * low-poly spheres.
+   */
+  const perCluster = detail >= 2 ? 22 : detail >= 1 ? 16 : 9;
+  const masses: { radius: number; centre: [number, number, number]; scale: number }[] = [
+    { radius: 0.62, centre: [0, 0.46, 0], scale: 1 },
+    { radius: 0.48, centre: [0.26, 0.72, -0.16], scale: 0.88 },
+    { radius: 0.42, centre: [-0.27, 0.6, 0.2], scale: 0.82 },
+  ];
+  for (let m = 0; m < masses.length; m++) {
+    const mass = masses[m];
+    leafCluster(parts, {
+      count: m === 0 ? perCluster : Math.max(6, perCluster - 5),
+      radius: mass.radius,
+      flatten: 0.88,
+      // Leaf size against bush size is the ratio that decides whether this reads
+      // as a shrub or as a houseplant. Half a metre was too long: at the scales
+      // bushes are instanced at, that is a banana leaf.
+      leafLength: 0.32 * mass.scale,
+      leafWidth: 0.17 * mass.scale,
+      centre: mass.centre,
+      palette,
+    });
+  }
+
+  return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
 }
 
 /** A fruit bush: a bush with visible berries, so food is findable. */
@@ -703,21 +877,54 @@ function concatGeometries(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return merged;
 }
 
-/** A fern: a rosette of angled fronds. */
+/**
+ * A fern: a rosette of arching compound fronds.
+ *
+ * Each frond is a rachis with leaflets paired along it, which is what makes a
+ * fern a fern — the old version was a rosette of long thin *boxes*, and a box has
+ * no fern in it at all. The arch is built by stepping along the frond and dropping
+ * each pair a little lower than the last, so the tip bows towards the ground the
+ * way a real frond does under its own weight.
+ */
 function buildFern(detail: number): PropAssets {
-  const fronds = detail >= 1 ? 7 : 4;
+  const fronds = detail >= 2 ? 8 : detail >= 1 ? 6 : 4;
+  const leaflets = detail >= 2 ? 7 : detail >= 1 ? 5 : 3;
   const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  const shades = [0x54903a, 0x437a2b, 0x3a6a24, 0x4d8330];
+
   for (let i = 0; i < fronds; i++) {
-    const a = (i / fronds) * Math.PI * 2;
-    const frond = new THREE.BoxGeometry(0.1, 0.05, 1.15);
-    frond.translate(0, 0, 0.55);
-    frond.rotateX(-0.55);
-    frond.rotateY(a);
-    frond.translate(0, 0.42, 0);
-    parts.push({
-      geometry: frond,
-      color: new THREE.Color(i % 2 === 0 ? 0x4d8330 : 0x3d6c24),
-    });
+    const a = (i / fronds) * Math.PI * 2 + (i % 2) * 0.22;
+    const length = 0.95 + (i % 3) * 0.28;
+
+    // The rachis: a thin stem arching out and up from the crown.
+    const rachis = new THREE.CylinderGeometry(0.012, 0.022, length, 3);
+    rachis.translate(0, length * 0.5, 0);
+    rachis.rotateZ(1.02);
+    rachis.rotateY(-a);
+    rachis.translate(0, 0.14, 0);
+    parts.push({ geometry: rachis, color: new THREE.Color(0x46702a) });
+
+    for (let j = 0; j < leaflets; j++) {
+      const t = (j + 1) / (leaflets + 1);
+      // Along the arch: out with sin, up-then-over with a bowed profile.
+      const along = Math.sin(1.02) * length * t;
+      const height = 0.14 + Math.cos(1.02) * length * t - t * t * length * 0.34;
+      // Leaflets shorten towards the tip.
+      const size = (0.3 + (1 - t) * 0.24) * (detail >= 1 ? 1 : 0.8);
+
+      for (const side of [-1, 1]) {
+        const leaflet = leafGeometry(size, size * 0.42, size * 0.3);
+        // Splay out sideways from the rachis, angled back towards the tip.
+        leaflet.rotateY(side * 1.15);
+        leaflet.rotateZ(-0.25);
+        leaflet.rotateY(-a);
+        leaflet.translate(Math.cos(a) * along, height, Math.sin(a) * along);
+        parts.push({
+          geometry: leaflet,
+          color: new THREE.Color(shades[(i + j) % shades.length]),
+        });
+      }
+    }
   }
   return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
 }
@@ -780,15 +987,34 @@ export function buildGrassTuftGeometry(): THREE.BufferGeometry {
   for (let i = 0; i < blades; i++) {
     // Golden-angle fan so the blades never line up, at any rotation.
     const a = i * 2.399963;
-    const blade = bladeGeometry(0.06, 0.1 + (i % 3) * 0.035, 0.06 + (i % 2) * 0.04, 2);
+    /*
+     * Deliberately unequal blades. Five identical ones make a tidy little
+     * rosette, and a field of tidy rosettes reads as a pattern — the eye picks
+     * out the repeat immediately at this density. One blade noticeably taller
+     * than the rest, and widths that do not match, is enough to break it.
+     */
+    const tall = i === 0 ? 1.75 : i === 3 ? 1.3 : 1;
+    const blade = bladeGeometry(
+      0.055 + (i % 2) * 0.022,
+      (0.1 + (i % 3) * 0.035) * tall,
+      0.06 + (i % 2) * 0.045,
+      2,
+    );
     blade.rotateY(a);
-    blade.translate(Math.cos(a) * 0.03, 0, Math.sin(a) * 0.03);
+    blade.translate(Math.cos(a) * 0.032, 0, Math.sin(a) * 0.032);
     // Alternate shades so a tuft has depth even before the per-instance tint.
     parts.push({
       geometry: blade,
       color: new THREE.Color(i % 3 === 0 ? 0x5c8f34 : i % 3 === 1 ? 0x3d6824 : 0x4c7a2b),
     });
   }
+  // A single broad leaf per tuft: rainforest floor is not a lawn, it is grass
+  // interleaved with wider low-growing foliage, and one broad blade among five
+  // narrow ones is what carries that read.
+  const broad = leafGeometry(0.2, 0.11, 0.09);
+  broad.rotateZ(-0.85);
+  broad.rotateY(1.7);
+  parts.push({ geometry: broad, color: new THREE.Color(0x3f7028) });
   return merge(parts);
 }
 

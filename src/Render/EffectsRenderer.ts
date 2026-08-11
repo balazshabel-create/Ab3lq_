@@ -34,6 +34,8 @@ const RAIN_VERTEX = /* glsl */ `
   uniform float uSlant;
   attribute float aSeed;
   varying float vAlpha;
+  varying vec2 vStreak;
+  varying float vBright;
 
   void main() {
     // Each drop falls on a loop, so the whole system is stateless: position is
@@ -52,10 +54,32 @@ const RAIN_VERTEX = /* glsl */ `
     vec3 world = uCenter + offset;
     vec4 mvPosition = viewMatrix * vec4(world, 1.0);
     gl_Position = projectionMatrix * mvPosition;
-    // Perspective-correct size, clamped so near drops do not become blobs.
-    gl_PointSize = clamp(90.0 / -mvPosition.z, 1.0, 5.0);
+    /*
+     * Bigger points than a drop needs, because the point is a *canvas* for the
+     * streak the fragment shader draws inside it, not the drop itself. Rain read
+     * as falling dots before — which is snow. What makes rain look like rain is
+     * motion blur: each drop is a short line, not a dot.
+     */
+    gl_PointSize = clamp(420.0 / -mvPosition.z, 3.0, 26.0);
+
+    /*
+     * The streak's direction in *screen* space.
+     *
+     * A drop falls down the world's -Y and is pushed sideways by the wind, so its
+     * apparent direction on screen depends on where the camera is looking. Project
+     * the world-space velocity into clip space and hand the fragment shader the 2D
+     * direction to smear along, so streaks lean correctly from any viewpoint —
+     * including straight down, where they collapse to dots, which is also right.
+     */
+    vec3 velocity = normalize(vec3(uSlant * 6.0, -uHeight, 0.0));
+    vec4 tip = projectionMatrix * (mvPosition + vec4(velocity * 0.6, 0.0));
+    vec2 dir = tip.xy / max(1e-4, tip.w) - gl_Position.xy / max(1e-4, gl_Position.w);
+    vStreak = length(dir) > 1e-5 ? normalize(dir) : vec2(0.0, 1.0);
+
     // Fade in at the top and out near the ground, so drops do not pop.
     vAlpha = smoothstep(0.0, 0.12, fall) * (1.0 - smoothstep(0.85, 1.0, fall));
+    // Nearer drops are brighter, which gives the curtain depth.
+    vBright = 0.55 + 0.45 * clamp(20.0 / -mvPosition.z, 0.0, 1.0);
   }
 `;
 
@@ -64,8 +88,22 @@ const RAIN_FRAGMENT = /* glsl */ `
   uniform vec3 uColor;
   uniform float uOpacity;
   varying float vAlpha;
+  varying vec2 vStreak;
+  varying float vBright;
+
   void main() {
-    gl_FragColor = vec4(uColor, vAlpha * uOpacity);
+    // Point-local coordinates, centred and in -1..1.
+    vec2 p = gl_PointCoord * 2.0 - 1.0;
+    // Split into "along the streak" and "across it". Anything more than a hair
+    // off the line is discarded, which is what turns a square sprite into a
+    // slanted line without any texture.
+    float along = dot(p, vStreak);
+    float across = abs(dot(p, vec2(-vStreak.y, vStreak.x)));
+    float line = 1.0 - smoothstep(0.06, 0.34, across);
+    // Taper both ends so the streak has a head and a tail rather than square cuts.
+    line *= 1.0 - smoothstep(0.55, 1.0, abs(along));
+    if (line <= 0.01) discard;
+    gl_FragColor = vec4(uColor * vBright, line * vAlpha * uOpacity);
   }
 `;
 
@@ -221,6 +259,7 @@ export class EffectsRenderer {
   /** Live ripples: expanding rings on the water surface. */
   private ripplePool: { x: number; z: number; age: number; life: number; scale: number }[] = [];
   private rippleSpawnAccumulator = 0;
+  private dimpleAccumulator = 0;
   private static readonly RIPPLE_POOL = 96;
 
   constructor(scene: THREE.Scene, settings: GraphicsSettings) {
@@ -511,6 +550,51 @@ export class EffectsRenderer {
           scale: (0.6 + Math.random() * 1.5) * (0.6 + e.strength * 0.8),
         });
       }
+    }
+  }
+
+  /**
+   * Rain dimpling the water.
+   *
+   * Rain that falls *through* a river without touching it is one of those details
+   * whose absence is hard to name and easy to feel. Reuses the ripple pool, so it
+   * costs no extra draw call: the ring geometry, the material and the instanced
+   * mesh are all already there for animal wakes.
+   *
+   * Candidates are sampled near the camera and rejected unless they land on water,
+   * which keeps the cost to a handful of heightfield lookups per frame and means
+   * dimples never appear on dry land.
+   */
+  spawnRainDimples(
+    rain: number,
+    cameraX: number,
+    cameraZ: number,
+    isWater: (x: number, z: number) => boolean,
+    dt: number,
+  ): void {
+    if (this.settings.effectsQuality === 'off' || rain <= 0.05) return;
+    this.dimpleAccumulator += dt * rain * 46;
+    let budget = Math.min(6, Math.floor(this.dimpleAccumulator));
+    if (budget <= 0) return;
+    this.dimpleAccumulator -= budget;
+    // Bounded attempts: in a jungle with no river in sight, most samples miss.
+    let attempts = budget * 4;
+    while (budget > 0 && attempts-- > 0) {
+      if (this.ripplePool.length >= EffectsRenderer.RIPPLE_POOL) return;
+      const a = Math.random() * Math.PI * 2;
+      const r = 30 * Math.sqrt(Math.random());
+      const x = cameraX + Math.cos(a) * r;
+      const z = cameraZ + Math.sin(a) * r;
+      if (!isWater(x, z)) continue;
+      this.ripplePool.push({
+        x,
+        z,
+        age: 0,
+        // Short-lived and small: a raindrop, not an animal.
+        life: 0.4 + Math.random() * 0.35,
+        scale: 0.16 + Math.random() * 0.2,
+      });
+      budget--;
     }
   }
 

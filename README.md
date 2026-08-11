@@ -270,6 +270,12 @@ weights. Rebalancing does not require touching any system.
   continuous lightning
 - Dense streamed ground cover: grass generated on demand in chunks around the
   camera rather than scattered over the map, plus flowers in five colours
+- Foliage built from leaf cards rather than spheres — trees have branches with
+  leaf clusters hanging off them, bushes are leaves around stems, ferns are
+  compound fronds with paired leaflets
+- A post-processing chain: HDR render targets, bloom on genuine highlights only,
+  SMAA, and tone mapping applied last
+- Rain as slanted screen-space streaks that dimple the river where they land
 - 23 species defined, 19 active and 17 of those playable, each with its own
   speed, diet, hunger rate, locomotion (swim / climb / jump), silhouette,
   temperament and signature ability — all data in one table. The four flying
@@ -322,15 +328,19 @@ Honest list of what a prototype this size does not have:
   for internet play.
 - **Water reflections are a fresnel sky approximation**, not a real planar
   reflection pass — it reads as water but does not mirror the trees.
-- **There is no post-processing chain.** Ambient occlusion, bloom and motion blur
-  are exposed as settings, wired through, and currently no-ops. Adding them means
-  an EffectComposer pass stack, which has not been built.
+- **Ambient occlusion and motion blur are still no-ops.** Bloom and SMAA now run
+  in a real composer chain, but AO does not. Three's SSAO/GTAO passes re-render
+  the scene with an overridden normal material, which would skip the wind
+  displacement in the foliage vertex shaders — so the AO would be computed against
+  geometry in the wrong place. Doing it properly means writing normals in the main
+  pass, which has not been built.
 - **No ray tracing and no frame generation.** Neither is available to a WebGL
   page: there is no ray-tracing API in the platform, and frame generation is a
   driver/vendor feature (DLSS, FSR) that a browser cannot reach. What the
   lighting actually is: one shadow-mapped directional sun on a tightened frustum,
-  a hemisphere bounce term, a weak opposite-side fill, and ACES tone mapping.
-  That is a long way from ray tracing and it is worth being straight about.
+  a hemisphere bounce term, a weak opposite-side fill, ACES tone mapping and a
+  bloom pass. That is a long way from ray tracing and it is worth being straight
+  about.
 - **No client-side reconciliation of the hunter's attack**, so a bite's visual
   and its result arrive one round trip apart.
 - Practice bots in single-player wander and whistle roughly on time, which is

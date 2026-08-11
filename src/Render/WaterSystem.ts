@@ -83,15 +83,45 @@ const FRAGMENT_SHADER = /* glsl */ `
    */
   #include <fog_pars_fragment>
 
-  // Reconstruct a surface normal from the same wave functions as the vertex
-  // shader, analytically — no normal map, no extra texture fetch.
-  vec3 waveNormal(vec2 p) {
+  /*
+   * Reconstruct a surface normal analytically — no normal map, no texture fetch.
+   *
+   * The vertex shader only displaces three long, smooth wave trains, because that
+   * is all the mesh has the resolution to carry. The *normal* is not limited by
+   * mesh resolution, so it gets four extra octaves of much finer ripple on top:
+   * detail the surface does not actually have geometrically, but which is what the
+   * eye reads as water rather than as a tilted sheet. Cross-hatched at
+   * non-parallel angles and at frequencies that are not multiples of each other,
+   * so the pattern never visibly tiles.
+   */
+  vec3 waveNormal(vec2 p, float detail) {
     float dx = cos(p.x * 0.19 + uTime * 1.10) * 0.19 * 0.055
              + cos((p.x + p.y) * 0.045 + uTime * 0.35) * 0.045 * 0.075;
     float dz = cos(p.y * 0.25 - uTime * 0.85) * 0.25 * -0.045
              + cos((p.x + p.y) * 0.045 + uTime * 0.35) * 0.045 * 0.075;
+
+    /*
+     * Fine chop, faded out with distance by 'detail'.
+     *
+     * The fade is not an optimisation, it is the fix for a real artefact. A ripple
+     * with a wavelength under a metre covers less than a pixel once the water is
+     * thirty metres away, so the shader samples it essentially at random from one
+     * pixel to the next — and with a sharp specular lobe on top, "slightly
+     * different normal" means "wildly different brightness". The result was a
+     * shimmering cross-hatch across the whole river, which is aliasing: detail
+     * finer than the pixel grid can resolve. Mip-mapping solves this for textures;
+     * for procedural normals you have to fade the octaves out by hand.
+     *
+     * Amplitudes also fall off as frequency rises, which is what keeps the sum
+     * looking like water rather than corrugated iron.
+     */
+    dx += cos(p.x * 1.31 + p.y * 0.42 + uTime * 2.3) * 0.020 * detail;
+    dz += cos(p.y * 1.19 - p.x * 0.37 - uTime * 2.1) * 0.020 * detail;
+    dx += cos(p.x * 2.87 - p.y * 1.13 + uTime * 3.7) * 0.011 * detail * detail;
+    dz += cos(p.y * 3.11 + p.x * 0.91 - uTime * 3.3) * 0.011 * detail * detail;
+
     // Ripples from rain, which visibly roughen the surface during a storm.
-    float r = uRain * 0.35;
+    float r = uRain * 0.35 * detail;
     dx += sin(p.x * 5.0 + uTime * 9.0) * r * 0.02;
     dz += sin(p.y * 5.3 - uTime * 8.0) * r * 0.02;
     return normalize(vec3(-dx * 6.0, 1.0, -dz * 6.0));
@@ -115,7 +145,11 @@ const FRAGMENT_SHADER = /* glsl */ `
     // Anywhere the terrain rises above the water line, there is simply no water.
     if (depthM <= 0.0) discard;
 
-    vec3 normal = waveNormal(vWorldXZ);
+    // How much fine surface detail this pixel can actually resolve.
+    float camDist = length(uCameraPos - vWorldPos);
+    float detail = 1.0 - smoothstep(10.0, 48.0, camDist);
+
+    vec3 normal = waveNormal(vWorldXZ, detail);
     vec3 viewDir = normalize(uCameraPos - vWorldPos);
 
     /*
@@ -152,12 +186,40 @@ const FRAGMENT_SHADER = /* glsl */ `
     // Depth-graded body colour: silty green in the shallows, near-black deep.
     vec3 body = mix(uShallowColor, uDeepColor, clamp(depthM / 3.5, 0.0, 1.0));
 
-    // Sky reflection plus a specular sun glint on the wave crests.
+    /*
+     * Sky reflection, plus two specular lobes rather than one.
+     *
+     * A single tight highlight gives you one bright spot on the water and nothing
+     * else. Real water has a *glitter path*: a broad sheen stretching away towards
+     * the sun, speckled with individual sparks where a wavelet happens to face it
+     * exactly. The tight lobe is the sparks, the broad one is the sheen, and the
+     * fine ripple octaves in waveNormal are what make the sparks land in different
+     * places from frame to frame instead of sitting still.
+     */
     vec3 halfway = normalize(uSunDirection + viewDir);
-    float spec = pow(max(dot(normal, halfway), 0.0), 90.0);
-    vec3 reflection = uSkyColor + uSunColor * spec * 2.2;
+    float ndh = max(dot(normal, halfway), 0.0);
+    /*
+     * The tight lobe is faded with the same 'detail' term as the ripples that
+     * feed it. An exponent this high turns a hair of normal variation into a
+     * blown-out spark, so leaving it at full strength out at the horizon puts
+     * the aliasing straight back even with the ripples faded.
+     */
+    float sparkle = pow(ndh, 120.0) * 2.2 * detail;
+    float sheen = pow(ndh, 18.0) * 0.55;
+    vec3 reflection = uSkyColor + uSunColor * (sparkle + sheen);
 
     vec3 color = mix(body, reflection, fresnel);
+
+    /*
+     * Silt.
+     *
+     * A slow, large-scale brightness drift across the surface, tied to world
+     * position rather than to the waves. An Amazon tributary is loaded with
+     * sediment and is visibly not one uniform colour; without this the river reads
+     * as a flat plane of paint no matter how good the highlights are.
+     */
+    float silt = sin(vWorldXZ.x * 0.031 + uTime * 0.06) * sin(vWorldXZ.y * 0.027 - uTime * 0.045);
+    color *= 1.0 + silt * 0.13;
 
     /*
      * Foam on the crests, and a wet band in the last half metre of shallows.
