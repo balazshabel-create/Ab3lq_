@@ -334,6 +334,8 @@ export const WORLD_PROPS = {
    * world size. See GrassField.ts.
    */
   flowers: 24000,
+  /** Tall flowering spikes, placed in drifts rather than scattered. */
+  flowerSpikes: 14000,
   rocks: 900,
   logs: 620,
   ferns: 6400,

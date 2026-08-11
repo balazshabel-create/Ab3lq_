@@ -38,6 +38,16 @@ export enum PropKind {
    * river bed was a bare brown plane with nothing on it.
    */
   Waterweed = 14,
+  /**
+   * A tall flowering spike — celosia, ginger, heliconia: the plants that give a
+   * clearing its colour.
+   *
+   * Separate from Flower because it plays a different visual role. Flowers are
+   * ground-level punctuation you notice when you look down; spikes stand at knee
+   * to waist height and are meant to be seen *across* a clearing, in drifts. They
+   * are placed in clumps rather than scattered for exactly that reason.
+   */
+  FlowerSpike = 15,
 }
 
 /** One placed piece of scenery. */
@@ -355,6 +365,52 @@ export function generateWorld(
         variant: rng.int(0, 4),
       });
     });
+
+    /*
+     * --- Flowering spikes, in drifts --------------------------------------
+     *
+     * Clumped, not scattered. Real flowering plants spread from a parent, so they
+     * grow in patches, and a patch reads as *a stand of flowers* from across a
+     * clearing where the same number spread evenly reads as noise. Each clump
+     * shares one colour variant, which is what makes it a drift rather than a
+     * fruit salad.
+     */
+    const spikeClumps = Math.round((WORLD_PROPS.flowerSpikes / 14) * d);
+    for (let i = 0; i < spikeClumps; i++) {
+      const anchor = terrain.findPosition(
+        cosmeticRng,
+        (x, z) =>
+          terrain.inBounds(x, z) &&
+          !terrain.isWater(x, z) &&
+          terrain.slopeAt(x, z) < 0.5 &&
+          // Open ground: flowers want the light, and a clearing wants the colour.
+          terrain.foliageAt(x, z) < 0.55,
+        24,
+      );
+      const variant = cosmeticRng.int(0, 3);
+      const spread = cosmeticRng.range(2.5, 7);
+      const count = cosmeticRng.int(8, 18);
+      for (let j = 0; j < count; j++) {
+        const a = cosmeticRng.range(0, Math.PI * 2);
+        const r = spread * Math.sqrt(cosmeticRng.next());
+        const x = anchor.x + Math.cos(a) * r;
+        const z = anchor.z + Math.sin(a) * r;
+        if (!terrain.inBounds(x, z) || terrain.isWater(x, z)) continue;
+        content.cosmetic.push({
+          kind: PropKind.FlowerSpike,
+          x,
+          y: terrain.heightAt(x, z),
+          z,
+          rot: cosmeticRng.range(0, Math.PI * 2),
+          // Knee-to-waist on the animals, which is what "a drift you see across
+          // a clearing" means here. The top of the old range put a 1.5 m spike
+          // right in front of a low camera, where it stopped being scenery and
+          // became an obstruction.
+          scale: cosmeticRng.range(0.62, 1.12),
+          variant,
+        });
+      }
+    }
 
     // --- Reeds: the waterline, where the jungle meets the river -----------
     const reedCount = Math.round(WORLD_PROPS.reeds * d);

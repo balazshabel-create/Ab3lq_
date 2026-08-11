@@ -40,6 +40,17 @@ export interface AnimalModel {
   jaw: THREE.Object3D | null;
   /** Legs, ordered front-left, front-right, back-left, back-right. */
   legs: THREE.Object3D[];
+  /**
+   * Knee joints, index-matched to `legs` — `knees[i]` is a descendant of
+   * `legs[i]`, or undefined for a plan whose legs are a single segment.
+   *
+   * A leg that rotates as one rigid stick is the single most obvious tell that
+   * an animal is a toy: real legs fold. Driving the knee from the same gait
+   * phase as the hip, a quarter-cycle behind it, is what turns a pendulum swing
+   * into a step — the lower leg tucks under as the foot lifts and straightens
+   * again as it reaches forward to plant.
+   */
+  knees: (THREE.Object3D | undefined)[];
   /** Tail segments, base first. */
   tail: THREE.Object3D[];
   /** Wings, for flyers. */
@@ -84,11 +95,34 @@ function sphere(r: number, segments = 8): THREE.BufferGeometry {
   return g;
 }
 
-function capsule(r: number, len: number): THREE.BufferGeometry {
-  const key = `cap:${r.toFixed(3)}:${len.toFixed(3)}`;
+function capsule(r: number, len: number, radial = 8): THREE.BufferGeometry {
+  const key = `cap:${r.toFixed(3)}:${len.toFixed(3)}:${radial}`;
   let g = geometryCache.get(key);
   if (!g) {
-    g = new THREE.CapsuleGeometry(r, len, 4, 8);
+    g = new THREE.CapsuleGeometry(r, len, Math.max(3, radial >> 1), radial);
+    geometryCache.set(key, g);
+  }
+  return g;
+}
+
+/**
+ * An ellipsoid: a sphere with independent axes, cached by its final shape.
+ *
+ * Almost every mass on an animal is an ellipsoid rather than a sphere — a skull
+ * is longer than it is wide, a haunch is deeper than it is broad, a ribcage is
+ * flattened side to side. Scaling a shared sphere mesh gets the shape but breaks
+ * the geometry cache's whole purpose the moment a normal needs to be right, and
+ * non-uniform `Mesh.scale` skews lighting on flat-shaded facets. Baking the axes
+ * into the geometry keeps one cached buffer per distinct shape and leaves the
+ * normals correct.
+ */
+function ellipsoid(rx: number, ry: number, rz: number, segments = 8): THREE.BufferGeometry {
+  const key = `ell:${rx.toFixed(3)}:${ry.toFixed(3)}:${rz.toFixed(3)}:${segments}`;
+  let g = geometryCache.get(key);
+  if (!g) {
+    g = new THREE.SphereGeometry(1, segments, Math.max(4, segments >> 1));
+    g.scale(rx, ry, rz);
+    g.computeVertexNormals();
     geometryCache.set(key, g);
   }
   return g;
@@ -145,6 +179,7 @@ export function buildAnimalModel(species: Species, detail = 1): AnimalModel {
     head: root,
     jaw: null,
     legs: [],
+    knees: [],
     tail: [],
     wings: [],
     segments: [],
@@ -229,6 +264,111 @@ function addJaw(
   model.jaw = group;
 }
 
+/**
+ * A jointed leg: hip → thigh → knee → shank → foot.
+ *
+ * Registers the hip in `model.legs` and the knee in `model.knees` at the same
+ * index, which is the contract the animator relies on to flex the two together.
+ *
+ * `forward` is +1 for a foreleg and -1 for a hind leg. It flips which way the
+ * knee bends, and that asymmetry is worth the parameter: a quadruped's forelegs
+ * fold backwards at the wrist while the hind legs fold forwards at the hock, and
+ * bending all four the same way is instantly readable as wrong even to someone
+ * who could not say why.
+ */
+function addJointedLeg(
+  model: AnimalModel,
+  parent: THREE.Object3D,
+  options: {
+    x: number;
+    y: number;
+    z: number;
+    length: number;
+    radius: number;
+    color: number;
+    footColor: number;
+    forward: 1 | -1;
+    detail: number;
+    /** Toes on the foot, for the animals that should show them. */
+    toes?: number;
+  },
+): void {
+  const { length, radius, detail, forward } = options;
+  const hip = new THREE.Group();
+  hip.position.set(options.x, options.y, options.z);
+  parent.add(hip);
+
+  // Thigh: the upper half, hanging from the hip.
+  const thighLen = length * 0.5;
+  const thigh = mesh(
+    capsule(radius, thighLen * 0.72, detail > 0.5 ? 8 : 5),
+    options.color,
+    hip,
+    0,
+    -thighLen * 0.5,
+    0,
+  );
+  thigh.castShadow = true;
+
+  if (detail <= 0.4) {
+    // Far away, one segment is enough — and the knee slot stays undefined so the
+    // animator simply skips the flex rather than testing a detail level.
+    model.legs.push(hip);
+    model.knees.push(undefined);
+    return;
+  }
+
+  // Knee: a joint group at the bottom of the thigh, with the shank below it.
+  const knee = new THREE.Group();
+  knee.position.set(0, -thighLen, 0);
+  // Which way this joint folds, recorded here so the animator does not have to
+  // guess it from the leg's index — the plans do not all order their limbs the
+  // same way, and a primate's front pair are arms that fold the other way.
+  knee.userData.fold = -forward;
+  hip.add(knee);
+  // A small mass at the joint itself, so the leg does not visibly pinch to
+  // nothing where the two segments meet when the knee is bent.
+  mesh(sphere(radius * 0.92, detail > 0.6 ? 7 : 5), options.color, knee);
+
+  const shankLen = length * 0.5;
+  const shank = mesh(
+    capsule(radius * 0.78, shankLen * 0.7, detail > 0.5 ? 7 : 5),
+    options.color,
+    knee,
+    0,
+    -shankLen * 0.5,
+    0,
+  );
+  shank.castShadow = true;
+
+  // Foot, flat on the ground at the bottom of the shank.
+  const footLen = radius * 2.6;
+  mesh(
+    box(footLen, radius * 0.7, radius * 2.1),
+    options.footColor,
+    knee,
+    forward * radius * 0.45,
+    -shankLen - radius * 0.3,
+    0,
+  );
+  if (options.toes && detail > 0.6) {
+    for (let t = 0; t < options.toes; t++) {
+      const spread = (t / Math.max(1, options.toes - 1) - 0.5) * radius * 1.7;
+      mesh(
+        box(radius * 0.9, radius * 0.5, radius * 0.5),
+        options.footColor,
+        knee,
+        forward * (radius * 0.45 + footLen * 0.5),
+        -shankLen - radius * 0.32,
+        spread,
+      );
+    }
+  }
+
+  model.legs.push(hip);
+  model.knees.push(knee);
+}
+
 // ---------------------------------------------------------------------------
 // Body plans
 // ---------------------------------------------------------------------------
@@ -254,45 +394,180 @@ function buildQuadruped(
   model.root.add(bodyGroup);
   model.body = bodyGroup;
 
-  // Torso: a capsule reads as a mammal far better than a box does.
-  const torso = mesh(capsule(W * 0.5, L * (style === 1 ? 0.62 : 0.5)), c.body, bodyGroup);
-  torso.rotation.z = Math.PI / 2;
-  torso.scale.set(1, 1, style === 1 ? 0.85 : 1);
+  /*
+   * ## The torso is three masses, not one capsule
+   *
+   * A single capsule is a sausage: the same diameter from nose to tail, with no
+   * shoulder, no waist and no haunch. Every animal built on this plan came out
+   * looking like the same tube with different colours on it, and no amount of
+   * head detail fixes a body with no anatomy in it.
+   *
+   * Three overlapping ellipsoids — chest, barrel, hindquarters — cost about as
+   * much as the capsule did and give the silhouette a line: wide at the
+   * shoulder, tucked at the waist, heavy over the back legs. That line is what
+   * the eye reads as "animal", and it is what tells a jaguar (deep chest, long
+   * low barrel) from a capybara (barrel almost as deep as it is long) before any
+   * of the markings are visible.
+   */
+  const barrelR = W * 0.5;
+  const torso = mesh(
+    ellipsoid(L * (style === 1 ? 0.34 : 0.3), barrelR * 0.94, barrelR * (style === 1 ? 0.84 : 0.96), detail > 0.5 ? 10 : 6),
+    c.body,
+    bodyGroup,
+  );
+  torso.castShadow = true;
 
-  // Belly, a lighter underside — cheap, and it makes the silhouette read.
   if (detail > 0.4) {
-    const belly = mesh(capsule(W * 0.42, L * 0.42), c.belly, bodyGroup, 0, -H * 0.16, 0);
+    // Chest, forward and a little lower: where the forelegs hang from.
+    mesh(
+      ellipsoid(L * 0.19, barrelR * 0.9, barrelR * (style === 1 ? 0.82 : 0.9), detail > 0.5 ? 9 : 6),
+      c.body,
+      bodyGroup,
+      L * 0.26,
+      -H * 0.04,
+      0,
+    );
+    // Hindquarters, heavier and set slightly higher — the push-off end.
+    mesh(
+      ellipsoid(L * 0.2, barrelR * 1.0, barrelR * 0.94, detail > 0.5 ? 9 : 6),
+      c.body,
+      bodyGroup,
+      -L * 0.26,
+      H * 0.02,
+      0,
+    );
+    // Belly, a lighter underside — cheap, and it makes the silhouette read.
+    const belly = mesh(capsule(W * 0.4, L * 0.44, 7), c.belly, bodyGroup, 0, -H * 0.2, 0);
     belly.rotation.z = Math.PI / 2;
+    // Shoulder blades, standing a little proud of the back.
+    if (detail > 0.6) {
+      for (const side of [-1, 1]) {
+        mesh(
+          ellipsoid(L * 0.09, H * 0.12, W * 0.1, 6),
+          c.body,
+          bodyGroup,
+          L * 0.22,
+          H * 0.18,
+          side * W * 0.3,
+        );
+      }
+    }
   }
 
   // Head on a short neck.
   const neck = new THREE.Group();
-  neck.position.set(L * 0.48, H * 0.16, 0);
+  neck.position.set(L * 0.4, H * 0.18, 0);
   bodyGroup.add(neck);
   model.head = neck;
 
-  const skull = mesh(sphere(W * 0.42, detail > 0.5 ? 8 : 5), c.body, neck, L * 0.1, 0, 0);
-  skull.scale.set(1.25, 0.95, 0.95);
+  // A visible neck between the chest and the skull, angled up and forward.
+  if (detail > 0.4) {
+    const neckMesh = mesh(
+      capsule(W * 0.26, L * (style === 1 ? 0.16 : 0.12), detail > 0.5 ? 8 : 5),
+      c.body,
+      neck,
+      -L * 0.02,
+      -H * 0.02,
+      0,
+    );
+    neckMesh.rotation.z = Math.PI / 2 - 0.5;
+  }
+
+  const skull = mesh(
+    ellipsoid(W * 0.5, W * 0.4, W * 0.4, detail > 0.5 ? 10 : 5),
+    c.body,
+    neck,
+    L * 0.1,
+    0,
+    0,
+  );
+  skull.castShadow = true;
 
   if (detail > 0.4) {
-    // Snout.
-    const snout = mesh(box(L * 0.16, H * 0.2, W * 0.34), c.body, neck, L * 0.22, -H * 0.06, 0);
-    snout.scale.setScalar(1);
+    /*
+     * Muzzle, built as a taper rather than a box.
+     *
+     * The old snout was a single box stuck on the front of the skull, which from
+     * the side reads as a drawer left open. Two stacked masses — a wide bridge
+     * narrowing to a nose — give the head a profile, and the profile is most of
+     * what distinguishes these species at the distance the game is played at.
+     */
+    mesh(
+      ellipsoid(L * 0.09, H * 0.1, W * 0.19, detail > 0.6 ? 8 : 5),
+      c.body,
+      neck,
+      L * 0.19,
+      -H * 0.03,
+      0,
+    );
+    // Nose pad.
+    mesh(
+      ellipsoid(L * 0.025, H * 0.035, W * 0.09, 6),
+      c.eye,
+      neck,
+      L * 0.27,
+      -H * 0.01,
+      0,
+    );
+    // Brow ridge: a shelf over the eyes. Small, and it does more for a face than
+    // anything else here — it is what stops the head reading as a smooth egg.
+    if (detail > 0.6) {
+      for (const side of [-1, 1]) {
+        mesh(
+          ellipsoid(W * 0.13, W * 0.06, W * 0.11, 6),
+          c.body,
+          neck,
+          L * 0.13,
+          H * 0.11,
+          side * W * 0.2,
+        );
+      }
+    }
+
     addJaw(model, neck, {
-      hingeX: L * 0.14,
-      hingeY: -H * 0.1,
-      length: L * 0.17,
-      height: H * 0.09,
-      width: W * 0.3,
+      hingeX: L * 0.1,
+      hingeY: -H * 0.11,
+      length: L * 0.19,
+      height: H * 0.08,
+      width: W * 0.32,
       color: c.belly,
     });
-    // Ears.
+
+    // Ears, with a darker inner surface set into the cone.
     for (const side of [-1, 1]) {
-      mesh(cone(W * 0.12, H * 0.22), c.accent, neck, L * 0.04, W * 0.3, side * W * 0.26);
+      const ear = mesh(cone(W * 0.13, H * 0.24), c.accent, neck, L * 0.02, W * 0.32, side * W * 0.25);
+      ear.rotation.x = side * 0.25;
+      if (detail > 0.6) {
+        const inner = mesh(cone(W * 0.08, H * 0.17), c.eye, neck, L * 0.035, W * 0.31, side * W * 0.25);
+        inner.rotation.x = side * 0.25;
+      }
     }
-    // Eyes.
+
+    // Eyes, with a pupil in front of the eyeball. Two spheres, and the animal
+    // suddenly has somewhere it is looking.
     for (const side of [-1, 1]) {
-      mesh(sphere(W * 0.075, 6), c.eye, neck, L * 0.18, H * 0.08, side * W * 0.24);
+      mesh(sphere(W * 0.085, 7), c.eye, neck, L * 0.16, H * 0.06, side * W * 0.235);
+      if (detail > 0.6) {
+        mesh(sphere(W * 0.04, 5), 0x0d0b09, neck, L * 0.185, H * 0.065, side * W * 0.245);
+      }
+    }
+
+    // Whiskers on the cats: four fine bristles a side, and they read from
+    // surprisingly far away because nothing else on the model is a straight line.
+    if (style === 1 && detail > 0.7) {
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 3; i++) {
+          const whisker = mesh(
+            box(L * 0.11, W * 0.012, W * 0.012),
+            c.belly,
+            neck,
+            L * 0.25,
+            -H * 0.02 + i * H * 0.025,
+            side * W * 0.13,
+          );
+          whisker.rotation.y = side * (0.5 + i * 0.16);
+        }
+      }
     }
   }
 
@@ -300,21 +575,25 @@ function buildQuadruped(
   if (detail > 0.25) {
     const legLen = H * 0.92;
     const legR = W * 0.13;
-    const positions: [number, number][] = [
-      [L * 0.3, W * 0.32],
-      [L * 0.3, -W * 0.32],
-      [-L * 0.3, W * 0.34],
-      [-L * 0.3, -W * 0.34],
+    const positions: [number, number, 1 | -1][] = [
+      [L * 0.3, W * 0.32, 1],
+      [L * 0.3, -W * 0.32, 1],
+      [-L * 0.3, W * 0.34, -1],
+      [-L * 0.3, -W * 0.34, -1],
     ];
-    for (const [x, z] of positions) {
-      const hip = new THREE.Group();
-      hip.position.set(x, -H * 0.1, z);
-      bodyGroup.add(hip);
-      const leg = mesh(capsule(legR, legLen * 0.55), c.body, hip, 0, -legLen * 0.42, 0);
-      leg.castShadow = true;
-      // Hoof / paw.
-      if (detail > 0.6) mesh(box(legR * 2.2, legLen * 0.1, legR * 2.4), c.accent, hip, 0, -legLen * 0.86, 0);
-      model.legs.push(hip);
+    for (const [x, z, forward] of positions) {
+      addJointedLeg(model, bodyGroup, {
+        x,
+        y: -H * 0.1,
+        z,
+        length: legLen,
+        radius: legR,
+        color: c.body,
+        footColor: c.accent,
+        forward,
+        detail,
+        toes: style === 1 ? 3 : 0,
+      });
     }
   }
 
@@ -343,19 +622,48 @@ function buildQuadruped(
     }
   }
 
-  // Jaguar and ocelot spots: a handful of dark blobs, enough to read as a cat.
+  /*
+   * Jaguar and ocelot rosettes.
+   *
+   * The old version stepped one angle around a circle and used it for both the
+   * position along the body and the position around it, so the spots traced a
+   * single helix — from most angles a tidy diagonal stripe, which is a marking
+   * no cat has. Rows down the flank, offset half a step from each other and
+   * jittered by a fixed hash, scatter properly.
+   *
+   * They are placed on both flanks and along the spine, pressed flat against the
+   * body so they read as markings rather than as lumps, and they are slightly
+   * *inside* the surface: a spot floating a millimetre proud z-fights, and a
+   * flat-shaded facet makes that painfully visible.
+   */
   if (style === 1 && detail > 0.6) {
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2;
-      const spot = mesh(
-        sphere(W * 0.09, 5),
-        c.accent,
-        bodyGroup,
-        Math.cos(a * 1.7) * L * 0.3,
-        Math.sin(a) * W * 0.3,
-        Math.cos(a) * W * 0.42,
-      );
-      spot.scale.set(0.6, 0.6, 0.3);
+    const rows = 3;
+    const perRow = 5;
+    for (let r = 0; r < rows; r++) {
+      for (let i = 0; i < perRow; i++) {
+        // A cheap deterministic jitter, so the grid does not read as a grid.
+        const j = Math.sin((r * 13.7 + i * 7.3) * 12.9898) * 43758.5453;
+        const jitter = j - Math.floor(j);
+        const along = ((i + (r % 2) * 0.5 + jitter * 0.4) / perRow - 0.45) * L * 0.82;
+        // Row 0 sits over the spine, rows 1–2 down each flank.
+        const ring = -0.35 + r * 0.62 + jitter * 0.2;
+        for (const side of [-1, 1]) {
+          if (r === 0 && side < 0) continue; // the spine row exists once
+          const y = Math.cos(ring) * barrelR * 0.9;
+          const z = side * Math.sin(ring) * barrelR * 0.86;
+          const spot = mesh(
+            ellipsoid(W * 0.07 + jitter * W * 0.03, W * 0.055, W * 0.07, 5),
+            c.accent,
+            bodyGroup,
+            along,
+            y,
+            z,
+          );
+          // Flatten onto the surface and face outwards.
+          spot.lookAt(spot.position.x, spot.position.y * 3, spot.position.z * 3);
+          spot.scale.set(1, 1, 0.35);
+        }
+      }
     }
   }
 }
@@ -446,7 +754,19 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
     }
   }
 
-  // Sprawling legs.
+  /*
+   * Sprawling legs, with an elbow.
+   *
+   * A crocodilian's limb geometry is the opposite of a mammal's: the upper
+   * segment goes *outwards* almost horizontally and the lower one drops
+   * vertically to the foot, which is what produces the wide-track, belly-low
+   * stance. Building that as one straight capsule leaning outwards gave four
+   * splayed sticks and the animal sat on its chin.
+   *
+   * So the hip carries a near-horizontal humerus and the elbow group under it
+   * carries a vertical forearm and a clawed foot. The elbow goes into
+   * `model.knees` like any other, so the walk cycle flexes it for free.
+   */
   if (detail > 0.25) {
     const positions: [number, number][] = [
       [L * 0.26, W * 0.42],
@@ -455,12 +775,47 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
       [-L * 0.24, -W * 0.44],
     ];
     for (const [x, z] of positions) {
+      const side = Math.sign(z);
       const hip = new THREE.Group();
-      hip.position.set(x, -H * 0.2, z);
+      hip.position.set(x, -H * 0.16, z);
       bodyGroup.add(hip);
-      const leg = mesh(capsule(W * 0.1, H * 0.4), c.body, hip, 0, -H * 0.25, Math.sign(z) * W * 0.1);
-      leg.rotation.x = Math.sign(z) * 0.5;
+
+      // Humerus: out to the side and slightly down.
+      const upper = mesh(capsule(W * 0.1, H * 0.3, detail > 0.5 ? 7 : 5), c.body, hip, 0, -H * 0.16, side * W * 0.12);
+      upper.rotation.x = -side * 0.9;
+      upper.castShadow = true;
+
+      if (detail <= 0.4) {
+        model.legs.push(hip);
+        model.knees.push(undefined);
+        continue;
+      }
+
+      const elbow = new THREE.Group();
+      elbow.position.set(0, -H * 0.3, side * W * 0.24);
+      // Front pair fold back, rear pair fold forward — same convention as the
+      // mammal legs, so the animator needs no special case for reptiles.
+      elbow.userData.fold = x > 0 ? -1 : 1;
+      hip.add(elbow);
+      const lower = mesh(capsule(W * 0.082, H * 0.26, detail > 0.5 ? 7 : 5), c.body, elbow, 0, -H * 0.16, 0);
+      lower.castShadow = true;
+      // Foot, splayed flat.
+      mesh(box(W * 0.26, H * 0.06, W * 0.3), c.belly, elbow, W * 0.04, -H * 0.32, 0);
+      // Claws.
+      if (detail > 0.6) {
+        for (let t = -1; t <= 1; t++) {
+          mesh(
+            cone(W * 0.028, W * 0.09),
+            c.accent,
+            elbow,
+            W * 0.17,
+            -H * 0.32,
+            t * W * 0.09,
+          ).rotation.z = -Math.PI / 2;
+        }
+      }
       model.legs.push(hip);
+      model.knees.push(elbow);
     }
   }
 
@@ -599,13 +954,22 @@ function buildPrimate(model: AnimalModel, def: AnimalDef, detail: number): void 
       [-L * 0.22, -W * 0.36, 0],
     ];
     for (const [x, z, isArm] of limbs) {
-      const shoulder = new THREE.Group();
-      shoulder.position.set(x, isArm ? H * 0.1 : -H * 0.12, z);
-      bodyGroup.add(shoulder);
       const len = isArm ? H * 0.9 : H * 0.8;
-      mesh(capsule(W * 0.11, len * 0.5), c.body, shoulder, 0, -len * 0.4, 0);
-      if (detail > 0.6) mesh(sphere(W * 0.13, 5), c.accent, shoulder, 0, -len * 0.82, 0);
-      model.legs.push(shoulder);
+      addJointedLeg(model, bodyGroup, {
+        x,
+        y: isArm ? H * 0.1 : -H * 0.12,
+        z,
+        length: len,
+        radius: W * 0.11,
+        color: c.body,
+        // Bare hands and feet, paler than the coat — a monkey's most recognisable
+        // detail after its tail, and it costs one colour.
+        footColor: c.accent,
+        // Arms fold the other way from legs, which is the whole point of an arm.
+        forward: isArm ? -1 : 1,
+        detail,
+        toes: 3,
+      });
     }
   }
 
@@ -802,19 +1166,49 @@ function buildShelled(model: AnimalModel, def: AnimalDef, detail: number): void 
   // Plastron.
   mesh(box(L * 0.7, H * 0.12, W * 0.8), c.belly, bodyGroup, 0, -H * 0.24, 0);
 
+  /*
+   * Scutes: the plated pattern that makes a shell a shell.
+   *
+   * The old version put seven flattened spheres in a single ring at one height,
+   * which from directly above — the angle this game is usually played from —
+   * reads as a daisy, and from the side as a lumpy seam. A tortoise's carapace
+   * is a central row of vertebral scutes flanked by two rows of costals, and
+   * laying them out that way is what turns a smooth dome into something that
+   * looks armoured.
+   */
   if (detail > 0.5) {
-    // Shell plates: rings of small flattened spheres.
-    for (let i = 0; i < 7; i++) {
-      const a = (i / 7) * Math.PI * 2;
-      const plate = mesh(
-        sphere(W * 0.16, 5),
-        c.body,
+    const rowY = [H * 0.38, H * 0.3, H * 0.16];
+    const rowZ = [0, W * 0.32, W * 0.5];
+    for (let row = 0; row < 3; row++) {
+      const along = row === 0 ? 5 : 4;
+      for (let i = 0; i < along; i++) {
+        const x = ((i + 0.5) / along - 0.5) * L * 0.72;
+        for (const side of [-1, 1]) {
+          if (row === 0 && side < 0) continue; // the vertebral row exists once
+          const plate = mesh(
+            ellipsoid(L * 0.1, H * 0.07, W * (row === 0 ? 0.15 : 0.13), 6),
+            row === 0 ? c.body : c.belly,
+            bodyGroup,
+            x,
+            rowY[row],
+            side * rowZ[row],
+          );
+          plate.scale.set(1, 1, 1);
+        }
+      }
+    }
+    // A rim around the lower edge of the carapace, which is what gives a shell
+    // its overhang instead of letting the dome fade straight into the legs.
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      mesh(
+        ellipsoid(L * 0.07, H * 0.05, W * 0.08, 5),
+        c.accent,
         bodyGroup,
-        Math.cos(a) * L * 0.24,
-        H * 0.3,
-        Math.sin(a) * W * 0.34,
+        Math.cos(a) * L * 0.44,
+        H * 0.02,
+        Math.sin(a) * W * 0.56,
       );
-      plate.scale.set(1, 0.35, 1);
     }
   }
 
@@ -822,8 +1216,13 @@ function buildShelled(model: AnimalModel, def: AnimalDef, detail: number): void 
   head.position.set(L * 0.42, -H * 0.02, 0);
   bodyGroup.add(head);
   model.head = head;
-  const skull = mesh(sphere(W * 0.24, 7), c.body, head);
-  skull.scale.set(1.4, 0.9, 0.9);
+  const skull = mesh(ellipsoid(W * 0.34, W * 0.21, W * 0.22, detail > 0.5 ? 9 : 6), c.body, head);
+  skull.castShadow = true;
+  // A scaly neck, drawn out of the shell.
+  if (detail > 0.4) {
+    const neck = mesh(capsule(W * 0.15, W * 0.22, 7), c.body, head, -W * 0.24, -W * 0.03, 0);
+    neck.rotation.z = Math.PI / 2;
+  }
   addJaw(model, head, {
     hingeX: 0,
     hingeY: -H * 0.04,
@@ -833,24 +1232,36 @@ function buildShelled(model: AnimalModel, def: AnimalDef, detail: number): void 
     color: c.belly,
   });
   if (detail > 0.4) {
+    // A beak: the hooked upper lip that every tortoise has, and the one feature
+    // that stops the head reading as a thumb.
+    mesh(ellipsoid(W * 0.09, W * 0.07, W * 0.1, 6), c.accent, head, W * 0.3, -W * 0.03, 0);
     for (const side of [-1, 1]) {
-      mesh(sphere(W * 0.05, 5), c.eye, head, W * 0.2, W * 0.08, side * W * 0.13);
+      mesh(sphere(W * 0.055, 6), c.eye, head, W * 0.2, W * 0.08, side * W * 0.15);
+      if (detail > 0.6) mesh(sphere(W * 0.026, 5), 0x0d0b09, head, W * 0.235, W * 0.085, side * W * 0.16);
     }
   }
 
   if (detail > 0.25) {
-    const positions: [number, number][] = [
-      [L * 0.24, W * 0.4],
-      [L * 0.24, -W * 0.4],
-      [-L * 0.24, W * 0.4],
-      [-L * 0.24, -W * 0.4],
+    const positions: [number, number, 1 | -1][] = [
+      [L * 0.24, W * 0.4, 1],
+      [L * 0.24, -W * 0.4, 1],
+      [-L * 0.24, W * 0.4, -1],
+      [-L * 0.24, -W * 0.4, -1],
     ];
-    for (const [x, z] of positions) {
-      const hip = new THREE.Group();
-      hip.position.set(x, -H * 0.22, z);
-      bodyGroup.add(hip);
-      mesh(capsule(W * 0.1, H * 0.22), c.body, hip, 0, -H * 0.14, 0);
-      model.legs.push(hip);
+    for (const [x, z, forward] of positions) {
+      addJointedLeg(model, bodyGroup, {
+        x,
+        y: -H * 0.22,
+        z,
+        length: H * 0.44,
+        radius: W * 0.11,
+        color: c.body,
+        footColor: c.accent,
+        forward,
+        detail,
+        // Stumpy clawed feet: the elephantine forefoot is the tortoise read.
+        toes: 3,
+      });
     }
   }
 

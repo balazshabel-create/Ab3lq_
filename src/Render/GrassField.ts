@@ -42,7 +42,7 @@ const CHUNK = 14;
  * what pays for the density. The cutoff is not visible for the same reason it is
  * cheap to remove: there is almost nothing there to see.
  */
-const MAX_REACH = 26;
+const MAX_REACH = 22;
 
 /**
  * Tufts per square metre at full density.
@@ -54,7 +54,20 @@ const MAX_REACH = 26;
  * bigger makes it worse. So the tufts are small — about fifteen centimetres — and
  * there are a lot of them.
  */
-const TUFT_DENSITY = 3.2;
+const TUFT_DENSITY = 5.4;
+
+/*
+ * Density and reach trade against each other, and the trade is heavily in favour
+ * of density.
+ *
+ * Coverage area grows as the square of the reach, so most of the tufts in a
+ * 26 m ring live in its outermost few metres — where a blade is a couple of
+ * pixels tall and adds nothing but triangles. Pulling the reach in to 22 m and
+ * spending the budget on density instead is what closes the ground over near the
+ * camera, which is the only place grass is really *seen*. Same triangle count,
+ * completely different picture: at 1.9 the field was a scattering of tufts with
+ * visible ground between them.
+ */
 
 /**
  * How many chunks may be built in one frame.
@@ -219,15 +232,39 @@ export class GrassField {
         // Nothing grows below the waterline, and nothing grows on a cliff.
         if (ground < this.terrain.waterLevel + 0.12) continue;
         if (this.terrain.slopeAt(x, z) > 0.8) continue;
-        // Thin out where the foliage field is sparse, so clearings read as open.
+        /*
+         * Thicker in the open, thinner under closed canopy — which is the
+         * opposite of what this did before, and the wrong way round was both
+         * unrealistic and worse looking.
+         *
+         * `foliageAt` is high where the *canopy* is dense, and a rainforest floor
+         * under closed canopy is leaf litter and roots precisely because almost no
+         * light reaches it. The ground cover is in the gaps: clearings, riverbanks,
+         * the edges of the canopy. Keying grass to high canopy density put the
+         * thickest grass in the darkest places and left the sunlit clearings —
+         * where the eye actually goes — looking bald.
+         *
+         * The floor stays high (0.55 even under full canopy) because the ground
+         * still has to be covered; this is a lean, not a switch.
+         */
         const density = this.terrain.foliageAt(x, z);
         const h2 = hash2(cx * 17 + i, cz * 29 + j, 7);
-        if (h2.u > 0.25 + density * 1.1) continue;
+        if (h2.u > 0.55 + (1 - clamp01(density)) * 0.4) continue;
 
         this.position.set(x, ground, z);
         this.quaternion.setFromAxisAngle(this.axis, h.u * Math.PI * 2);
-        const s = 0.7 + h2.v * 0.8;
-        this.scale.set(s, s * (0.7 + h.v * 0.9), s);
+        /*
+         * A much narrower size spread than before.
+         *
+         * The old range multiplied out to a 3.4× span between the smallest and
+         * largest tuft, and the big end of that is what made the near field read
+         * as a scattering of oversized individual leaves: a 2.4× tuft is a
+         * 1.2 m blade standing next to the camera, which the eye reads as one
+         * plant rather than as grass. Variation still matters — a uniform field
+         * looks stamped — but it belongs in the tens of percent, not in factors.
+         */
+        const s = 0.8 + h2.v * 0.42;
+        this.scale.set(s, s * (0.84 + h.v * 0.46), s);
         this.matrix.compose(this.position, this.quaternion, this.scale);
         mesh.setMatrixAt(placed, this.matrix);
 
@@ -240,8 +277,14 @@ export class GrassField {
          * landscape look procedural — and with it a clearing edge reads as
          * sun-bleached grass shading into deep shade under the canopy.
          */
-        const brightness = 0.68 + h2.v * 0.62;
-        const dry = clamp01(1 - density * 1.3) * 0.4;
+        /*
+         * A gentler multiplier than before, because the blades now carry their
+         * own root-to-tip colour ramp. This tint used to be the *only* colour
+         * variation grass had, so it swung hard; leaving it that wide now washes
+         * the ramp out and puts the flat look straight back.
+         */
+        const brightness = 0.84 + h2.v * 0.34;
+        const dry = clamp01(1 - density * 1.3) * 0.26;
         this.tint.setRGB(brightness + dry, brightness + dry * 0.45, brightness - dry * 0.5);
         mesh.setColorAt(placed, this.tint);
         placed++;

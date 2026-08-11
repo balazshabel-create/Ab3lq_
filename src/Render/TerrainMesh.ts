@@ -151,8 +151,24 @@ export class TerrainMesh {
   }
 }
 
-/** How many metres one tile of the detail texture covers. */
-const DETAIL_TILE_METRES = 7;
+/**
+ * How many metres one tile of the detail texture covers.
+ *
+ * This was 7, and at 7 the texture was doing nothing at all — which is worth
+ * recording, because it looked like a working feature. A 128² tile over 7 m is
+ * 5.5 cm per texel, so every octave in it has a wavelength somewhere between a
+ * few centimetres and nine; all of that is below a pixel by the time the surface
+ * is more than a couple of metres away, the mip chain averages it to a flat 1.0,
+ * and the ground goes back to being the smooth painted plane the texture exists
+ * to break up. Detail you cannot resolve is not detail.
+ *
+ * At 26 m the same three octaves land on 3.2 m patches, 1.1 m mottling and 40 cm
+ * grain — scales the eye can actually see across a clearing — and the texel is a
+ * legible 20 cm. The cost of the larger tile is that the repeat is in principle
+ * visible, but the vertex colours carry all the large-scale variation and the
+ * ground is under grass almost everywhere, so in practice it is not.
+ */
+const DETAIL_TILE_METRES = 26;
 
 /**
  * Build the tiling ground-detail texture.
@@ -201,11 +217,13 @@ function buildGroundDetailTexture(seed: number): THREE.Texture {
     for (let i = 0; i < size; i++) {
       const u = i / size;
       const v = j / size;
-      // Three octaves: patches, speckle, and fine grain.
-      const n = octave(u, v, 8) * 0.5 + octave(u, v, 24) * 0.32 + octave(u, v, 64) * 0.18;
-      // Centre on 1.0 with about ±18% swing.
-      const value = 1 + (n - 0.5) * 0.58;
-      const warm = (octave(u, v, 12) - 0.5) * 0.16;
+      // Three octaves: patches, mottling, and fine grain. Weighted towards the
+      // broad octave, since that is the one that survives to a distance — the
+      // fine grain is a close-range accent, not the structure.
+      const n = octave(u, v, 6) * 0.56 + octave(u, v, 18) * 0.29 + octave(u, v, 52) * 0.15;
+      // Centre on 1.0 with about ±26% swing.
+      const value = 1 + (n - 0.5) * 0.82;
+      const warm = (octave(u, v, 10) - 0.5) * 0.22;
       const idx = (j * size + i) * 4;
       const clamp255 = (x: number) => Math.max(0, Math.min(255, Math.round(x * 255)));
       data[idx] = clamp255(value + warm);

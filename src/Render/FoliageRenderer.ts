@@ -57,7 +57,7 @@ interface KindConfig {
    * way to get five different flower colours out of one InstancedMesh — the
    * geometry is shared, so the variety has to live in the colour attribute.
    */
-  tint?: 'foliage' | 'flower' | 'none';
+  tint?: 'foliage' | 'flower' | 'spike' | 'none';
   /**
    * Non-uniform instance scaling.
    *
@@ -70,6 +70,26 @@ interface KindConfig {
 
 /** Flower colours. Tropical, but not so saturated they read as plastic. */
 const FLOWER_PALETTE = [0xe4483f, 0xe8c33a, 0xf0eee4, 0xa964c4, 0xe87ba8];
+
+/**
+ * Spike colours: magenta, gold, coral, cream.
+ *
+ * A shorter, hotter palette than the ground flowers get. A spike is meant to be
+ * read across a clearing, and the whole point of placing them in single-variant
+ * drifts is that a band of one strong colour is what carries at that distance —
+ * five pastels mixed together just average out to grey.
+ */
+/*
+ * Spike colours, pulled back from where they started.
+ *
+ * These multiply a white floret, so whatever is written here arrives on screen
+ * at close to full strength — and a fully saturated magenta in a scene whose
+ * every other surface is a muted green reads as neon plastic, not as a flower.
+ * The first pass used 0xd6428a and 0xf0c02e and the drifts glowed. Desaturated
+ * towards the warm end and dropped a little in value, they still carry a
+ * clearing from across it without looking like they are lit from inside.
+ */
+const SPIKE_PALETTE = [0xb8497f, 0xd4ac3c, 0xcc6a42, 0xdcd0b4];
 
 /*
  * Note the absence of PropKind.Grass.
@@ -114,6 +134,16 @@ const KIND_CONFIG: Partial<Record<PropKind, KindConfig>> = {
     castShadow: false,
     chunkGrid: FINE_GRID,
     tint: 'flower',
+  },
+  [PropKind.FlowerSpike]: {
+    // Visible further than ground flowers: standing knee-high in a drift, these
+    // are landmarks in a clearing rather than detail underfoot.
+    distance: (s) => Math.min(s.viewDistance, 95),
+    density: (s) => s.foliageDensity,
+    wind: 1.9,
+    castShadow: false,
+    chunkGrid: FINE_GRID,
+    tint: 'spike',
   },
   [PropKind.Reed]: {
     distance: (s) => Math.min(s.viewDistance, 100),
@@ -204,7 +234,17 @@ export function applyWind(material: THREE.Material, strength: number): void {
   (material as THREE.Material & { userData: { windUniforms?: typeof uniforms } }).userData.windUniforms =
     uniforms;
 
-  material.onBeforeCompile = (shader) => {
+  /*
+   * Chain, do not replace.
+   *
+   * `vertexColorMaterial` has already installed the tint-mask injection here,
+   * and assigning over it silently dropped that — which showed up as every
+   * flower stem going black again. Anything that hooks a shared material's
+   * compile step has to compose with what is already there.
+   */
+  const previous = material.onBeforeCompile;
+  material.onBeforeCompile = (shader, renderer) => {
+    previous?.call(material, shader, renderer);
     shader.uniforms.uTime = uniforms.uTime;
     shader.uniforms.uWind = uniforms.uWind;
     shader.uniforms.uStrength = uniforms.uStrength;
@@ -348,7 +388,12 @@ export class FoliageRenderer {
            * identical on every client.
            */
           const jitter = hashPosition(p.x, p.z);
-          if (tintMode === 'flower') {
+          if (tintMode === 'spike') {
+            // One colour per drift: the clump shares a variant, so this picks the
+            // same hue for every spike in it. Brightness still jitters per plant.
+            tint.setHex(SPIKE_PALETTE[p.variant % SPIKE_PALETTE.length]);
+            tint.multiplyScalar(0.86 + jitter.a * 0.3);
+          } else if (tintMode === 'flower') {
             // The geometry's petals are white, so this multiplier *is* the
             // flower's colour rather than a nudge to it.
             tint.setHex(FLOWER_PALETTE[p.variant % FLOWER_PALETTE.length]);
@@ -501,6 +546,9 @@ function buildPropGeometry(kind: PropKind, settings: GraphicsSettings): PropAsse
     case PropKind.Flower:
       assets = buildFlower();
       break;
+    case PropKind.FlowerSpike:
+      assets = buildFlowerSpike(detail);
+      break;
     case PropKind.Reed:
       assets = buildReed();
       break;
@@ -541,19 +589,34 @@ function buildPropGeometry(kind: PropKind, settings: GraphicsSettings): PropAsse
 }
 
 /** Merge a list of geometries into one, preserving vertex colours. */
-function merge(parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[]): THREE.BufferGeometry {
+/**
+ * A merged part.
+ *
+ * `tintable: false` opts the part out of the per-instance colour — see
+ * `injectTintMask` for why that is needed and what goes wrong without it.
+ */
+interface MergePart {
+  geometry: THREE.BufferGeometry;
+  color: THREE.Color;
+  tintable?: boolean;
+}
+
+function merge(parts: MergePart[]): THREE.BufferGeometry {
   const positions: number[] = [];
   const normals: number[] = [];
   const colors: number[] = [];
+  const tintMask: number[] = [];
 
   for (const part of parts) {
     const g = part.geometry.index ? part.geometry.toNonIndexed() : part.geometry;
     const pos = g.attributes.position as THREE.BufferAttribute;
     const nrm = g.attributes.normal as THREE.BufferAttribute | undefined;
+    const mask = part.tintable === false ? 0 : 1;
     for (let i = 0; i < pos.count; i++) {
       positions.push(pos.getX(i), pos.getY(i), pos.getZ(i));
       if (nrm) normals.push(nrm.getX(i), nrm.getY(i), nrm.getZ(i));
       colors.push(part.color.r, part.color.g, part.color.b);
+      tintMask.push(mask);
     }
     if (g !== part.geometry) g.dispose();
     part.geometry.dispose();
@@ -567,17 +630,65 @@ function merge(parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[]):
     merged.computeVertexNormals();
   }
   merged.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  merged.setAttribute('aTintMask', new THREE.Float32BufferAttribute(tintMask, 1));
   merged.computeBoundingSphere();
   return merged;
 }
 
+/**
+ * Make the per-instance colour apply only to the vertices that asked for it.
+ *
+ * ## The bug this fixes
+ *
+ * Several props are drawn in many colours from one geometry by leaving the
+ * coloured parts white and letting the InstancedMesh's per-instance colour
+ * supply the hue — that is how one flower mesh produces red, yellow and purple
+ * flowers across the map for a single draw call. It is a good trick and it has
+ * one flaw that is invisible until the tint gets saturated: three.js multiplies
+ * `instanceColor` into *every* vertex of the instance, not just the white ones.
+ *
+ * So a flowering spike with a green stem and green leaves, tinted magenta, does
+ * not get a magenta plume on a green plant. It gets a magenta plume, magenta
+ * leaves, and a stem whose green has been multiplied by magenta into something
+ * very close to black. On screen that read as a drift of neon plumes floating
+ * over black sticks, which is exactly what it was.
+ *
+ * The fix is a per-vertex mask written at merge time: 1 for "this vertex is
+ * white and wants the instance colour", 0 for "this vertex already knows what
+ * colour it is". Then the stem stays green whatever the flower is doing.
+ *
+ * Implemented by replacing three's `<color_vertex>` chunk rather than adding to
+ * it, because the multiply that has to be conditional is *inside* that chunk.
+ * The default is 1, so every prop that does not care is unaffected.
+ */
+function injectTintMask(shader: { vertexShader: string }): void {
+  shader.vertexShader = shader.vertexShader
+    .replace(
+      '#include <common>',
+      `#include <common>
+       attribute float aTintMask;`,
+    )
+    .replace(
+      '#include <color_vertex>',
+      `vColor = vec3( 1.0 );
+       #ifdef USE_COLOR
+         vColor *= color;
+       #endif
+       #ifdef USE_INSTANCING_COLOR
+         vColor.xyz *= mix( vec3( 1.0 ), instanceColor.xyz, aTintMask );
+       #endif`,
+    );
+}
+
 export function vertexColorMaterial(options: { transparent?: boolean; side?: THREE.Side } = {}): THREE.Material {
-  return new THREE.MeshLambertMaterial({
+  const material = new THREE.MeshLambertMaterial({
     vertexColors: true,
     flatShading: true,
     side: options.side ?? THREE.FrontSide,
     transparent: options.transparent ?? false,
   });
+  material.onBeforeCompile = (shader) => injectTintMask(shader);
+  return material;
 }
 
 /**
@@ -623,7 +734,7 @@ function leafGeometry(length: number, width: number, droop: number): THREE.Buffe
  * something with depth instead of a single-tone shape.
  */
 function leafCluster(
-  parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[],
+  parts: MergePart[],
   options: {
     count: number;
     radius: number;
@@ -665,7 +776,7 @@ function leafCluster(
 /** A rainforest tree: bare trunk, real branches, and a canopy of leaves. */
 function buildTree(detail: number): PropAssets {
   const segments = detail >= 2 ? 7 : detail >= 1 ? 5 : 4;
-  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  const parts: MergePart[] = [];
 
   // Trunk — tall and clean, as rainforest trunks are. Two stacked sections with
   // different tapers read as a real trunk rather than as a pole.
@@ -747,6 +858,49 @@ function buildTree(detail: number): PropAssets {
     palette,
   });
 
+  /*
+   * A lower tier, at four to nine metres.
+   *
+   * Everything above is botanically right for a rainforest — a clean trunk with
+   * all its leaves in a canopy fifteen metres up — and from the game's actual
+   * camera it looked wrong, because the player's eye is half a metre off the
+   * ground and the canopy is entirely out of frame. What filled the screen was a
+   * row of bare brown poles with sky between them.
+   *
+   * Real forest fills that band with saplings, epiphytes and the lower branches
+   * of smaller trees. Rather than add another prop for it, each tree carries two
+   * short drooping branches down at eye level. They cost about a tenth of the
+   * canopy and they are the difference between looking at a jungle and looking
+   * through one — which also matters for play, since this is the band that
+   * actually breaks line of sight between two animals.
+   */
+  if (detail >= 1) {
+    const lowPalette = [0x2b5a20, 0x33682a, 0x3c7530, 0x27501d];
+    const lowCount = detail >= 2 ? 3 : 2;
+    for (let i = 0; i < lowCount; i++) {
+      const a = (i / lowCount) * Math.PI * 2 + 1.9;
+      const len = 2.2 + (i % 2) * 0.7;
+      const baseY = 4.4 + i * 2.1;
+      const branch = new THREE.CylinderGeometry(0.05, 0.11, len, 4);
+      branch.translate(0, len * 0.5, 0);
+      // Past 90°, so the branch droops rather than reaching up.
+      branch.rotateZ(1.15);
+      branch.rotateY(-a);
+      branch.translate(0, baseY, 0);
+      parts.push({ geometry: branch, color: new THREE.Color(0x453320) });
+      const reach = Math.sin(1.15) * len;
+      leafCluster(parts, {
+        count: detail >= 2 ? 7 : 5,
+        radius: 1.25,
+        flatten: 0.85,
+        leafLength: 1.1,
+        leafWidth: 0.5,
+        centre: [Math.cos(a) * reach, baseY + Math.cos(1.15) * len, Math.sin(a) * reach],
+        palette: lowPalette,
+      });
+    }
+  }
+
   return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
 }
 
@@ -767,7 +921,7 @@ function buildTree(detail: number): PropAssets {
  * and starts reading as a hole in the ground.
  */
 function buildBush(detail: number, color: number): PropAssets {
-  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  const parts: MergePart[] = [];
   const base = new THREE.Color(color);
 
   // A palette spread around the base colour. The spread is wider than looks
@@ -873,6 +1027,17 @@ function concatGeometries(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
   merged.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   merged.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   merged.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  /*
+   * Every vertex takes the instance tint. Nothing built through this path wants
+   * to opt out — but the attribute has to be present regardless, because the
+   * shader declares it unconditionally and a missing attribute reads as zero,
+   * which would silently strip the tint from grass and fruit bushes instead of
+   * throwing.
+   */
+  merged.setAttribute(
+    'aTintMask',
+    new THREE.Float32BufferAttribute(new Float32Array(positions.length / 3).fill(1), 1),
+  );
   merged.computeBoundingSphere();
   return merged;
 }
@@ -889,7 +1054,7 @@ function concatGeometries(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
 function buildFern(detail: number): PropAssets {
   const fronds = detail >= 2 ? 8 : detail >= 1 ? 6 : 4;
   const leaflets = detail >= 2 ? 7 : detail >= 1 ? 5 : 3;
-  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  const parts: MergePart[] = [];
   const shades = [0x54903a, 0x437a2b, 0x3a6a24, 0x4d8330];
 
   for (let i = 0; i < fronds; i++) {
@@ -938,8 +1103,40 @@ function buildFern(detail: number): PropAssets {
  * vertical slabs. Cheap enough that a tuft can afford five of them: grass is
  * culled at a few dozen metres, so only a small fraction is ever submitted.
  */
-function bladeGeometry(width: number, height: number, lean: number, segments = 4): THREE.BufferGeometry {
+function bladeGeometry(
+  width: number,
+  height: number,
+  lean: number,
+  segments = 4,
+  /**
+   * Optional root-to-tip colour ramp, written straight into a vertex colour
+   * attribute.
+   *
+   * This is the single detail that most separates convincing grass from a green
+   * carpet, and it is not a lighting effect — it is the plant. A blade is shaded
+   * and often bluer at the base, where it is buried among its neighbours, and
+   * lighter and more yellow at the tip, where it is new growth in full sun. Bake
+   * that in and a mass of blades gets depth from its own colour before a single
+   * light touches it.
+   */
+  ramp?: { base: number; tip: number },
+): THREE.BufferGeometry {
   const positions: number[] = [];
+  const colors: number[] = [];
+  const base = ramp ? new THREE.Color(ramp.base) : null;
+  const tip = ramp ? new THREE.Color(ramp.tip) : null;
+  const shade = new THREE.Color();
+
+  const push = (x: number, y: number, t: number) => {
+    positions.push(x, y, 0);
+    if (base && tip) {
+      // Biased towards the tip colour so the light band is the wider one, which
+      // is what makes a field read as sunlit rather than as dying.
+      shade.copy(base).lerp(tip, Math.pow(t, 0.65));
+      colors.push(shade.r, shade.g, shade.b);
+    }
+  };
+
   for (let s = 0; s < segments; s++) {
     const t0 = s / segments;
     const t1 = (s + 1) / segments;
@@ -950,11 +1147,18 @@ function bladeGeometry(width: number, height: number, lean: number, segments = 4
     const y1 = height * t1;
     const x0 = lean * t0 * t0;
     const x1 = lean * t1 * t1;
-    positions.push(x0 - w0, y0, 0, x0 + w0, y0, 0, x1 + w1, y1, 0);
-    positions.push(x0 - w0, y0, 0, x1 + w1, y1, 0, x1 - w1, y1, 0);
+    push(x0 - w0, y0, t0);
+    push(x0 + w0, y0, t0);
+    push(x1 + w1, y1, t1);
+    push(x0 - w0, y0, t0);
+    push(x1 + w1, y1, t1);
+    push(x1 - w1, y1, t1);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  if (colors.length === positions.length) {
+    g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  }
   g.computeVertexNormals();
   return g;
 }
@@ -968,54 +1172,128 @@ function bladeGeometry(width: number, height: number, lean: number, segments = 4
  * boundary between them.
  */
 export function buildGrassTuftGeometry(): THREE.BufferGeometry {
-  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
   /*
-   * Five short blades, two segments each: twenty triangles per tuft.
+   * Tall, arching, gradient blades.
    *
-   * Both numbers were tuned against a triangle budget, and the budget is the
-   * whole story here. Grass reads as grass through *density*, not blade size — a
-   * sparse field of tall blades looks like reeds stuck in a lawn — but density
-   * multiplies whatever a single tuft costs. At seven blades and three segments,
-   * a believable density came to over two million triangles. At twenty triangles
-   * a tuft, the same density costs under a hundred thousand.
+   * The earlier version was fifteen-centimetre stubs, on the reasoning that
+   * ankle-height cover is what a rainforest floor has. It is, and it looked like
+   * a mown lawn with sprigs on it. Real ground cover — and the look this is
+   * matching — is knee-to-waist height on the things walking through it, dense
+   * enough that individual blades overlap into a continuous mass, and lit from
+   * within by a root-to-tip colour ramp rather than by shading alone.
    *
-   * Height matters too, and in the same direction: a tuft tops out around fifteen
-   * centimetres, which is ankle height on most of the roster. The first pass had
-   * blades taller than a capybara.
+   * Three things carry that, in order of how much they matter:
+   *   1. **Height.** Blades reach half a metre. Everything else is cosmetic if
+   *      the grass is too short to be grass.
+   *   2. **The colour ramp**, baked per vertex — see bladeGeometry.
+   *   3. **The arch.** Three segments rather than two, and a much stronger lean,
+   *      so a blade bows over under its own weight instead of standing up like a
+   *      spike. Two segments cannot describe a curve.
+   *
+   * ## The gameplay cost, which is real
+   *
+   * Grass this tall genuinely hides animals, and this is a game about spotting
+   * animals. That cuts both ways and mostly in a good direction — cover is the
+   * survivor's whole toolkit and the hunter is supposed to have a hard problem —
+   * but it is a balance change, not just a visual one, and worth naming.
+   * Mitigated by the height *variance* below: a tuft is a mix of tall and short
+   * blades, and the field thins over open ground, so nothing is uniformly buried.
    */
+  const parts: THREE.BufferGeometry[] = [];
+
+  /*
+   * ## Two tiers, and the short one is the one that matters
+   *
+   * The previous tuft was seven tall blades fanned from a single point, and at
+   * field density it produced exactly the wrong picture: a flat green plane with
+   * isolated sprays of big blades standing on it, like cutlery in a lawn. The
+   * diagnosis is that a tuft built from one tier can only be one of two things —
+   * tall and see-through, or short and invisible — and ground cover needs to be
+   * both at once.
+   *
+   * So a tuft is now a *clump*:
+   *
+   *   • a **skirt** of short blades splayed outward over the full circle, which
+   *     is what actually hides the ground. These are the ones doing the work of
+   *     making the floor read as overgrown rather than painted. Two segments
+   *     each, because a 20 cm blade does not need a curve.
+   *   • a **spray** of tall arching blades over about 130° of one side, which is
+   *     what gives the field silhouette and movement.
+   *
+   * The skirt is spread to a 20 cm radius rather than sprouting from the origin.
+   * That single number roughly quadruples the ground each instance covers for no
+   * extra triangles at all, and it is what closes the gaps between neighbours:
+   * at ~5 tufts/m² the skirts of adjacent clumps now overlap instead of leaving
+   * bare floor between them.
+   */
+  const skirt = 7;
+  for (let i = 0; i < skirt; i++) {
+    // Full circle, golden-angle stepped so the spread does not form a visible
+    // ring of evenly spaced spokes.
+    const a = i * 2.39996 + 0.7;
+    const reach = 0.09 + (i % 3) * 0.055;
+    const height = 0.15 + (i % 4) * 0.032;
+    const blade = bladeGeometry(0.045 + (i % 2) * 0.02, height, 0.2 + (i % 3) * 0.06, 2, {
+      base: i % 2 === 0 ? 0x22441a : 0x1c3a16,
+      tip: i % 3 === 0 ? 0x6b9c37 : 0x5c8c30,
+    });
+    blade.rotateY(a);
+    blade.translate(Math.cos(a) * reach, 0, Math.sin(a) * reach);
+    parts.push(blade);
+  }
+
   const blades = 5;
   for (let i = 0; i < blades; i++) {
-    // Golden-angle fan so the blades never line up, at any rotation.
-    const a = i * 2.399963;
     /*
-     * Deliberately unequal blades. Five identical ones make a tidy little
-     * rosette, and a field of tidy rosettes reads as a pattern — the eye picks
-     * out the repeat immediately at this density. One blade noticeably taller
-     * than the rest, and widths that do not match, is enough to break it.
+     * A one-sided clump, not a rosette.
+     *
+     * Fanning the blades over the full circle — which a golden-angle spread does —
+     * makes every tuft radially symmetric, and a field of radially symmetric tufts
+     * reads as a scattering of little green stars. Real grass grows as a clump
+     * leaning one way. Spreading over about 130° instead, with the instance's own
+     * random rotation deciding which way that is, gives clumps that lean in
+     * different directions across the field and interlock rather than dot it.
      */
-    const tall = i === 0 ? 1.75 : i === 3 ? 1.3 : 1;
+    const a = (i / (blades - 1) - 0.5) * 2.3 + (i % 2) * 0.24;
+    /*
+     * Deliberately unequal. Identical blades make a tidy little rosette, and at
+     * this density a field of tidy rosettes reads as a repeating pattern — the
+     * eye finds the repeat immediately.
+     */
+    const tall = i === 0 ? 1.0 : i === 1 ? 0.8 : i === 3 ? 0.64 : 0.52 + (i % 3) * 0.13;
+    const height = 0.5 * tall;
     const blade = bladeGeometry(
-      0.055 + (i % 2) * 0.022,
-      (0.1 + (i % 3) * 0.035) * tall,
-      0.06 + (i % 2) * 0.045,
-      2,
+      // Narrower than before. The old 5–7 cm blade was legible as an individual
+      // leaf at close range, which is precisely what stops a field reading as
+      // grass; the mass has to come from count, not from blade area.
+      0.036 + (i % 2) * 0.012,
+      height,
+      // Taller blades bow further over, as they do under their own weight.
+      (0.18 + (i % 3) * 0.08) * tall,
+      3,
+      {
+        // Shaded blue-green at the base, sunlit yellow-green at the tip.
+        base: i % 2 === 0 ? 0x24491c : 0x1f4019,
+        tip: i % 3 === 0 ? 0x8cba46 : i % 3 === 1 ? 0x6da236 : 0x7cae3e,
+      },
     );
     blade.rotateY(a);
-    blade.translate(Math.cos(a) * 0.032, 0, Math.sin(a) * 0.032);
-    // Alternate shades so a tuft has depth even before the per-instance tint.
-    parts.push({
-      geometry: blade,
-      color: new THREE.Color(i % 3 === 0 ? 0x5c8f34 : i % 3 === 1 ? 0x3d6824 : 0x4c7a2b),
-    });
+    blade.translate(Math.cos(a) * 0.05, 0, Math.sin(a) * 0.05);
+    parts.push(blade);
   }
-  // A single broad leaf per tuft: rainforest floor is not a lawn, it is grass
-  // interleaved with wider low-growing foliage, and one broad blade among five
-  // narrow ones is what carries that read.
-  const broad = leafGeometry(0.2, 0.11, 0.09);
-  broad.rotateZ(-0.85);
+
+  // One broad low leaf: rainforest floor is not a lawn, it is grass interleaved
+  // with wider low-growing foliage, and one broad blade among the narrow ones is
+  // what carries that read.
+  const broad = bladeGeometry(0.13, 0.24, 0.14, 2, { base: 0x25491b, tip: 0x5d9432 });
+  broad.rotateZ(-0.5);
   broad.rotateY(1.7);
-  parts.push({ geometry: broad, color: new THREE.Color(0x3f7028) });
-  return merge(parts);
+  broad.translate(0.06, 0, 0.02);
+  parts.push(broad);
+
+  const merged = concatGeometries(parts);
+  for (const g of parts) g.dispose();
+  return merged;
 }
 
 /**
@@ -1026,17 +1304,18 @@ export function buildGrassTuftGeometry(): THREE.BufferGeometry {
  * red, yellow, purple and pink flowers across the map — see FLOWER_PALETTE.
  */
 function buildFlower(): PropAssets {
-  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  const parts: MergePart[] = [];
 
+  // Green parts stay green whatever colour this instance's petals are.
   const stem = new THREE.CylinderGeometry(0.012, 0.02, 0.42, 3);
   stem.translate(0, 0.21, 0);
-  parts.push({ geometry: stem, color: new THREE.Color(0x3f6a24) });
+  parts.push({ geometry: stem, color: new THREE.Color(0x3f6a24), tintable: false });
 
   // Two low leaves, so the flower has something at ground level.
   for (const side of [-1, 1]) {
     const leaf = bladeGeometry(0.09, 0.2, 0.13 * side);
     leaf.rotateY(side > 0 ? 0.6 : 2.4);
-    parts.push({ geometry: leaf, color: new THREE.Color(0x477a28) });
+    parts.push({ geometry: leaf, color: new THREE.Color(0x477a28), tintable: false });
   }
 
   // Petals: five flat blades splayed outwards from the top of the stem.
@@ -1060,6 +1339,77 @@ function buildFlower(): PropAssets {
 }
 
 /**
+ * A tall flowering spike: a stem, a few leaves, and a dense plume of florets.
+ *
+ * Built from small quads stacked up a vertical axis and fanned around it, tapering
+ * to a point — the celosia/ginger silhouette. The florets are near-white so the
+ * per-instance tint *is* the flower's colour, the same trick the ground flowers
+ * use: one shared geometry, four drift colours.
+ *
+ * The plume is dense on purpose. A spike read from across a clearing is a solid
+ * block of colour with a shape, and a sparse one just looks like a dead stick with
+ * some confetti stuck to it.
+ */
+function buildFlowerSpike(detail: number): PropAssets {
+  const parts: MergePart[] = [];
+
+  // Stem and leaves opt out of the instance tint: they are green plants, not
+  // parts of the flower, and multiplying them by a saturated plume colour turned
+  // the stem black and the leaves magenta. See injectTintMask.
+  const stem = new THREE.CylinderGeometry(0.012, 0.022, 0.72, 3);
+  stem.translate(0, 0.36, 0);
+  parts.push({ geometry: stem, color: new THREE.Color(0x4a7a2c), tintable: false });
+
+  // A couple of long leaves low on the stem.
+  for (const side of [-1, 1]) {
+    const leaf = bladeGeometry(0.075, 0.34, 0.16 * side, 3);
+    leaf.rotateZ(-0.7);
+    leaf.rotateY(side > 0 ? 0.5 : 2.5);
+    leaf.translate(0, 0.1, 0);
+    parts.push({ geometry: leaf, color: new THREE.Color(0x4c8730), tintable: false });
+  }
+
+  /*
+   * The plume: rings of florets up the top third, narrowing to a tip.
+   *
+   * Many small florets, not a few big ones. The first version used 5×7 cm cards
+   * four to a ring, which is the right *silhouette* and completely the wrong
+   * texture: from a couple of metres away each card is individually legible and
+   * the spike reads as a stack of coloured tiles on a stick. A flowering spike
+   * is supposed to be a soft mass with an edge you cannot quite resolve, and the
+   * only way to get that out of flat cards is to make them small enough that no
+   * single one draws the eye.
+   *
+   * So: roughly twice the rings, half again the florets per ring, and each one
+   * about a third of the area. That is 84 quads against 36 — but they are only
+   * ever drawn within 95 m and there are about a thousand on screen, so the cost
+   * is a rounding error next to the canopy.
+   */
+  const rings = detail >= 2 ? 14 : detail >= 1 ? 10 : 5;
+  const perRing = detail >= 1 ? 6 : 3;
+  for (let r = 0; r < rings; r++) {
+    const t = r / (rings - 1);
+    const y = 0.58 + t * 0.46;
+    // Widest a third of the way up, tapering to nothing at the tip.
+    const radius = 0.072 * Math.sin(Math.min(1, t * 1.25 + 0.18) * Math.PI * 0.85);
+    for (let i = 0; i < perRing; i++) {
+      // Golden-angle offset per ring, so the florets interleave up the spike
+      // instead of stacking into visible vertical columns.
+      const a = (i / perRing) * Math.PI * 2 + r * 2.39996;
+      const floret = new THREE.PlaneGeometry(0.03, 0.042);
+      // Tip each one outward a little: a plume of strictly vertical cards
+      // silhouettes as a rectangle no matter how many you use.
+      floret.rotateX(-0.35);
+      floret.rotateY(-a);
+      floret.translate(Math.cos(a) * radius, y, Math.sin(a) * radius);
+      parts.push({ geometry: floret, color: new THREE.Color(0xffffff) });
+    }
+  }
+
+  return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
+}
+
+/**
  * Reeds: a tight clump of tall blades standing in the shallows.
  *
  * Rooted on the river bed, so the visible height depends on how deep the water
@@ -1067,7 +1417,7 @@ function buildFlower(): PropAssets {
  * instead of a hard line between "water" and "jungle".
  */
 function buildReed(): PropAssets {
-  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  const parts: MergePart[] = [];
   const blades = 7;
   for (let i = 0; i < blades; i++) {
     const a = i * 2.399963;
@@ -1098,7 +1448,7 @@ function buildReed(): PropAssets {
  * only reason a crocodile player has anywhere to hide under water at all.
  */
 function buildWaterweed(): PropAssets {
-  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  const parts: MergePart[] = [];
   const fronds = 9;
   for (let i = 0; i < fronds; i++) {
     const a = i * 2.399963;
@@ -1138,7 +1488,7 @@ function buildRock(detail: number): PropAssets {
 
 /** A fallen log: cover, and a bridge across a stream. */
 function buildLog(detail: number): PropAssets {
-  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  const parts: MergePart[] = [];
   const trunk = new THREE.CylinderGeometry(0.36, 0.42, 4.2, detail >= 1 ? 7 : 5);
   trunk.rotateZ(Math.PI / 2);
   trunk.translate(0, 0.4, 0);
@@ -1155,7 +1505,7 @@ function buildLog(detail: number): PropAssets {
 
 /** A hanging vine. */
 function buildVine(): PropAssets {
-  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  const parts: MergePart[] = [];
   const rope = new THREE.CylinderGeometry(0.05, 0.04, 5.5, 4);
   rope.translate(0, -2.75, 0);
   parts.push({ geometry: rope, color: new THREE.Color(0x466a2a) });
@@ -1179,7 +1529,7 @@ function buildLilyPad(): PropAssets {
 
 /** An abandoned hut: the only man-made landmark out here. */
 function buildHut(): PropAssets {
-  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  const parts: MergePart[] = [];
   // Stilts.
   for (const [x, z] of [
     [-1.6, -1.6],
@@ -1208,7 +1558,7 @@ function buildHut(): PropAssets {
 
 /** A rope bridge deck across a river. */
 function buildBridge(): PropAssets {
-  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  const parts: MergePart[] = [];
   const planks = 16;
   for (let i = 0; i < planks; i++) {
     const plank = new THREE.BoxGeometry(1.6, 0.1, 0.5);
@@ -1228,7 +1578,7 @@ function buildBridge(): PropAssets {
 
 /** A cave mouth: a dark arch set into a slope. */
 function buildCave(): PropAssets {
-  const parts: { geometry: THREE.BufferGeometry; color: THREE.Color }[] = [];
+  const parts: MergePart[] = [];
   const arch = new THREE.SphereGeometry(2.6, 9, 6, 0, Math.PI);
   arch.scale(1, 0.9, 0.7);
   arch.translate(0, 0.6, 0);

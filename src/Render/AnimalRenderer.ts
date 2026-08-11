@@ -519,6 +519,7 @@ export class AnimalRenderer {
       const amplitude = (swimming ? 0.5 : 0.75) * Math.max(actor.gait, swimming ? 0.35 : 0);
       for (let i = 0; i < model.legs.length; i++) {
         const leg = model.legs[i];
+        const knee = model.knees[i];
         if (curled) {
           leg.visible = false;
           continue;
@@ -527,15 +528,26 @@ export class AnimalRenderer {
 
         const baseY = leg.userData.baseY ?? leg.position.y;
         leg.userData.baseY = baseY;
+        /*
+         * Which way this knee folds. Forelegs bend backwards, hind legs
+         * forwards, and `addJointedLeg` recorded that when it built the leg —
+         * the animator must not re-derive it from the index, because not every
+         * plan orders its limbs the same way (a primate's front pair are arms).
+         */
+        const fold = (knee?.userData.fold as number | undefined) ?? -1;
 
         if (airborne) {
-          // Tucked in mid-jump.
+          // Tucked in mid-jump: hips forward, knees folded hard.
           leg.rotation.z = lerp(leg.rotation.z, -0.55, dt * 10);
+          if (knee) knee.rotation.z = lerp(knee.rotation.z, fold * 0.9, dt * 10);
           leg.position.y = baseY;
           continue;
         }
         if (!moving && !swimming) {
           leg.rotation.z = lerp(leg.rotation.z, 0, dt * 6);
+          // Standing legs keep a slight bend. Locked straight reads as a
+          // trestle rather than as an animal at rest.
+          if (knee) knee.rotation.z = lerp(knee.rotation.z, fold * 0.16, dt * 6);
           leg.position.y = lerp(leg.position.y, baseY, dt * 6);
           continue;
         }
@@ -550,6 +562,20 @@ export class AnimalRenderer {
         // cycle plants it — that asymmetry is what makes it look like walking.
         const lift = Math.max(0, Math.cos(legPhase));
         leg.position.y = baseY + lift * def.silhouette.height * 0.14 * actor.gait;
+
+        /*
+         * The knee, a quarter-cycle behind the hip.
+         *
+         * That lag is the whole trick. In phase, the leg scissors open and shut
+         * like a compass and still reads as rigid; a quarter cycle late, the
+         * shank tucks under exactly while the foot is off the ground and swings
+         * through to straighten just as it plants. Held at a small positive bend
+         * throughout so it never hyperextends backwards through the joint.
+         */
+        if (knee) {
+          const tuck = (Math.sin(legPhase - Math.PI * 0.5) * 0.5 + 0.5) * amplitude * 0.9;
+          knee.rotation.z = fold * (0.12 + tuck);
+        }
       }
     }
 
