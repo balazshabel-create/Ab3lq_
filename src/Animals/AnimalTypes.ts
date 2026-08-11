@@ -335,6 +335,9 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.Monkey]: {
     species: Species.Monkey,
     name: 'Spider Monkey',
+    // Withdrawn at the designer's request. The table entry stays because the
+    // snapshot format encodes a species as its index in ALL_SPECIES.
+    enabled: false,
     emoji: '🐒',
     tagline: 'Chaos with opposable thumbs.',
     diet: Diet.Omnivore,
@@ -980,6 +983,8 @@ export const ANIMALS: Record<Species, AnimalDef> = {
   [Species.HowlerMonkey]: {
     species: Species.HowlerMonkey,
     name: 'Howler Monkey',
+    // Withdrawn alongside the spider monkey — see that entry.
+    enabled: false,
     emoji: '🙊',
     tagline: 'Audible from three kilometres away.',
     diet: Diet.Herbivore,

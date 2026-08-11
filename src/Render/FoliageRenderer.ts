@@ -1449,19 +1449,42 @@ function buildReed(): PropAssets {
  */
 function buildWaterweed(): PropAssets {
   const parts: MergePart[] = [];
-  const fronds = 9;
-  for (let i = 0; i < fronds; i++) {
-    const a = i * 2.399963;
-    // Unit height, so scaleAxes maps Y directly to metres of depth.
-    const frond = bladeGeometry(0.3, 1, 0.42 + (i % 3) * 0.16, 4);
-    frond.rotateY(a);
-    frond.translate(Math.cos(a) * 0.16, 0, Math.sin(a) * 0.16);
-    parts.push({
-      geometry: frond,
-      // Deep, desaturated greens: underwater light loses red first, and weed
-      // that is as bright as grass looks like grass someone flooded.
-      color: new THREE.Color(i % 3 === 0 ? 0x244a2f : i % 3 === 1 ? 0x1b3d29 : 0x2b5236),
-    });
+  /*
+   * A thicket, not a spray.
+   *
+   * This is the only cover a submerged crocodile has, so it has to actually
+   * occlude — nine fronds from a single point is a shape you can see straight
+   * between, which makes "hide in the weed" a fiction. Eighteen fronds over two
+   * staggered rings of different heights build a clump you can lose an animal
+   * inside, and they are still only 4 triangles each.
+   *
+   * The inner ring is full height and the outer ring is shorter and splayed
+   * further, so a bed of these reads as a mound rather than as a set of columns.
+   */
+  const rings = [
+    { count: 9, radius: 0.16, height: 1, lean: 0.42, width: 0.3 },
+    { count: 9, radius: 0.42, height: 0.68, lean: 0.72, width: 0.24 },
+  ];
+  for (let r = 0; r < rings.length; r++) {
+    const ring = rings[r];
+    for (let i = 0; i < ring.count; i++) {
+      const a = i * 2.399963 + r * 0.7;
+      // Unit height, so scaleAxes maps Y directly to metres of depth.
+      const frond = bladeGeometry(
+        ring.width,
+        ring.height,
+        ring.lean + (i % 3) * 0.16,
+        4,
+      );
+      frond.rotateY(a);
+      frond.translate(Math.cos(a) * ring.radius, 0, Math.sin(a) * ring.radius);
+      parts.push({
+        geometry: frond,
+        // Deep, desaturated greens: underwater light loses red first, and weed
+        // that is as bright as grass looks like grass someone flooded.
+        color: new THREE.Color(i % 3 === 0 ? 0x244a2f : i % 3 === 1 ? 0x1b3d29 : 0x2b5236),
+      });
+    }
   }
   return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
 }

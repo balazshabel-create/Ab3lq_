@@ -342,7 +342,17 @@ export const WORLD_PROPS = {
   vines: 1300,
   /** Reeds and lilies at the waterline, and weed on the river bed. */
   reeds: 5200,
-  underwaterPlants: 4200,
+  /*
+   * Weed on the river bed.
+   *
+   * Higher than it looks, because these are spread over only the deep parts of
+   * the river rather than over the map: the river is a small fraction of a
+   * 1000 m world, and the placement pass additionally rejects anything under
+   * 0.9 m of water. This is the crocodile's only cover while submerged, so it
+   * has to be a bed dense enough to disappear into rather than a scattering of
+   * plants to swim past.
+   */
+  underwaterPlants: 12000,
   huts: 11,
   bridges: 8,
   caves: 10,
@@ -417,19 +427,44 @@ export const ZONE_MIN_WATER_FRACTION = 0.045;
  * world, which is both cheaper and better: the crowd is where the players are,
  * and as the circle closes the density climbs on its own, exactly like real
  * animals crowding away from a storm front.
+ *
+ * ## This number changes what the game is, and that is deliberate
+ *
+ * It was 220. At that size the jungle is a crowd and the game is a hiding game:
+ * you are one capybara among forty, the hunter has to read behaviour rather than
+ * just count heads, and the whistle is a real risk because it picks you out of a
+ * herd. At 5 there is no crowd to hide in — the hunter can check every animal in
+ * the circle in a minute, so the game becomes a stalking-and-evasion game about
+ * cover, terrain and the closing storm instead of about blending in.
+ *
+ * That is the design the numbers below are now tuned for. Requested explicitly;
+ * recorded here because a future reader will otherwise "fix" it back.
  */
-export const AI_POPULATION = 220;
+export const AI_POPULATION = 5;
 
 /**
  * Guaranteed minimum number of AI animals of the same species as each player.
- * This is what makes hiding in the crowd possible — a player capybara is
- * useless as a disguise if there are no AI capybaras around.
+ *
+ * This used to be what made hiding in the crowd possible — a player capybara is
+ * useless as a disguise if there are no AI capybaras around — and at a total
+ * population of 5 it cannot do that job for anyone: reserving 14 per player
+ * would overspend the entire budget several times over on the first player.
+ *
+ * So it is 1. Every player still gets one animal of their own species in the
+ * world, which keeps a lone sighting ambiguous, and the remaining budget goes to
+ * a spread of the ecosystem rather than to a single species' worth of decoys.
  */
-export const AI_SPECIES_COVER_MIN = 14;
+export const AI_SPECIES_COVER_MIN = 1;
 
-/** Herd sizes for social species. */
-export const HERD_SIZE_MIN = 3;
-export const HERD_SIZE_MAX = 9;
+/**
+ * Herd sizes for social species.
+ *
+ * Pulled down to match the population. A herd of nine out of five animals is not
+ * a herd, it is the entire world standing in one place — and `spawnGroup` would
+ * blow the budget on the first group it placed.
+ */
+export const HERD_SIZE_MIN = 1;
+export const HERD_SIZE_MAX = 2;
 
 /** AI animals farther than this from every player are simulated coarsely. */
 export const AI_LOD_DISTANCE = 120;

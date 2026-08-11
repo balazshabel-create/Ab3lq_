@@ -20,7 +20,7 @@ import {
   EVENT_LOCKOUT_START,
   ROUND_DURATION,
 } from '../Systems/Config';
-import { Species } from '../Animals/AnimalTypes';
+import { isEnabled, Species } from '../Animals/AnimalTypes';
 import { Weather } from '../Core/Types';
 import { Rng } from '../Systems/Rng';
 
@@ -224,6 +224,15 @@ export function updateSchedule(
   const candidates = ALL_EVENTS.filter((id) => {
     if (schedule.active.some((a) => a.id === id)) return false;
     if (weatherBusy && EVENTS[id].forcesWeather !== undefined) return false;
+    /*
+     * An event whose whole point is a burst of a withdrawn species has nothing
+     * to do. Checked here rather than by deleting the event, so withdrawing a
+     * species stays a one-line change in the animal table instead of something
+     * you have to remember to chase through the event list — which is exactly
+     * how the monkey riot survived the monkeys being removed.
+     */
+    const burst = EVENTS[id].spawnBurst;
+    if (burst && !isEnabled(burst.species)) return false;
     return true;
   });
   if (candidates.length === 0) return started;

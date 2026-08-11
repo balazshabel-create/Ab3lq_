@@ -490,10 +490,20 @@ export class Simulation implements AiContext {
     const rng = this.rng.fork('population');
     let budget = AI_POPULATION;
 
-    // 1. Guaranteed cover for every species a player is using.
+    /*
+     * 1. Guaranteed cover for every species a player is using.
+     *
+     * Clamped against the remaining budget, which did not matter when the budget
+     * was 220 and matters a great deal now that it is 5: without the clamp a
+     * full lobby of players on distinct species would spawn one cover animal
+     * each regardless, overshooting the population cap by however many players
+     * turned up.
+     */
     const unique = [...new Set(coverSpecies)];
     for (const species of unique) {
-      const count = Math.max(AI_SPECIES_COVER_MIN, Math.round(AI_SPECIES_COVER_MIN * 1.2));
+      if (budget <= 0) break;
+      const want = Math.max(AI_SPECIES_COVER_MIN, Math.round(AI_SPECIES_COVER_MIN * 1.2));
+      const count = Math.min(budget, want);
       this.spawnGroup(species, count, rng);
       budget -= count;
     }

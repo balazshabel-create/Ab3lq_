@@ -19,6 +19,7 @@ import * as THREE from 'three';
 import {
   ANIMALS,
   BodyPlan,
+  Diet,
   Species,
   type AnimalDef,
 } from '../Animals/AnimalTypes';
@@ -369,6 +370,123 @@ function addJointedLeg(
   model.knees.push(knee);
 }
 
+/**
+ * A shell of fur tufts over a body.
+ *
+ * ## Why silhouette is the whole game here
+ *
+ * Every mammal on this plan was a set of smooth ellipsoids, and smooth
+ * ellipsoids read as plastic no matter what colour you paint them. Fur cannot be
+ * done with a texture in this project — there are no texture assets at all — but
+ * it does not need to be, because at the distance the game is played the thing
+ * the eye actually reads as "furry" is a *broken outline*: a coat is legible
+ * from the ragged edge it puts on the silhouette, not from any detail inside it.
+ *
+ * So this scatters flattened, tapered tufts over the surface of an ellipsoid,
+ * each tilted outwards along its own normal. From outside they break the
+ * outline; from any angle they catch light differently from the body under
+ * them. Cheap — four triangles each — and applied only at full detail, since a
+ * distant animal is a few pixels wide and has no silhouette to break.
+ *
+ * Points are placed on a Fibonacci sphere, which spreads them evenly without any
+ * of the clumping at the poles that stepping latitude and longitude produces.
+ */
+function addFur(
+  parent: THREE.Object3D,
+  options: {
+    rx: number;
+    ry: number;
+    rz: number;
+    count: number;
+    length: number;
+    colors: number[];
+    /** Only cover the upper half, for animals with a bare belly. */
+    topOnly?: boolean;
+    centre?: [number, number, number];
+  },
+): void {
+  const { rx, ry, rz, count, length, colors } = options;
+  const [cx, cy, cz] = options.centre ?? [0, 0, 0];
+  for (let i = 0; i < count; i++) {
+    // Fibonacci sphere: even coverage, no polar clumping.
+    const y = 1 - (i / (count - 1)) * 2;
+    if (options.topOnly && y < -0.15) continue;
+    const r = Math.sqrt(Math.max(0, 1 - y * y));
+    const theta = i * 2.399963;
+    const nx = Math.cos(theta) * r;
+    const nz = Math.sin(theta) * r;
+
+    // A deterministic wobble, so the coat is not a lattice.
+    const h = Math.sin((i * 12.9898 + 78.233) * 43758.5453);
+    const jitter = h - Math.floor(h);
+    const len = length * (0.7 + jitter * 0.7);
+
+    /*
+     * The long axis has to be Z, not X.
+     *
+     * `Object3D.lookAt` aims local **+Z** at the target, so a tuft whose length
+     * runs along local X ends up lying flat against the body — tangential, half
+     * buried, and contributing nothing to the outline. That is exactly what the
+     * first version did, and the coat was invisible: the animal still read as
+     * smooth plastic while the triangles were all being drawn.
+     *
+     * Built long in Z and aimed outward along the surface normal, each tuft
+     * sticks out of the body instead.
+     */
+    const tuft = mesh(
+      box(len * 0.5, len * 0.28, len),
+      colors[i % colors.length],
+      parent,
+      // Base slightly inside the surface, so no tuft floats free of the body.
+      cx + nx * rx * 0.88,
+      cy + y * ry * 0.88,
+      cz + nz * rz * 0.88,
+    );
+    tuft.lookAt(cx + nx * rx * 2.6, cy + y * ry * 2.6, cz + nz * rz * 2.6);
+    // Then lie it back along the body: fur sweeps, it does not stand on end.
+    tuft.rotateX(0.5 + jitter * 0.5);
+    tuft.castShadow = false;
+  }
+}
+
+/**
+ * A row of teeth along a jaw, pointing up or down.
+ *
+ * `direction` is -1 for an upper row hanging down and +1 for a lower row
+ * standing up. Rows on opposing jaws should be given different `count`s or a
+ * half-step offset so they interlock rather than collide.
+ */
+function addTeeth(
+  parent: THREE.Object3D,
+  options: {
+    count: number;
+    fromX: number;
+    toX: number;
+    y: number;
+    spread: number;
+    size: number;
+    direction: 1 | -1;
+  },
+): void {
+  const { count, fromX, toX, y, spread, size, direction } = options;
+  for (let i = 0; i < count; i++) {
+    const t = count === 1 ? 0.5 : i / (count - 1);
+    // Canines at the front, smaller cheek teeth behind.
+    const scale = 1 - t * 0.5;
+    for (const side of [-1, 1]) {
+      const tooth = mesh(
+        cone(size * 0.42 * scale, size * 2 * scale),
+        0xf4efe3,
+        parent,
+        fromX + (toX - fromX) * t,
+        y,
+        side * spread * (1 - t * 0.25),
+      );
+      if (direction < 0) tooth.rotation.x = Math.PI;
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Body plans
 // ---------------------------------------------------------------------------
@@ -454,6 +572,32 @@ function buildQuadruped(
     }
   }
 
+  /*
+   * The coat.
+   *
+   * Only at full detail, and only over the barrel — the tufts are there to break
+   * the silhouette, and a distant animal has no silhouette to break while a
+   * fully furred head turns into a hairball. Cats get a short, tight coat; the
+   * shaggy ones (anteater, sloth, capybara) get a longer, looser one, which is
+   * most of what tells them apart at a glance now that they share a body plan.
+   */
+  if (detail >= 1) {
+    const shaggy =
+      def.species === Species.Anteater ||
+      def.species === Species.Sloth ||
+      def.species === Species.Capybara ||
+      def.species === Species.Peccary;
+    addFur(bodyGroup, {
+      rx: L * 0.32,
+      ry: barrelR * 0.92,
+      rz: barrelR * (style === 1 ? 0.82 : 0.94),
+      count: shaggy ? 54 : 38,
+      length: (shaggy ? 0.3 : 0.19) * W,
+      colors: [c.body, c.accent, c.body, c.belly],
+      topOnly: true,
+    });
+  }
+
   // Head on a short neck.
   const neck = new THREE.Group();
   neck.position.set(L * 0.4, H * 0.18, 0);
@@ -532,6 +676,38 @@ function buildQuadruped(
       width: W * 0.32,
       color: c.belly,
     });
+
+    /*
+     * Teeth, for the animals that have a bite worth showing.
+     *
+     * Gated on diet rather than on body plan: a jaguar and a capybara share this
+     * builder, and a capybara with canines is a different animal. The lower row
+     * hangs off the hinged jaw so a bite opens a gap between the rows, which is
+     * what makes the attack animation land.
+     */
+    const carnivore = def.diet === Diet.Carnivore || def.diet === Diet.Omnivore;
+    if (carnivore && detail > 0.7) {
+      addTeeth(neck, {
+        count: 4,
+        fromX: L * 0.25,
+        toX: L * 0.13,
+        y: -H * 0.1,
+        spread: W * 0.13,
+        size: W * 0.075,
+        direction: -1,
+      });
+      if (model.jaw) {
+        addTeeth(model.jaw, {
+          count: 3,
+          fromX: L * 0.16,
+          toX: L * 0.07,
+          y: -H * 0.02,
+          spread: W * 0.11,
+          size: W * 0.06,
+          direction: 1,
+        });
+      }
+    }
 
     // Ears, with a darker inner surface set into the cone.
     for (const side of [-1, 1]) {
@@ -697,13 +873,79 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
    * anchors (at ±0.4·L). At 0.4·L it fell short at both ends and the animal read
    * as three separate objects floating in a line.
    */
-  const torso = mesh(capsule(W * 0.44, L * 0.62), c.body, bodyGroup);
-  torso.rotation.z = Math.PI / 2;
-  torso.scale.set(0.62, 1, 1);
+  const torso = mesh(
+    ellipsoid(L * 0.34, W * 0.3, W * 0.46, detail > 0.5 ? 10 : 6),
+    c.body,
+    bodyGroup,
+  );
+  torso.castShadow = true;
 
   if (detail > 0.4) {
-    const belly = mesh(box(L * 0.5, H * 0.18, W * 0.7), c.belly, bodyGroup, 0, -H * 0.28, 0);
-    belly.receiveShadow = true;
+    /*
+     * The belly, as overlapping transverse scutes rather than one slab.
+     *
+     * A crocodile's underside is banded — that banding is most of what you see
+     * when one turns in the water, and a single box read as a plank glued under
+     * a tube.
+     */
+    const bands = 7;
+    for (let i = 0; i < bands; i++) {
+      const t = i / (bands - 1);
+      const taper = 0.72 + Math.sin(t * Math.PI) * 0.28;
+      const band = mesh(
+        box(L * 0.075, H * 0.1, W * 0.66 * taper),
+        i % 2 === 0 ? c.belly : c.accent,
+        bodyGroup,
+        (t - 0.5) * L * 0.58,
+        -H * 0.3,
+        0,
+      );
+      band.receiveShadow = true;
+    }
+  }
+
+  /*
+   * --- Armour ------------------------------------------------------------
+   *
+   * The osteoderms: the bony plates that make a crocodilian look armoured
+   * rather than merely scaly, and the single feature that most separates one
+   * from a lizard at a glance. Three ranks — a raised double row over the
+   * spine and a flatter row down each flank — running the length of the body
+   * and continuing onto the tail below.
+   *
+   * Built as flattened, tilted boxes rather than cones: a cone reads as a spike
+   * and a crocodile's back is plated, not spiny.
+   */
+  if (detail > 0.5) {
+    const plates = detail >= 1 ? 9 : 6;
+    for (let i = 0; i < plates; i++) {
+      const t = i / (plates - 1);
+      const x = (t - 0.5) * L * 0.62;
+      // Tallest over the shoulders and hips, lower at the waist.
+      const rise = 0.7 + Math.sin(t * Math.PI * 2) * 0.3;
+      for (const side of [-1, 1]) {
+        const keel = mesh(
+          box(L * 0.07, H * 0.2 * rise, W * 0.17),
+          c.accent,
+          bodyGroup,
+          x,
+          W * 0.26,
+          side * W * 0.13,
+        );
+        keel.rotation.z = side * 0.12;
+        keel.castShadow = true;
+        // Flank rank, flatter and pressed against the side.
+        const flank = mesh(
+          box(L * 0.06, H * 0.12, W * 0.13),
+          c.accent,
+          bodyGroup,
+          x,
+          W * 0.05,
+          side * W * 0.42,
+        );
+        flank.rotation.x = side * 0.6;
+      }
+    }
   }
 
   // Long jaw.
@@ -713,12 +955,20 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
   model.head = head;
 
   // Shoulders: blends the head into the torso instead of butting against it.
-  const shoulder = mesh(sphere(W * 0.44, detail > 0.5 ? 8 : 5), c.body, bodyGroup, L * 0.3, 0, 0);
-  shoulder.scale.set(1, 0.6, 1);
+  mesh(ellipsoid(W * 0.3, W * 0.26, W * 0.44, detail > 0.5 ? 8 : 5), c.body, bodyGroup, L * 0.3, 0, 0);
 
-  // Upper jaw, fixed to the skull.
-  const upperJaw = mesh(box(L * 0.3, H * 0.2, W * 0.5), c.body, head, L * 0.12, H * 0.07, 0);
-  upperJaw.scale.set(1, 1, 1);
+  /*
+   * The skull.
+   *
+   * Two stacked masses: a broad cranium at the hinge and a long snout that
+   * narrows towards the nostrils. The old single box gave a head of constant
+   * width from ear to nose, which is an alligator-shaped brick — the taper is
+   * the shape.
+   */
+  const upperJaw = mesh(box(L * 0.14, H * 0.22, W * 0.5), c.body, head, L * 0.04, H * 0.07, 0);
+  upperJaw.castShadow = true;
+  const snout = mesh(box(L * 0.2, H * 0.16, W * 0.34), c.body, head, L * 0.21, H * 0.05, 0);
+  snout.castShadow = true;
   // Lower jaw, hinged — a crocodile's gape is its whole personality.
   addJaw(model, head, {
     hingeX: -L * 0.03,
@@ -729,26 +979,75 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
     color: c.body,
   });
   if (detail > 0.4) {
-    // Snout taper.
-    const tip = mesh(box(L * 0.12, H * 0.24, W * 0.32), c.body, head, L * 0.3, -H * 0.02, 0);
-    tip.scale.setScalar(1);
-    // The famous eyes-above-the-water silhouette.
+    // Snout tip and the nostril bump on top of it.
+    mesh(box(L * 0.07, H * 0.15, W * 0.26), c.body, head, L * 0.345, H * 0.04, 0);
+    mesh(ellipsoid(L * 0.035, H * 0.05, W * 0.11, 6), c.accent, head, L * 0.35, H * 0.12, 0);
+    /*
+     * The famous eyes-above-the-water silhouette, on raised turrets.
+     *
+     * The turret matters as much as the eye: a crocodile's eyes sit on bony
+     * mounds that stay above the surface when the rest of the skull is under
+     * it, and an eye sunk flush into the head loses the whole read.
+     */
     for (const side of [-1, 1]) {
-      mesh(sphere(W * 0.1, 6), c.eye, head, L * 0.02, H * 0.22, side * W * 0.2);
+      mesh(ellipsoid(W * 0.11, W * 0.09, W * 0.11, 6), c.body, head, L * 0.01, H * 0.17, side * W * 0.19);
+      mesh(sphere(W * 0.075, 7), c.eye, head, L * 0.02, H * 0.26, side * W * 0.2);
+      if (detail > 0.6) {
+        // A vertical slit pupil, which is what makes it read as a reptile eye
+        // rather than as a bead.
+        const pupil = mesh(box(W * 0.02, W * 0.09, W * 0.05), 0x0b0a08, head, L * 0.055, H * 0.27, side * W * 0.205);
+        pupil.rotation.z = 0.1;
+      }
+      // Ear flap, just behind the eye.
+      if (detail > 0.7) {
+        mesh(box(L * 0.035, H * 0.07, W * 0.04), c.accent, head, -L * 0.04, H * 0.19, side * W * 0.21);
+      }
     }
-    // Teeth.
+    /*
+     * Teeth, in two interlocking rows.
+     *
+     * Upper teeth point down from the maxilla and lower teeth point up from the
+     * jaw, and they are offset along the snout so they mesh rather than meet —
+     * which is exactly what makes a crocodile's closed mouth look dangerous
+     * instead of like a seam. The lower row is parented to the hinged jaw, so
+     * opening the mouth separates them.
+     */
     if (detail > 0.7) {
-      for (let i = 0; i < 5; i++) {
+      const upperCount = 8;
+      for (let i = 0; i < upperCount; i++) {
+        const t = i / (upperCount - 1);
+        // Taper the row with the snout, and shrink the teeth towards the tip.
+        const spread = W * (0.22 - t * 0.08);
+        const size = 1 - t * 0.45;
         for (const side of [-1, 1]) {
-          const t = mesh(
-            cone(W * 0.03, H * 0.14),
+          const tooth = mesh(
+            cone(W * 0.032 * size, H * 0.17 * size),
             0xf2ece0,
             head,
-            L * (0.08 + i * 0.05),
-            -H * 0.12,
-            side * W * 0.2,
+            L * (0.02 + t * 0.32),
+            -H * 0.06,
+            side * spread,
           );
-          t.rotation.x = Math.PI;
+          tooth.rotation.x = Math.PI;
+        }
+      }
+      if (model.jaw) {
+        const lowerCount = 7;
+        for (let i = 0; i < lowerCount; i++) {
+          // Half a step offset from the upper row, so the two mesh.
+          const t = (i + 0.5) / lowerCount;
+          const spread = W * (0.2 - t * 0.07);
+          const size = 1 - t * 0.4;
+          for (const side of [-1, 1]) {
+            mesh(
+              cone(W * 0.03 * size, H * 0.15 * size),
+              0xf2ece0,
+              model.jaw,
+              L * (0.04 + t * 0.3),
+              H * 0.02,
+              side * spread,
+            );
+          }
         }
       }
     }
@@ -1209,6 +1508,37 @@ function buildShelled(model: AnimalModel, def: AnimalDef, detail: number): void 
         H * 0.02,
         Math.sin(a) * W * 0.56,
       );
+    }
+
+    /*
+     * Banded armour, for the armadillo.
+     *
+     * An armadillo is not a domed tortoise: its shell is a rigid front and rear
+     * shield with a set of hinged bands between them, and those bands are the
+     * whole silhouette — they are why it can roll up. Sharing the tortoise's
+     * body plan meant it was drawn as a tortoise, which is a different animal.
+     */
+    if (def.species === Species.Armadillo) {
+      const bands = 6;
+      // Each band is an arc of small plates stepped over the shell's
+      // cross-section, which is the only way to get a band that actually follows
+      // the curve — a stretched box just makes a flat slab through the middle.
+      const perBand = 9;
+      for (let i = 0; i < bands; i++) {
+        const t = (i + 0.5) / bands;
+        const x = (t - 0.5) * L * 0.5;
+        for (let j = 0; j < perBand; j++) {
+          const a = (j / (perBand - 1) - 0.5) * Math.PI * 0.92;
+          mesh(
+            box(L * 0.045, H * 0.06, W * 0.14),
+            j % 2 === 0 ? c.accent : c.body,
+            bodyGroup,
+            x,
+            H * 0.1 + Math.cos(a) * H * 0.34,
+            Math.sin(a) * W * 0.56,
+          ).rotation.x = a;
+        }
+      }
     }
   }
 

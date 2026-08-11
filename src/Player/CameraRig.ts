@@ -163,10 +163,29 @@ export class CameraRig {
     );
     this.tmpB.copy(this.focus).addScaledVector(this.tmp, this.distance);
 
-    // --- Keep the camera out of the ground -------------------------------
-    // Without this, looking up at a low animal buries the view in the terrain.
-    const groundY = this.terrain.surfaceAt(this.tmpB.x, this.tmpB.z);
-    const minY = groundY + 0.45;
+    /*
+     * --- Keep the camera out of the ground -------------------------------
+     *
+     * Without this, looking up at a low animal buries the view in the terrain.
+     *
+     * ## Why the floor changes when the animal dives
+     *
+     * `terrain.surfaceAt` is the *walkable* surface, which over water is the
+     * water line, not the bed. That is the right answer for walking and exactly
+     * the wrong one here: it clamped the camera to 0.45 m above the water line
+     * whenever it was over a river, so a submerged crocodile was filmed from
+     * above the surface and `underwater` below could never become true. The
+     * underwater view — the tinted fog, the hidden sky, the weed you are hiding
+     * in — was unreachable in play, however well the diving itself worked.
+     *
+     * So when the followed animal is submerged the floor becomes the river bed
+     * instead, and the camera is allowed to follow it down.
+     */
+    const submerged = animals.isSubmerged(this.targetId);
+    const floor = submerged
+      ? this.terrain.heightAt(this.tmpB.x, this.tmpB.z)
+      : this.terrain.surfaceAt(this.tmpB.x, this.tmpB.z);
+    const minY = floor + (submerged ? 0.25 : 0.45);
     if (this.tmpB.y < minY) {
       this.tmpB.y = minY;
     }
@@ -181,14 +200,20 @@ export class CameraRig {
       const sz = lerp(this.focus.z, this.tmpB.z, t);
       const sy = lerp(this.focus.y, this.tmpB.y, t);
 
-      const hitTerrain = sy < this.terrain.surfaceAt(sx, sz) + 0.3;
+      // Same substitution as the floor above: while submerged, the thing the
+      // boom can collide with is the bed, not the surface it is swimming under.
+      const solid = submerged ? this.terrain.heightAt(sx, sz) : this.terrain.surfaceAt(sx, sz);
+      const hitTerrain = sy < solid + 0.3;
       const hitProp = this.blockerTest ? this.blockerTest(sx, sy, sz) : false;
       if (!hitTerrain && !hitProp) continue;
 
       // Shorten the boom to just before the obstruction.
       const shortened = this.distance * ((i - 1) / steps);
       this.tmpB.copy(this.focus).addScaledVector(this.tmp, Math.max(1.1, shortened));
-      this.tmpB.y = Math.max(this.tmpB.y, this.terrain.surfaceAt(this.tmpB.x, this.tmpB.z) + 0.45);
+      const endFloor = submerged
+        ? this.terrain.heightAt(this.tmpB.x, this.tmpB.z) + 0.25
+        : this.terrain.surfaceAt(this.tmpB.x, this.tmpB.z) + 0.45;
+      this.tmpB.y = Math.max(this.tmpB.y, endFloor);
       break;
     }
 

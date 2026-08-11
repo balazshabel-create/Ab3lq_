@@ -291,13 +291,40 @@ export class Terrain {
 
     // Carve the river valleys.
     const { dist, width } = this.distanceToRiver(x, z);
-    // riverT: 1 inside the channel, easing to 0 at the top of the bank.
+    /*
+     * Carve the channel.
+     *
+     * ## Why the bed is flat rather than V-shaped
+     *
+     * The floor was already set about 3.4 m below the water line, so on paper
+     * the river was deep — but `pow(riverT, 1.6)` reached that depth only on the
+     * exact centre-line and fell away fast, which made the channel a narrow
+     * V. In play almost the whole width of the river was ankle-deep and only a
+     * thin thread down the middle was swimmable, so "go underwater as a
+     * crocodile" meant finding and staying on a line you could not see.
+     *
+     * Two changes make the depth mean something:
+     *
+     *  • the full-depth core now runs out to 0.85 of the channel width rather
+     *    than 0.5, so most of the river *is* the deep part;
+     *  • the profile exponent drops below 1, which bows the cross-section into a
+     *    U — the bed stays near its floor and then turns up sharply at the
+     *    banks, instead of sloping continuously from the middle.
+     *
+     * The target is roughly 3.5 m of water over the bed for a 0.5 m animal:
+     * deep enough to swim in, to submerge in, and to grow weed tall enough to
+     * hide a crocodile, while the banks still shelve up quickly enough that
+     * walking into the river is a decision rather than an accident.
+     */
     const bank = width * 2.6;
-    const riverT = 1 - smoothstep(width * 0.5, bank, dist);
+    const riverT = 1 - smoothstep(width * 0.85, bank, dist);
     if (riverT > 0) {
       // Channel floor sits below the water line; banks blend into the terrain.
-      const channelDepth = WATER_LEVEL - 3.4 - width * 0.06;
-      const carve = Math.pow(riverT, 1.6);
+      // The width term keeps the main channel a little deeper than its
+      // tributaries, which is both true of rivers and useful: the big river is
+      // the one worth swimming down.
+      const channelDepth = WATER_LEVEL - 3.5 - width * 0.04;
+      const carve = Math.pow(riverT, 0.65);
       height = lerp(height, channelDepth, carve);
     }
 

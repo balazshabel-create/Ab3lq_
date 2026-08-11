@@ -145,6 +145,18 @@ export class AnimalRenderer {
     return true;
   }
 
+  /**
+   * Is this actor under the surface?
+   *
+   * Read by the camera rig, which has to stop treating the water line as a floor
+   * when the animal it is following goes below it — otherwise a submerged
+   * crocodile is filmed from above the water and never gets the underwater view.
+   */
+  isSubmerged(id: number): boolean {
+    const actor = this.actors.get(id);
+    return actor ? (actor.flags & ActorFlags.Submerged) !== 0 : false;
+  }
+
   /** Height of an actor's back, for placing fly swarms and markers. */
   getBodyHeight(id: number): number {
     const actor = this.actors.get(id);

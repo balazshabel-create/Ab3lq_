@@ -30,6 +30,13 @@ import {
   WeaknessId,
 } from '../src/Gameplay/Weaknesses';
 import { assignRoles } from '../src/Gameplay/RoundState';
+import {
+  ALL_EVENTS,
+  EVENTS,
+  createSchedule,
+  updateSchedule,
+  type EventId,
+} from '../src/Gameplay/RandomEvents';
 import { evaluateZone, planRings } from '../src/Gameplay/StormZone';
 import {
   InputAction,
@@ -38,7 +45,10 @@ import {
   type Snapshot,
 } from '../src/Networking/Protocol';
 import {
+  AI_POPULATION,
+  AI_SPECIES_COVER_MIN,
   ATTACK_STRIKE_TIME,
+  EVENT_LOCKOUT_START,
   HUNGER_DECAY_RATE,
   HUNTER_ATTACK_COOLDOWN,
   ROUND_DURATION,
@@ -157,17 +167,37 @@ test('the hunter is always an animal with AI cover of its own species', () => {
   // The hunter is a normal animal, never a human with a gun.
   assert.ok(ANIMALS[hunter!.species].canBeHunter);
 
-  // There must be a crowd of the same species to hide among.
+  /*
+   * There must be at least one other animal of the hunter's species.
+   *
+   * This asserted ten, back when the world held 220 AI animals and the game was
+   * about blending into a crowd. At a population of five there is no crowd to
+   * blend into by design — but the guarantee that still has to hold is that a
+   * player is never the *only* animal of their kind, because a lone specimen is
+   * an instant giveaway rather than a deduction. That is what AI_SPECIES_COVER_MIN
+   * now buys, and it is what this checks.
+   */
   let sameSpecies = 0;
   sim.forEachNearby(0, 0, 10_000, (a) => {
     if (a.species === hunter!.species && a.id !== hunter!.id) sameSpecies++;
   });
-  assert.ok(sameSpecies >= 10, `hunter needs cover; found only ${sameSpecies} of its species`);
+  assert.ok(
+    sameSpecies >= AI_SPECIES_COVER_MIN,
+    `hunter needs cover; found only ${sameSpecies} of its species`,
+  );
 });
 
 test('every player species gets AI cover to hide among', () => {
+  /*
+   * Three players rather than six.
+   *
+   * With a population of five, six players on six distinct species cannot each
+   * be given a companion — the budget runs out, and the clamp in `spawnPopulation`
+   * is what stops it overshooting instead. Three players is inside the budget, so
+   * the guarantee this test exists to protect is still testable.
+   */
   const sim = new Simulation(31337);
-  for (let i = 0; i < 6; i++) sim.addPlayer(`p${i}`, `P${i}`);
+  for (let i = 0; i < 3; i++) sim.addPlayer(`p${i}`, `P${i}`);
   sim.startRound();
 
   for (const player of sim.getPlayers()) {
@@ -175,7 +205,10 @@ test('every player species gets AI cover to hide among', () => {
     sim.forEachNearby(0, 0, 10_000, (a) => {
       if (a.species === player.species && a.id !== player.id) count++;
     });
-    assert.ok(count >= 10, `${player.species} only has ${count} AI companions`);
+    assert.ok(
+      count >= AI_SPECIES_COVER_MIN,
+      `${player.species} only has ${count} AI companions`,
+    );
   }
 });
 
@@ -731,7 +764,16 @@ test('nothing spawns in the storm', () => {
     total++;
     if (Math.hypot(a.pos.x - zone.x, a.pos.z - zone.z) > zone.radius) outside++;
   });
-  assert.ok(total > 50, `expected a populated world, got ${total} actors`);
+  /*
+   * A guard that the world is populated at all, so the real assertion below is
+   * not passing vacuously. Derived from the budget rather than hardcoded: this
+   * said `> 50`, which silently encoded the old population of 220 and turned a
+   * deliberate design change into a test failure that looked like a bug.
+   */
+  assert.ok(
+    total >= AI_POPULATION,
+    `expected a populated world, got ${total} actors`,
+  );
   assert.equal(outside, 0, `${outside} of ${total} actors spawned outside the circle`);
 });
 
@@ -925,4 +967,140 @@ test('a quick click is never dropped, whatever the frame rate', () => {
     0,
     'one tick of Attack must be enough to start a strike',
   );
+});
+
+test('the AI population respects its budget, however many players turn up', () => {
+  /*
+   * At the old budget of 220 an overshoot of a few animals was invisible. At 5
+   * it is the difference between the requested world and twice it, and the
+   * guaranteed-cover pass is the one that can overspend: it reserves an animal
+   * per *player species* before the filler loop, and only the filler loop used
+   * to clamp.
+   */
+  for (const playerCount of [1, 3, 8]) {
+    const sim = new Simulation(24680 + playerCount);
+    for (let i = 0; i < playerCount; i++) sim.addPlayer(`p${i}`, `P${i}`);
+    sim.startRound();
+
+    const count = sim.getAnimalCount();
+    assert.ok(
+      count <= AI_POPULATION,
+      `${playerCount} players produced ${count} AI animals, over the budget of ${AI_POPULATION}`,
+    );
+    assert.ok(count > 0, 'a round with no AI animals at all is not a jungle');
+  }
+});
+
+test('withdrawn species never reach the world', () => {
+  /*
+   * Withdrawing a species is a one-line `enabled: false` in the animal table.
+   * The whole point is that nothing else has to be remembered — so this asserts
+   * the guarantee end to end rather than trusting each spawn site to have asked.
+   */
+  const withdrawn = ALL_SPECIES.filter((s) => !isEnabled(s));
+  assert.ok(withdrawn.length > 0, 'this test is meaningless with nothing withdrawn');
+  assert.ok(
+    withdrawn.includes(Species.Monkey) && withdrawn.includes(Species.HowlerMonkey),
+    'both monkeys are meant to be withdrawn',
+  );
+
+  for (const seed of [11, 222, 3333, 44444]) {
+    const sim = new Simulation(seed);
+    sim.addPlayer('a', 'A');
+    sim.startRound();
+    advance(sim, 60);
+    sim.forEachNearby(0, 0, 10_000, (a) => {
+      assert.ok(isEnabled(a.species), `seed ${seed} spawned ${a.species}, which is withdrawn`);
+    });
+    for (const p of sim.getPlayers()) {
+      assert.ok(isEnabled(p.species), `seed ${seed} dealt a player the withdrawn ${p.species}`);
+    }
+  }
+
+  // A withdrawn species must also stay out of every pool the UI reads.
+  for (const s of withdrawn) {
+    assert.ok(!SPAWNABLE_SPECIES.includes(s), `${s} is still spawnable`);
+    assert.ok(!PLAYABLE_SPECIES.includes(s), `${s} is still playable`);
+    assert.ok(!HUNTER_SPECIES.includes(s), `${s} can still be dealt the hunter role`);
+  }
+});
+
+test('no random event can burst-spawn a withdrawn species', () => {
+  /*
+   * The monkey riot outlived the monkeys: its entire payload is fourteen howler
+   * monkeys, and nothing in the event table knew the species had gone. Rather
+   * than delete that one event, `updateSchedule` skips any event whose burst
+   * species is withdrawn — so this asserts the rule, not the case that motivated
+   * it, and a future withdrawal is covered for free.
+   */
+  const risky = ALL_EVENTS.filter((id) => {
+    const burst = EVENTS[id].spawnBurst;
+    return burst !== undefined && !isEnabled(burst.species);
+  });
+  assert.ok(risky.length > 0, 'expected at least one event bursting a withdrawn species');
+
+  const rng = new Rng(8642);
+  const schedule = createSchedule(rng);
+  const fired = new Set<EventId>();
+  // Well past the opening lockout and well short of the closing one.
+  for (let i = 0; i < 4000; i++) {
+    schedule.nextIn = 0;
+    for (const def of updateSchedule(schedule, rng, EVENT_LOCKOUT_START + 5, TICK)) {
+      fired.add(def.id);
+    }
+    // Clear the running list so the scheduler is free to pick again next loop.
+    schedule.active.length = 0;
+  }
+  assert.ok(fired.size > 0, 'the scheduler never fired anything; the test proves nothing');
+  for (const id of risky) {
+    assert.ok(!fired.has(id), `${id} fired despite bursting a withdrawn species`);
+  }
+});
+
+test('the river is deep enough to submerge in across its width', () => {
+  /*
+   * The channel floor has been ~3.4 m below the water line for a long time, and
+   * the river was still effectively ankle-deep: the old profile reached that
+   * floor only on the exact centre-line and shelved away immediately, so the
+   * deep part was a thread you could not see. "Deep river" is therefore not a
+   * statement about the maximum — it is a statement about the *median*, which is
+   * what a crocodile looking for somewhere to submerge actually meets.
+   *
+   * A submerging animal needs depth > its height * 1.1 (see Locomotion), so at
+   * 0.5 m tall a crocodile needs 0.55 m. Requiring a median far above that is
+   * what keeps the channel a place you can live in rather than one you can
+   * technically dip into.
+   */
+  for (const seed of [1234, 8080, 555]) {
+    const terrain = new Terrain(seed);
+    const depths: number[] = [];
+    for (let i = 0; i < 120_000; i++) {
+      const a = i * 2.399963;
+      const r = Math.sqrt((i % 9973) / 9973) * (WORLD_SIZE * 0.46);
+      const d = terrain.waterDepthAt(Math.cos(a) * r, Math.sin(a) * r);
+      if (d > 0.02) depths.push(d);
+    }
+    assert.ok(depths.length > 1000, `seed ${seed} has almost no water at all`);
+    depths.sort((x, y) => x - y);
+    const median = depths[Math.floor(depths.length / 2)];
+    assert.ok(
+      median >= 3,
+      `seed ${seed}: median water depth is ${median.toFixed(2)}m, so most of the river is shallow`,
+    );
+
+    // ...and the world must still be mostly jungle. A river you can swim down is
+    // no good if deepening it drowned the map.
+    const rng = new Rng(seed);
+    let land = 0;
+    const samples = 8000;
+    for (let i = 0; i < samples; i++) {
+      const p = rng.inCircle(WORLD_SIZE * 0.42);
+      if (!terrain.isWater(p.x, p.y)) land++;
+    }
+    const landFraction = land / samples;
+    assert.ok(
+      landFraction > 0.7,
+      `seed ${seed}: only ${(landFraction * 100).toFixed(0)}% of the map is dry land`,
+    );
+  }
 });

@@ -114,12 +114,21 @@ await page.waitForFunction(() => window.__jj?.state?.actorId > 0, null, { timeou
  */
 try {
   await page.waitForFunction(() => document.body.classList.contains('playing'), null, {
-    timeout: 90000,
+    timeout: 240000,
     polling: 500,
   });
 } catch (err) {
   await page.screenshot({ path: `${outDir}/probe-stuck.png` });
-  console.log('never reached the in-round screen; wrote probe-stuck.png');
+  // Report the state rather than leaving the next reader to guess at it from a
+  // screenshot, which is how two wrong wait conditions got written.
+  const state = await page.evaluate(() => ({
+    screen: window.__jj?.screen ?? null,
+    bodyClasses: document.body.className,
+    activeScreens: [...document.querySelectorAll('.screen.active')].map((n) => n.id),
+    actorId: window.__jj?.state?.actorId ?? null,
+    phase: window.__jj?.state?.status?.phase ?? null,
+  }));
+  console.log('never reached the in-round screen:', JSON.stringify(state));
   throw err;
 }
 // Let the streamed grass chunks and the foliage batches settle.
@@ -185,6 +194,23 @@ for (let i = 1; i <= 3; i++) {
   await page.waitForTimeout(900);
   await page.screenshot({ path: `${outDir}/probe-pan-${i}.png` });
 }
+
+/*
+ * No dive check here, deliberately.
+ *
+ * The obvious end-to-end test — make the player a caiman, drop them in deep
+ * water, hold C, screenshot — does not work from this harness, and it is worth
+ * saying why so nobody rebuilds it. Playwright's synthetic key events never
+ * reach the InputManager (input is gated on the in-round screen and pointer
+ * lock, which headless Chromium will not grant), and teleporting the server-side
+ * actor does not move the client's predicted position, so the camera keeps
+ * filming where the animal used to be. Both failure modes look exactly like "the
+ * camera refuses to dive", and one of them wasted a real diagnosis.
+ *
+ * The camera's dive behaviour is covered properly in tests/camera.test.ts, which
+ * drives the rig directly against a stub animal renderer — no browser, no input
+ * layer, and it fails if the fix is reverted.
+ */
 
 await browser.close();
 
