@@ -242,19 +242,42 @@ export class SkySystem {
     this.dome.renderOrder = -1000;
     scene.add(this.dome);
 
-    // --- Lights ----------------------------------------------------------
-    this.sunLight = new THREE.DirectionalLight(0xfff6e0, 2);
+    /*
+     * --- Lights ------------------------------------------------------------
+     *
+     * ## Rebalanced once ambient occlusion existed
+     *
+     * The old split was a sun at 2.0 against a hemisphere at 1.0, which is a very
+     * flat ratio — and it had to be, because without AO the hemisphere term was
+     * the *only* thing separating a surface from its neighbours, so turning it
+     * down turned the jungle into silhouettes.
+     *
+     * GTAO now supplies that separation properly, from geometry rather than from
+     * a uniform sky wash. That frees the key light to do what a key light is for:
+     * more sun, less ambient, and a sun that is warmer than the sky it competes
+     * with. Contrast is what makes AO legible, and a flat scene wastes it.
+     */
+    this.sunLight = new THREE.DirectionalLight(0xffeecb, 2.7);
     this.sunLight.name = 'sun';
     this.configureShadows(settings);
     scene.add(this.sunLight);
     scene.add(this.sunLight.target);
 
-    this.ambientLight = new THREE.HemisphereLight(0x9fb8c8, 0x2a3320, 1);
+    /*
+     * Sky above, bounced canopy light below.
+     *
+     * The ground colour is a green rather than a neutral on purpose: light
+     * reaching a rainforest floor from below has bounced off leaves, so it
+     * arrives green, and that tint is a large part of why the floor of a jungle
+     * looks like a jungle rather than like a dim room.
+     */
+    this.ambientLight = new THREE.HemisphereLight(0x9fb8c8, 0x33421f, 0.82);
     this.ambientLight.name = 'ambient';
     scene.add(this.ambientLight);
 
-    // Scaled to the same range as the sun (see the note above the sky keys).
-    this.fillLight = new THREE.DirectionalLight(0x516b8a, 0.7);
+    // A cool rim from behind, opposite the sun: it separates a dark animal from
+    // a dark background, which matters in a game about spotting shapes.
+    this.fillLight = new THREE.DirectionalLight(0x5f7ea6, 0.62);
     this.fillLight.position.set(-0.5, 0.4, -0.6);
     scene.add(this.fillLight);
   }
@@ -278,7 +301,17 @@ export class SkySystem {
      * so a 55 m frustum at 3072 is far sharper than a 90 m one at 4096, for a
      * third of the memory. This is where shadow crispness actually comes from.
      */
-    const extent = Math.min(55, settings.viewDistance * 0.4);
+    /*
+     * Tightened from 55 m to 42 m.
+     *
+     * Same argument as before, pushed further: texel density goes as the inverse
+     * square of the extent, so 42 m is another 70% sharper for free. What makes
+     * it affordable now is that everything past the frustum is covered by the AO
+     * pass and the fog — the shadow map no longer has to be the only thing
+     * separating objects at distance, so it can spend all of itself on the near
+     * field where a crisp leaf shadow is actually visible.
+     */
+    const extent = Math.min(42, settings.viewDistance * 0.4);
     const cam = this.sunLight.shadow.camera;
     cam.left = -extent;
     cam.right = extent;
@@ -299,7 +332,7 @@ export class SkySystem {
      * dappled shade while still making the sunlit clearings feel exposed, which
      * is what matters tactically.
      */
-    this.sunLight.shadow.intensity = 0.6;
+    this.sunLight.shadow.intensity = 0.72;
   }
 
   /**

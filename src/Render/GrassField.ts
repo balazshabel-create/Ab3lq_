@@ -28,7 +28,12 @@ import * as THREE from 'three';
 import { clamp01 } from '../Systems/Noise';
 import type { Terrain } from '../World/Terrain';
 import type { GraphicsSettings } from '../Graphics/QualitySettings';
-import { applyWind, buildGrassTuftGeometry, vertexColorMaterial } from './FoliageRenderer';
+import {
+  applyNearFade,
+  applyWind,
+  buildGrassTuftGeometry,
+  vertexColorMaterial,
+} from './FoliageRenderer';
 
 /** Chunk edge length in metres. */
 const CHUNK = 14;
@@ -142,6 +147,13 @@ export class GrassField {
     // Same wind shader as the rest of the foliage, so a gust moves the whole
     // jungle together rather than the bushes and the grass disagreeing.
     applyWind(this.material, 1.9);
+    /*
+     * Two metres: about one body length for the animals with the lowest cameras,
+     * which are the ones that were being blinded. Wide enough that the player is
+     * never looking through a blade, narrow enough that the patch is not visible
+     * as a clearing following them around.
+     */
+    applyNearFade(this.material, 2.0);
     this.group.name = 'grass-field';
     scene.add(this.group);
     this.recomputeBudget();
@@ -291,6 +303,14 @@ export class GrassField {
       u.uTime.value = time;
       u.uWind.value = 0.25 + wind * 1.4;
     }
+
+    // Where to shrink the blades. See applyNearFade.
+    const fade = (
+      this.material as THREE.Material & {
+        userData: { nearFadeUniforms?: { uFadeCamera: { value: THREE.Vector3 } } };
+      }
+    ).userData.nearFadeUniforms;
+    if (fade) fade.uFadeCamera.value.copy(cameraPos);
   }
 
   /**
@@ -415,8 +435,25 @@ export class GrassField {
 
   private newMesh(lod: Lod): THREE.InstancedMesh {
     const mesh = new THREE.InstancedMesh(this.geometry[lod], this.material, this.perChunk);
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
+    /*
+     * Near grass casts and receives; far grass does neither.
+     *
+     * Grass that casts no shadow at all sits *on* the ground rather than in it —
+     * a field of tufts with no contact darkening under them reads as stickers on
+     * a green plane, and no amount of density fixes it. The near ring is where
+     * that is visible, and it is also the only part inside the 42 m shadow
+     * frustum, so the far ring would gain nothing from being asked.
+     *
+     * Receiving matters as much as casting: it lets a tree's shadow fall across
+     * the field instead of stopping at the terrain underneath it, which was the
+     * single most obvious tell that the grass was a separate layer.
+     *
+     * Cost is bounded by the same LOD split that bounds everything else here —
+     * roughly a tenth of the tufts are in the near ring.
+     */
+    const near = lod === 'near';
+    mesh.castShadow = near;
+    mesh.receiveShadow = near;
     mesh.name = 'grass-chunk';
     return mesh;
   }

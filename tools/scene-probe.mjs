@@ -92,9 +92,22 @@ await page.addInitScript(
 
 await page.goto(base, { waitUntil: 'networkidle' });
 await page.waitForFunction(() => !!window.__jj, null, { timeout: 30000 });
-await page.click('#screen-menu .btn-primary');
+/*
+ * `force` and a long timeout on every click.
+ *
+ * Playwright's default click waits for the element to be "stable" — unmoved
+ * across two animation frames — and at the high preset under SwiftShader this
+ * scene can render slower than one frame a second, so a perfectly static button
+ * never satisfies the stability check inside the default 30 s. These are plain
+ * static buttons in a fixed layout; there is nothing for stability to protect
+ * against, and waiting for it made the tool unusable at exactly the preset it
+ * exists to inspect.
+ */
+const CLICK = { force: true, timeout: 180000 };
+
+await page.click('#screen-menu .btn-primary', CLICK);
 await page.waitForTimeout(500);
-await page.click('#screen-lobby .btn:has-text("Start Round")');
+await page.click('#screen-lobby .btn:has-text("Start Round")', CLICK);
 await page.waitForFunction(() => window.__jj?.state?.actorId > 0, null, { timeout: 30000 });
 
 /*

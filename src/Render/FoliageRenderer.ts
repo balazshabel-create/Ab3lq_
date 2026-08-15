@@ -225,6 +225,69 @@ interface ChunkBatch {
  * keep working — writing a whole material from scratch would mean
  * reimplementing three's shadow mapping.
  */
+/**
+ * Shrink blades that are very close to the camera.
+ *
+ * ## Why this is needed, and why it is not a density mistake
+ *
+ * Grass dense and tall enough to carpet the ground is, from a camera half a metre
+ * off it, a green wall. The shot that prompted this had a tortoise buried in its
+ * own field with blades filling the lower two-thirds of the screen: correct
+ * grass, unplayable view. The instinct is to back the density off, but that
+ * trades away the thing that took several passes to get right, and it fixes the
+ * near field by ruining the far one.
+ *
+ * The near field is the only part with the problem, so it is the only part that
+ * should pay. Blades within a couple of metres are scaled down towards the
+ * ground, smoothly, so the player is standing in a mown patch that travels with
+ * them while the field a few metres out is untouched. It costs one uniform and
+ * three lines of vertex shader, and because it scales rather than culls there is
+ * no popping — a blade shrinks as you approach and grows back behind you.
+ *
+ * Applied only to the streamed grass. Bushes and ferns are cover the player is
+ * *meant* to be blinded by.
+ */
+export function applyNearFade(material: THREE.Material, radius: number): void {
+  const uniforms = {
+    uFadeCamera: { value: new THREE.Vector3() },
+    uFadeRadius: { value: radius },
+  };
+  (
+    material as THREE.Material & { userData: { nearFadeUniforms?: typeof uniforms } }
+  ).userData.nearFadeUniforms = uniforms;
+
+  const previous = material.onBeforeCompile;
+  material.onBeforeCompile = (shader, renderer) => {
+    previous?.call(material, shader, renderer);
+    shader.uniforms.uFadeCamera = uniforms.uFadeCamera;
+    shader.uniforms.uFadeRadius = uniforms.uFadeRadius;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+         uniform vec3 uFadeCamera;
+         uniform float uFadeRadius;`,
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+         {
+           /*
+            * Horizontal distance only. Using the 3D distance would make the grass
+            * grow and shrink as the player looked up and down, because the camera
+            * rises and falls on its boom.
+            */
+           vec3 origin = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+           float d = length(origin.xz - uFadeCamera.xz);
+           // 1 at the camera, 0 at the radius. Squared so the transition is gentle
+           // at the edge and firm underfoot.
+           float k = clamp(1.0 - d / max(uFadeRadius, 0.001), 0.0, 1.0);
+           transformed.y *= 1.0 - k * k * 0.82;
+         }`,
+      );
+  };
+}
+
 export function applyWind(material: THREE.Material, strength: number): void {
   const uniforms = {
     uTime: { value: 0 },

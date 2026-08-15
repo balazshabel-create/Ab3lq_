@@ -40,6 +40,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import type { GraphicsSettings } from '../Graphics/QualitySettings';
 
 /**
@@ -72,6 +73,7 @@ export class PostProcessing {
   private composer: EffectComposer | null = null;
   private bloom: UnrealBloomPass | null = null;
   private smaa: SMAAPass | null = null;
+  private gtao: GTAOPass | null = null;
   private renderPass: RenderPass | null = null;
   private outputPass: OutputPass | null = null;
 
@@ -136,6 +138,54 @@ export class PostProcessing {
     this.renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(this.renderPass);
 
+    /*
+     * --- Ambient occlusion ---------------------------------------------------
+     *
+     * The single largest perceptual upgrade available to this scene, and the one
+     * thing no amount of geometry or lighting tuning was going to fix.
+     *
+     * The problem it solves: every object here is lit by a sun plus a hemisphere
+     * term, and a hemisphere light has no idea what is next to what. A tuft of
+     * grass, the tree trunk behind it and the log lying across both all receive
+     * the same sky contribution, so nothing ever darkens where it meets something
+     * else — and contact is exactly what the eye uses to read depth. It is why a
+     * dense jungle could still look like objects floating in front of each other
+     * rather than a place with things standing in it.
+     *
+     * GTAO rather than SSAO: it is a ground-truth-derived estimator, so it
+     * produces horizon-correct occlusion instead of the grey halo SSAO puts
+     * around every silhouette — which on a screen made almost entirely of thin
+     * overlapping foliage would have been far worse than no AO at all.
+     *
+     * HIGH only. It renders a depth+normal prepass, so it costs roughly a second
+     * geometry pass, and the machines on MEDIUM are already spending their budget
+     * on the foliage itself.
+     */
+    const effects = this.settings.effectsQuality;
+    if (effects === 'high') {
+      const ao = new GTAOPass(this.scene, this.camera, size.x, size.y);
+      /*
+       * Tuned for a scene at this scale. The defaults assume something
+       * room-sized: a 0.25 m radius over a jungle occludes nothing but the gap
+       * between one blade of grass and the next, which is invisible and costs the
+       * same. A metre and a half catches what actually matters — the base of a
+       * trunk, the underside of a bush, the hollow a log sits in.
+       */
+      ao.updateGtaoMaterial({
+        radius: 1.5,
+        distanceExponent: 1.4,
+        thickness: 1.2,
+        // Deliberately short of full strength. The rainforest floor is already
+        // the darkest thing on screen and the game depends on reading animal
+        // shapes in it; AO that bottoms out turns cover into a black hole.
+        scale: 0.85,
+        samples: 16,
+      });
+      ao.blendIntensity = 0.72;
+      this.composer.addPass(ao);
+      this.gtao = ao;
+    }
+
     const level = this.settings.effectsQuality as 'low' | 'medium' | 'high';
     const cfg = BLOOM[level] ?? BLOOM.low;
     this.bloom = new UnrealBloomPass(
@@ -171,11 +221,15 @@ export class PostProcessing {
   setCamera(camera: THREE.Camera): void {
     this.camera = camera;
     if (this.renderPass) this.renderPass.camera = camera;
+    // GTAO holds its own camera reference for the depth/normal prepass, so it
+    // has to be told too or the AO would be computed from the previous view.
+    if (this.gtao) this.gtao.camera = camera;
   }
 
   setSize(width: number, height: number): void {
     this.composer?.setSize(width, height);
     this.bloom?.setSize(width, height);
+    this.gtao?.setSize(width, height);
   }
 
   setSettings(settings: GraphicsSettings): void {
@@ -194,10 +248,12 @@ export class PostProcessing {
     this.composer?.dispose();
     this.bloom?.dispose();
     this.smaa?.dispose();
+    this.gtao?.dispose();
     this.outputPass?.dispose();
     this.composer = null;
     this.bloom = null;
     this.smaa = null;
+    this.gtao = null;
     this.renderPass = null;
     this.outputPass = null;
   }
