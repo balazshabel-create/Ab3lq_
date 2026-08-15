@@ -80,6 +80,31 @@ const info = await page.evaluate((what) => {
     return { depth: terrain.waterLevel - terrain.heightAt(p.x, p.z) };
   }
 
+  if (what === 'trees') {
+    /*
+     * The densest cluster of tall trees, so the shot is of a canopy rather than
+     * of whichever sapling happened to be near the river.
+     */
+    const trees = game.content.trees;
+    let best = trees[0];
+    let bestScore = -1;
+    for (const t of trees) {
+      if (t.height < 14) continue;
+      let near = 0;
+      for (const o of trees) {
+        const d = Math.hypot(o.x - t.x, o.z - t.z);
+        if (d < 22) near += o.height;
+      }
+      if (near > bestScore) {
+        bestScore = near;
+        best = t;
+      }
+    }
+    const radius = Number(new URLSearchParams(location.search).get('r') ?? '') || 34;
+    rig.setFreeAnchor(best.x, best.z, radius);
+    return { at: [Math.round(best.x), Math.round(best.z)], height: best.height, neighbours: bestScore };
+  }
+
   const river = terrain.rivers[0];
   const p = river.points[Math.floor(river.points.length / 3)];
   rig.setFreeAnchor(p.x, p.z, 48);

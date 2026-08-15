@@ -1180,8 +1180,14 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
    * anchors (at ±0.4·L). At 0.4·L it fell short at both ends and the animal read
    * as three separate objects floating in a line.
    */
+  /*
+   * Deeper than it was. At W * 0.3 the torso was a quarter of a metre tall on a
+   * body three quarters of a metre wide — a slab, and the reason the whole
+   * animal read as something stamped out of sheet metal. A crocodilian is
+   * flattened, not flat: roughly two thirds as deep as it is wide.
+   */
   const torso = mesh(
-    ellipsoid(L * 0.34, W * 0.3, W * 0.46, detail > 0.5 ? 10 : 6),
+    ellipsoid(L * 0.34, W * 0.33, W * 0.48, detail > 0.5 ? 10 : 6),
     c.body,
     bodyGroup,
   );
@@ -1232,7 +1238,7 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
       const rise = 0.7 + Math.sin(t * Math.PI * 2) * 0.3;
       for (const side of [-1, 1]) {
         const keel = mesh(
-          box(L * 0.07, H * 0.2 * rise, W * 0.17),
+          box(L * 0.07, H * 0.13 * rise, W * 0.17),
           c.accent,
           bodyGroup,
           x,
@@ -1272,23 +1278,60 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
    * width from ear to nose, which is an alligator-shaped brick — the taper is
    * the shape.
    */
-  const upperJaw = mesh(box(L * 0.14, H * 0.22, W * 0.5), c.body, head, L * 0.04, H * 0.07, 0);
+  /*
+   * ## Scale the head off the body's *length*, not its height
+   *
+   * `H` for a caiman is its shoulder height — half a metre on a three-and-a-half
+   * metre animal — so a skull built as a fraction of it came out eleven
+   * centimetres deep and eight at the snout. From the side that is not a head,
+   * it is a ruler: a flat plank sticking out of the front of the animal, which
+   * was by a distance the worst thing about this model. A crocodilian skull is
+   * about an eighth of the animal long and half as deep as it is wide, and both
+   * of those are proportions of *length*.
+   */
+  const skullLen = L * 0.13;
+  const skullDeep = L * 0.055;
+  const upperJaw = mesh(
+    box(skullLen, skullDeep, W * 0.54),
+    c.body,
+    head,
+    L * 0.02,
+    skullDeep * 0.35,
+    0,
+  );
   upperJaw.castShadow = true;
-  const snout = mesh(box(L * 0.2, H * 0.16, W * 0.34), c.body, head, L * 0.21, H * 0.05, 0);
+  // The snout: two tapering blocks rather than one, so the head has a profile
+  // that narrows and shallows towards the nostrils instead of a constant slab.
+  const snout = mesh(
+    box(L * 0.15, skullDeep * 0.78, W * 0.38),
+    c.body,
+    head,
+    L * 0.15,
+    skullDeep * 0.2,
+    0,
+  );
   snout.castShadow = true;
+  mesh(box(L * 0.1, skullDeep * 0.6, W * 0.27), c.body, head, L * 0.27, skullDeep * 0.12, 0);
   // Lower jaw, hinged — a crocodile's gape is its whole personality.
   addJaw(model, head, {
     hingeX: -L * 0.03,
-    hingeY: -H * 0.02,
+    hingeY: -skullDeep * 0.42,
     length: L * 0.34,
-    height: H * 0.15,
+    height: skullDeep * 0.62,
     width: W * 0.46,
     color: c.body,
   });
   if (detail > 0.4) {
     // Snout tip and the nostril bump on top of it.
-    mesh(box(L * 0.07, H * 0.15, W * 0.26), c.body, head, L * 0.345, H * 0.04, 0);
-    mesh(ellipsoid(L * 0.035, H * 0.05, W * 0.11, 6), c.accent, head, L * 0.35, H * 0.12, 0);
+    mesh(box(L * 0.05, skullDeep * 0.5, W * 0.2), c.body, head, L * 0.335, skullDeep * 0.1, 0);
+    mesh(
+      ellipsoid(L * 0.03, skullDeep * 0.28, W * 0.09, 6),
+      c.accent,
+      head,
+      L * 0.34,
+      skullDeep * 0.42,
+      0,
+    );
     /*
      * The famous eyes-above-the-water silhouette, on raised turrets.
      *
@@ -1297,17 +1340,38 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
      * it, and an eye sunk flush into the head loses the whole read.
      */
     for (const side of [-1, 1]) {
-      mesh(ellipsoid(W * 0.11, W * 0.09, W * 0.11, 6), c.body, head, L * 0.01, H * 0.17, side * W * 0.19);
-      mesh(sphere(W * 0.075, 7), c.eye, head, L * 0.02, H * 0.26, side * W * 0.2);
+      mesh(
+        ellipsoid(W * 0.12, W * 0.1, W * 0.12, 6),
+        c.body,
+        head,
+        L * 0.01,
+        skullDeep * 0.85,
+        side * W * 0.2,
+      );
+      mesh(sphere(W * 0.08, 7), c.eye, head, L * 0.02, skullDeep * 1.25, side * W * 0.21);
       if (detail > 0.6) {
         // A vertical slit pupil, which is what makes it read as a reptile eye
         // rather than as a bead.
-        const pupil = mesh(box(W * 0.02, W * 0.09, W * 0.05), 0x0b0a08, head, L * 0.055, H * 0.27, side * W * 0.205);
+        const pupil = mesh(
+          box(W * 0.02, W * 0.09, W * 0.05),
+          0x0b0a08,
+          head,
+          L * 0.055,
+          skullDeep * 1.3,
+          side * W * 0.215,
+        );
         pupil.rotation.z = 0.1;
       }
       // Ear flap, just behind the eye.
       if (detail > 0.7) {
-        mesh(box(L * 0.035, H * 0.07, W * 0.04), c.accent, head, -L * 0.04, H * 0.19, side * W * 0.21);
+        mesh(
+          box(L * 0.035, skullDeep * 0.4, W * 0.04),
+          c.accent,
+          head,
+          -L * 0.045,
+          skullDeep * 0.9,
+          side * W * 0.22,
+        );
       }
     }
     /*

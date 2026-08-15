@@ -78,11 +78,21 @@
       document.getElementById('label').textContent =
         `${def.name}  (${species})\nlength ${def.silhouette.length}m  height ${def.silhouette.height}m  detail ${detail}`;
 
+      /*
+       * Frame from above the animal's own eye line, not from it.
+       *
+       * The camera used to sit at 0.75 of shoulder height, which for a
+       * crocodile is thirty-seven centimetres — ground level. Everything long
+       * and low was photographed edge-on and came out looking like a plank,
+       * which is a fault in the camera, not in the model. Framing off the
+       * *bounding size* puts a tortoise and a tiger at comparable angles.
+       */
       let t = angle;
       function frame() {
         if (spin) t += 0.01;
         const r = size * 2.6;
-        camera.position.set(Math.cos(t) * r, def.silhouette.height * 0.75, Math.sin(t) * r);
+        const eye = Math.max(size * 0.42, def.silhouette.height * 1.15);
+        camera.position.set(Math.cos(t) * r, eye, Math.sin(t) * r);
         camera.lookAt(0, def.silhouette.height * 0.45, 0);
         renderer.render(scene, camera);
         requestAnimationFrame(frame);

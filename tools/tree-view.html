@@ -1,0 +1,104 @@
+<!doctype html>
+<!--
+  tree-view.html — one tree on a turntable, built by the game's own builder.
+
+  Same idea as model-view.html and for the same reason: judging a tree by
+  playing until you spawn next to one costs minutes, and the frame you get is
+  whichever sapling happened to be nearby. Here you name the variant:
+
+      /tools/tree-view.html?variant=2&detail=2&count=3
+
+  `count` plants a small stand of them, which is the only way to judge whether a
+  canopy closes — a single tree always looks sparser than a forest does.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>JukeJungle tree view</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #8ea5b8; }
+      canvas { display: block; }
+      #label {
+        position: fixed; left: 12px; top: 10px; font: 13px/1.4 monospace;
+        color: #fff; text-shadow: 0 1px 2px #000; white-space: pre;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="label"></div>
+    <script type="module">
+      import * as THREE from 'three';
+      import { buildTreeAssets } from '/src/Render/FoliageRenderer.ts';
+
+      const params = new URLSearchParams(location.search);
+      const variant = Number(params.get('variant') ?? 2);
+      const detail = Number(params.get('detail') ?? 2);
+      const count = Number(params.get('count') ?? 1);
+      const angle = Number(params.get('angle') ?? 0.6);
+      // The world generator scales the built mesh up to a target height; without
+      // that here, a tree looks half the size it does in the game.
+      const WORLD_SCALE = [13.5 / 8.4, 17.5 / 18.0, 11.5 / 11.2][variant % 3];
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(1);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      document.body.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x8ea5b8);
+
+      const sun = new THREE.DirectionalLight(0xfff2d8, 2.5);
+      sun.position.set(18, 30, 12);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(2048, 2048);
+      const s = 30;
+      sun.shadow.camera.left = -s;
+      sun.shadow.camera.right = s;
+      sun.shadow.camera.top = s;
+      sun.shadow.camera.bottom = -s;
+      sun.shadow.camera.far = 120;
+      scene.add(sun);
+      scene.add(new THREE.HemisphereLight(0xbcd4ff, 0x3f4a30, 1.6));
+
+      const ground = new THREE.Mesh(
+        new THREE.CircleGeometry(70, 48).rotateX(-Math.PI / 2),
+        new THREE.MeshLambertMaterial({ color: 0x4d6340 }),
+      );
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      const assets = buildTreeAssets(detail, variant);
+      let triangles = 0;
+      for (let i = 0; i < count; i++) {
+        const mesh = new THREE.Mesh(assets.geometry, assets.material);
+        const a = (i / Math.max(1, count)) * Math.PI * 2;
+        const r = count > 1 ? 7 : 0;
+        mesh.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+        mesh.rotation.y = a * 1.7;
+        mesh.scale.setScalar(WORLD_SCALE * (0.85 + (i % 3) * 0.12));
+        mesh.castShadow = true;
+        mesh.receiveShadow = false;
+        scene.add(mesh);
+      }
+      assets.geometry.computeBoundingBox();
+      const box = assets.geometry.boundingBox;
+      triangles = assets.geometry.getAttribute('position').count / 3;
+      const height = (box.max.y - box.min.y) * WORLD_SCALE;
+      const spread = (box.max.x - box.min.x) * WORLD_SCALE;
+
+      document.getElementById('label').textContent =
+        `variant ${variant}  detail ${detail}  x${count}\n` +
+        `${triangles.toFixed(0)} tris each   ${height.toFixed(1)} m tall   ${spread.toFixed(1)} m across`;
+
+      const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 400);
+      const r = Math.max(height, spread) * 1.5 + 8;
+      camera.position.set(Math.cos(angle) * r, height * 0.55, Math.sin(angle) * r);
+      camera.lookAt(0, height * 0.45, 0);
+      renderer.render(scene, camera);
+
+      window.__treeReady = true;
+    </script>
+  </body>
+</html>

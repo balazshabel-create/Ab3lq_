@@ -1046,6 +1046,20 @@ function growBranch(
     lengthFalloff: number;
     barkColor: number;
     leaves: { count: number; radius: number; length: number; width: number; palette: number[] } | null;
+    /**
+     * Clothe the branch itself, not only its tip.
+     *
+     * Tip-only foliage puts every leaf at the outside of the crown and leaves
+     * the middle as bare wood, which is what made the rebuilt broadleaf read as
+     * a tree in early spring: correct branching, and you could see right
+     * through it. Real foliage grows along the outer part of a branch, so a few
+     * smaller clusters down each segment fill the crown from the inside and hide
+     * the scaffolding they hang on.
+     *
+     * Applied only at `depth <= from`, because a cluster on a primary limb is a
+     * bush growing out of a trunk.
+     */
+    along?: { perSegment: number; from: number; scale: number };
     sides: number;
     seed: number;
   },
@@ -1111,6 +1125,30 @@ function growBranch(
     g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     g.computeVertexNormals();
     parts.push({ geometry: g, color: new THREE.Color(options.barkColor) });
+  }
+
+  // --- Clothe the segment -------------------------------------------------
+  if (options.leaves && options.along && depth <= options.along.from) {
+    const n = options.along.perSegment;
+    for (let i = 0; i < n; i++) {
+      // The outer part of the segment only: the inner third is where it joins
+      // its parent, and foliage there just buries the fork.
+      const t = 0.42 + ((i + 0.5) / n) * 0.58;
+      const j = hash(i * 31 + depth * 7);
+      leafCluster(parts, {
+        count: Math.max(3, Math.round(options.leaves.count * options.along.scale)),
+        radius: options.leaves.radius * (0.62 + j * 0.3),
+        flatten: 0.9,
+        leafLength: options.leaves.length,
+        leafWidth: options.leaves.width,
+        centre: [
+          origin[0] + d[0] * length * t,
+          origin[1] + d[1] * length * t,
+          origin[2] + d[2] * length * t,
+        ],
+        palette: options.leaves.palette,
+      });
+    }
   }
 
   // --- Tip: hang the leaves here -----------------------------------------
@@ -1217,38 +1255,64 @@ function addWillowFronds(
     count: number;
     length: number;
     palette: number[];
+    /** Small leaf cards scattered down each strand. 0 leaves a bare withe. */
+    leavesPerStrand?: number;
   },
 ): void {
   const { centre, radius, count, length, palette } = options;
   const [cx, cy, cz] = centre;
+  const leavesPerStrand = options.leavesPerStrand ?? 0;
+
   for (let i = 0; i < count; i++) {
     // Golden angle, and a radius that varies so the curtain has depth rather
     // than being a single ring of strands.
     const a = i * 2.399963;
     const h = Math.sin(i * 12.9898) * 43758.5453;
     const jitter = h - Math.floor(h);
-    const r = radius * (0.45 + jitter * 0.55);
-    const len = length * (0.55 + jitter * 0.7);
-    const w = 0.13;
+    const h2 = Math.sin(i * 78.233 + 1.7) * 43758.5453;
+    const jitter2 = h2 - Math.floor(h2);
+    const r = radius * (0.35 + jitter * 0.65);
+    // A wide spread of lengths. Strands of one length give the curtain a hemmed
+    // edge, which is the most artificial thing about it after the width.
+    const len = length * (0.35 + jitter2 * 0.95);
+    /*
+     * Thin. The strands used to be a quarter of a metre wide and dead straight,
+     * so a willow came out looking like the brushes in a car wash. A withe is a
+     * few millimetres across; a few centimetres is as thin as is worth building
+     * at this distance, and the *number* of them is what makes a curtain.
+     */
+    const w = 0.045;
 
-    // Three segments, each drifting a little further out and narrowing.
+    const cosA = Math.cos(a);
+    const sinA = Math.sin(a);
+    const px = (out: number, off: number): number => cx + cosA * out - sinA * off;
+    const pz = (out: number, off: number): number => cz + sinA * out + cosA * off;
+
+    /*
+     * The arc.
+     *
+     * A willow strand leaves the branch going outwards and slightly *up*, loses
+     * its argument with gravity about a third of the way along, and falls almost
+     * vertically from there. Interpolating between those two behaviours over the
+     * length is what turns a hanging tape into a weeping branch, and it is the
+     * whole reason this is a chain of segments rather than one strip.
+     */
+    const segs = 6;
+    const outAt = (t: number): number =>
+      r + Math.sin(Math.min(1, t * 2.1) * Math.PI * 0.5) * radius * 0.55;
+    const yAt = (t: number): number =>
+      Math.sin(Math.min(1, t * 8) * Math.PI * 0.5) * len * 0.06 - len * Math.pow(t, 1.35);
+
     const positions: number[] = [];
-    const segs = 3;
     for (let sIdx = 0; sIdx < segs; sIdx++) {
       const t0 = sIdx / segs;
       const t1 = (sIdx + 1) / segs;
-      const y0 = -len * t0;
-      const y1 = -len * t1;
-      // Bell outwards as it falls, then hang straight.
-      const out0 = r + Math.sin(t0 * Math.PI * 0.5) * radius * 0.25;
-      const out1 = r + Math.sin(t1 * Math.PI * 0.5) * radius * 0.25;
-      const w0 = w * (1 - t0 * 0.7);
-      const w1 = w * (1 - t1 * 0.7);
-      const cosA = Math.cos(a);
-      const sinA = Math.sin(a);
-      // Strip lies in the plane containing the radius and the vertical.
-      const px = (out: number, off: number) => cx + cosA * out - sinA * off;
-      const pz = (out: number, off: number) => cz + sinA * out + cosA * off;
+      const out0 = outAt(t0);
+      const out1 = outAt(t1);
+      const y0 = yAt(t0);
+      const y1 = yAt(t1);
+      const w0 = w * (1 - t0 * 0.6);
+      const w1 = w * (1 - t1 * 0.6);
       positions.push(
         px(out0, -w0), cy + y0, pz(out0, -w0),
         px(out0, w0), cy + y0, pz(out0, w0),
@@ -1262,6 +1326,27 @@ function addWillowFronds(
     frond.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     frond.computeVertexNormals();
     parts.push({ geometry: frond, color: new THREE.Color(palette[i % palette.length]) });
+
+    /*
+     * Leaves down the strand.
+     *
+     * Without them the curtain is bare withes — correct botany for February, and
+     * from any distance it reads as green string. They are tiny and alternate
+     * sides, as a willow's do, and they are what makes a strand catch light
+     * along its length instead of being a flat ribbon of one colour.
+     */
+    for (let k = 0; k < leavesPerStrand; k++) {
+      const t = 0.15 + ((k + 0.5) / leavesPerStrand) * 0.8;
+      const side = k % 2 === 0 ? 1 : -1;
+      const leaf = leafGeometry(0.34, 0.11, 0.1);
+      leaf.rotateZ(-1.05 - jitter * 0.3);
+      leaf.rotateY(-a + side * 0.7);
+      leaf.translate(px(outAt(t), side * w * 1.2), cy + yAt(t), pz(outAt(t), side * w * 1.2));
+      parts.push({
+        geometry: leaf,
+        color: new THREE.Color(palette[(i + k) % palette.length]),
+      });
+    }
   }
 }
 
@@ -1323,6 +1408,15 @@ function addWillowFronds(
  * bought back by `detail`, which drops the recursion depth a whole level on the
  * medium and low presets — one level of depth is most of the triangles.
  */
+/**
+ * Exported for tooling: `tools/tree-view.html` renders one variant on its own,
+ * which is the only way to judge a tree without playing until you spawn beside
+ * one. Nothing in the game calls it by this name.
+ */
+export function buildTreeAssets(detail: number, variant = 0): PropAssets {
+  return buildTree(detail, variant);
+}
+
 function buildTree(detail: number, variant = 0): PropAssets {
   const sides = detail >= 2 ? 7 : detail >= 1 ? 5 : 4;
   const rings = detail >= 2 ? 7 : detail >= 1 ? 5 : 3;
@@ -1374,27 +1468,49 @@ function buildTree(detail: number, variant = 0): PropAssets {
         barkColor: 0x5e4128,
         // Leaves come from the frond curtain instead, so the twigs carry only a
         // light cap — a willow's branch tips are not leafy, the strands are.
-        leaves: { count: detail >= 2 ? 5 : 3, radius: 0.9, length: 0.8, width: 0.34, palette },
+        leaves: { count: detail >= 2 ? 12 : 5, radius: 0.7, length: 0.4, width: 0.18, palette },
+        along: detail >= 2 ? { perSegment: 2, from: 1, scale: 0.5 } : undefined,
         sides: twigSides,
         seed: 100 + i,
       });
 
       // The curtain, hung from around each limb's reach.
+      /*
+       * The curtain, in two overlapping shells per limb.
+       *
+       * One ring of strands is a fringe you can see straight through, which is
+       * what a willow must never be — the species reads as a solid falling mass
+       * with the trunk showing underneath. Two shells at different radii, plus
+       * the crown shell below, close the silhouette for the price of geometry
+       * strips.
+       */
       const reach = 2.6;
       addWillowFronds(parts, {
         centre: [Math.cos(a) * reach * 0.8, height * 0.6 + 2.2, Math.sin(a) * reach * 0.8],
-        radius: 1.9,
-        count: detail >= 2 ? 14 : detail >= 1 ? 9 : 5,
-        length: 5.6,
+        radius: 2.1,
+        count: detail >= 2 ? 30 : detail >= 1 ? 15 : 6,
+        length: 6.4,
         palette,
+        leavesPerStrand: detail >= 2 ? 7 : detail >= 1 ? 3 : 0,
       });
+      if (detail >= 2) {
+        addWillowFronds(parts, {
+          centre: [Math.cos(a) * reach * 0.5, height * 0.6 + 2.9, Math.sin(a) * reach * 0.5],
+          radius: 1.4,
+          count: 18,
+          length: 5.2,
+          palette,
+          leavesPerStrand: 5,
+        });
+      }
     }
     addWillowFronds(parts, {
-      centre: [0, height * 0.95, 0],
-      radius: 1.5,
-      count: detail >= 2 ? 11 : 7,
-      length: 5.0,
+      centre: [0, height * 0.98, 0],
+      radius: 1.7,
+      count: detail >= 2 ? 24 : 9,
+      length: 5.6,
       palette,
+      leavesPerStrand: detail >= 2 ? 6 : 2,
     });
   } else if (v === 1) {
     // ---- Conifer ---------------------------------------------------------
@@ -1449,13 +1565,21 @@ function buildTree(detail: number, variant = 0): PropAssets {
           tropism: -0.1,
           lengthFalloff: 0.66,
           barkColor: 0x5c3d22,
+          /*
+           * Short, wide, thickly packed. The needles used to be long thin cards
+           * radiating from each tip, and at over a metre each they read as a
+           * bundle of grass blades stuck to a pole. Foliage is legible from
+           * coverage, not from card size: small drooping cards packed onto every
+           * tip make a spray, and a stack of sprays makes a conifer.
+           */
           leaves: {
-            count: detail >= 2 ? 5 : 3,
-            radius: spread * 0.36,
-            length: 1.15,
-            width: 0.34,
+            count: detail >= 2 ? 11 : 5,
+            radius: spread * 0.3,
+            length: 0.6,
+            width: 0.26,
             palette,
           },
+          along: detail >= 2 ? { perSegment: 2, from: 1, scale: 0.55 } : undefined,
           sides: twigSides,
           seed: 300 + w * 11 + i,
         });
@@ -1463,11 +1587,11 @@ function buildTree(detail: number, variant = 0): PropAssets {
     }
     // The spire.
     leafCluster(parts, {
-      count: detail >= 2 ? 10 : 5,
-      radius: 0.8,
-      flatten: 1.6,
-      leafLength: 1.0,
-      leafWidth: 0.28,
+      count: detail >= 2 ? 16 : 6,
+      radius: 0.7,
+      flatten: 1.9,
+      leafLength: 0.6,
+      leafWidth: 0.24,
       centre: [0, height * 0.99, 0],
       palette,
     });
@@ -1500,14 +1624,40 @@ function buildTree(detail: number, variant = 0): PropAssets {
      * each carrying a cluster, which fills a dome from the inside out.
      */
     const palette = [0x2f6d24, 0x3b8330, 0x4a9938, 0x286020, 0x56a743];
-    const limbs = detail >= 1 ? 4 : 3;
-    for (let i = 0; i < limbs; i++) {
-      const a = (i / limbs) * Math.PI * 2 + 0.9;
+    /*
+     * Three tiers, not one.
+     *
+     * Every limb used to leave the trunk at the same height and reach up at the
+     * same angle, so every tip finished on the same plane and the leaves sat on
+     * top of it: a flat green disc on a pole — a mushroom, not a tree. No amount
+     * of extra foliage fixes a crown with no depth in it, because the extra
+     * foliage lands on the same plane as the rest of it.
+     *
+     * Tiers at different heights, the lower ones longer and reaching outwards
+     * and the upper ones shorter and reaching up, give the crown a volume: tips
+     * at every height from two thirds of the trunk to the top of the tree, and
+     * foliage filling the space between them.
+     */
+    const tiers: { at: number; limbs: number; length: number; rise: number; tropism: number }[] =
+      detail >= 1
+        ? [
+            { at: 0.52, limbs: 4, length: 3.0, rise: 0.52, tropism: 0.02 },
+            { at: 0.7, limbs: 4, length: 2.6, rise: 0.85, tropism: 0.1 },
+            { at: 0.88, limbs: 3, length: 1.9, rise: 1.25, tropism: 0.18 },
+          ]
+        : [{ at: 0.7, limbs: 3, length: 2.6, rise: 0.9, tropism: 0.1 }];
+
+    for (let t = 0; t < tiers.length; t++) {
+      const tier = tiers[t];
+      for (let i = 0; i < tier.limbs; i++) {
+      // Offset each tier's fan so limbs from different tiers never stack into a
+      // vertical wall of wood.
+      const a = (i / tier.limbs) * Math.PI * 2 + 0.9 + t * 1.3;
       growBranch(parts, {
-        origin: [0, height * 0.72, 0],
-        dir: [Math.cos(a) * 0.62, 1, Math.sin(a) * 0.62],
-        length: 2.3,
-        radius: 0.26,
+        origin: [0, height * tier.at, 0],
+        dir: [Math.cos(a), tier.rise, Math.sin(a)],
+        length: tier.length,
+        radius: 0.22 - t * 0.04,
         /*
          * Depth 2, not 3.
          *
@@ -1520,23 +1670,32 @@ function buildTree(detail: number, variant = 0): PropAssets {
          */
         depth: detail >= 2 ? 2 : 1,
         split: 3,
-        spread: 0.62,
-        // Slightly upward: a broadleaf crown reaches for the light.
-        tropism: 0.12,
-        lengthFalloff: 0.7,
+        spread: 0.66,
+        tropism: tier.tropism,
+        lengthFalloff: 0.68,
         barkColor: 0x5e4128,
-        // Fewer, larger cards: coverage is area, and a card costs four triangles
-        // whatever size it is.
+        /*
+         * Small cards, and a great many of them.
+         *
+         * The world generator scales this mesh up by half again to reach its
+         * target height, so a card built at 1.6 m arrived in the game two and a
+         * half metres long — you could count the leaves on a tree from thirty
+         * metres away, which was the loudest thing wrong with the old canopy.
+         * Three times as many at a third of the length costs about the same and
+         * reads as foliage instead of as bunting.
+         */
         leaves: {
-          count: detail >= 2 ? 7 : detail >= 1 ? 5 : 3,
-          radius: 1.5,
-          length: 1.6,
-          width: 0.82,
+          count: detail >= 2 ? 13 : detail >= 1 ? 7 : 3,
+          radius: 1.15,
+          length: 0.54,
+          width: 0.3,
           palette,
         },
+        along: detail >= 2 ? { perSegment: 2, from: 1, scale: 0.62 } : undefined,
         sides: twigSides,
-        seed: 500 + i,
+        seed: 500 + t * 31 + i,
       });
+      }
     }
   }
 
