@@ -210,7 +210,12 @@ export function buildAnimalModel(species: Species, detail = 1): AnimalModel {
       buildSerpent(model, def, detail);
       break;
     case BodyPlan.Primate:
-      buildPrimate(model, def, detail);
+      // The great apes get their own builder. A gorilla and a howler monkey
+      // share a body plan on paper and nothing at all in silhouette, and running
+      // the gorilla through the monkey builder produced a black sausage on four
+      // sticks — see buildApe.
+      if (def.species === Species.Gorilla) buildApe(model, def, detail);
+      else buildPrimate(model, def, detail);
       break;
     case BodyPlan.Bird:
       buildBird(model, def, detail);
@@ -380,6 +385,89 @@ function addJointedLeg(
 }
 
 /**
+ * A tapering, segmented tail that cannot come apart.
+ *
+ * ## The bug this exists to make impossible
+ *
+ * Every body plan grew its own tail loop, and every one of them had the same
+ * two defects. The base was anchored past the end of the torso, so the tail
+ * started in mid-air behind the animal; and each segment's mesh was built at a
+ * fixed *fraction* of the slot it occupied while its radius shrank down the
+ * taper, so the gaps between segments grew towards the tip. The result — three
+ * detached blobs trailing a tiger, and a caiman in four pieces — was plainly
+ * visible in any screenshot and had survived a long time, because a tail is the
+ * part of an animal nobody looks at directly.
+ *
+ * Both are structural, so they are fixed structurally rather than by nudging
+ * numbers. Each segment is an ellipsoid whose half-length is *longer* than its
+ * slot, so consecutive segments always overlap however far the taper has gone;
+ * and callers pass the anchor as a point that is inside the body, because a
+ * tail that begins under the rump is invisible and a tail that begins behind it
+ * is a mistake you can see from fifty metres.
+ */
+function addTail(
+  model: AnimalModel,
+  parent: THREE.Object3D,
+  options: {
+    /** Where the tail leaves the body. Put it *inside* the hindquarters. */
+    x: number;
+    y: number;
+    z?: number;
+    length: number;
+    segments: number;
+    /** Cross-section at the root and at the tip, vertical then lateral. */
+    rootY: number;
+    rootZ: number;
+    tipY: number;
+    tipZ: number;
+    color: number;
+    detail: number;
+    /** Radians of droop per segment. Negative lifts the tail. */
+    droop?: number;
+    /** Hook for per-segment decoration — scutes, tufts, a tip. */
+    decorate?: (segment: THREE.Object3D, index: number, radius: number, segLen: number) => void;
+  },
+): void {
+  const { segments, detail } = options;
+  if (segments < 1 || options.length <= 0) return;
+
+  const segLen = options.length / segments;
+  const base = new THREE.Group();
+  base.position.set(options.x, options.y, options.z ?? 0);
+  parent.add(base);
+
+  let node: THREE.Object3D = base;
+  for (let i = 0; i < segments; i++) {
+    const g = new THREE.Group();
+    g.position.x = i === 0 ? 0 : -segLen;
+    // The first joint droops half as far, so the tail leaves the body along it
+    // rather than kinking away from it.
+    g.rotation.z = (options.droop ?? 0) * (i === 0 ? 0.5 : 1);
+    node.add(g);
+
+    // Sample the taper at the middle of this slot, not at its start: sampling at
+    // the start makes the last segment a stub of the wrong width.
+    const t = (i + 0.5) / segments;
+    const ry = options.rootY + (options.tipY - options.rootY) * t;
+    const rz = options.rootZ + (options.tipZ - options.rootZ) * t;
+
+    const seg = mesh(
+      ellipsoid(segLen * 0.66, ry, rz, detail > 0.5 ? 8 : 5),
+      options.color,
+      g,
+      -segLen * 0.5,
+      0,
+      0,
+    );
+    seg.castShadow = true;
+    options.decorate?.(g, i, Math.max(ry, rz), segLen);
+
+    model.tail.push(g);
+    node = g;
+  }
+}
+
+/**
  * A shell of fur tufts over a body.
  *
  * ## Why silhouette is the whole game here
@@ -537,35 +625,84 @@ function buildQuadruped(
    * of the markings are visible.
    */
   const barrelR = W * 0.5;
-  const torso = mesh(
-    ellipsoid(L * (style === 1 ? 0.34 : 0.3), barrelR * 0.94, barrelR * (style === 1 ? 0.84 : 0.96), detail > 0.5 ? 10 : 6),
-    c.body,
-    bodyGroup,
-  );
-  torso.castShadow = true;
-
+  /*
+   * The three masses are described as data before anything is built, because
+   * the markings later on have to know where the surface actually *is*.
+   *
+   * Painting stripes at a single guessed radius does not work: the barrel is a
+   * union of three ellipsoids of different widths, so one radius is inside the
+   * body over the ribs and outside it over the shoulder. The first attempt at
+   * tiger stripes did exactly that and came out as a scatter of black chips
+   * where the guess happened to break the surface. With the masses in a table,
+   * `surfaceAt` can find the widest one at any point along the body and put the
+   * marking on it.
+   */
+  type Mass = { cx: number; cy: number; rx: number; ry: number; rz: number };
+  const masses: Mass[] = [
+    {
+      cx: 0,
+      cy: 0,
+      rx: L * (style === 1 ? 0.34 : 0.3),
+      ry: barrelR * 0.94,
+      rz: barrelR * (style === 1 ? 0.84 : 0.96),
+    },
+  ];
   if (detail > 0.4) {
     // Chest, forward and a little lower: where the forelegs hang from.
-    mesh(
-      ellipsoid(L * 0.19, barrelR * 0.9, barrelR * (style === 1 ? 0.82 : 0.9), detail > 0.5 ? 9 : 6),
-      c.body,
-      bodyGroup,
-      L * 0.26,
-      -H * 0.04,
-      0,
-    );
+    masses.push({
+      cx: L * 0.26,
+      cy: -H * 0.04,
+      rx: L * 0.19,
+      ry: barrelR * 0.9,
+      rz: barrelR * (style === 1 ? 0.82 : 0.9),
+    });
     // Hindquarters, heavier and set slightly higher — the push-off end.
-    mesh(
-      ellipsoid(L * 0.2, barrelR * 1.0, barrelR * 0.94, detail > 0.5 ? 9 : 6),
-      c.body,
+    masses.push({ cx: -L * 0.26, cy: H * 0.02, rx: L * 0.2, ry: barrelR, rz: barrelR * 0.94 });
+  }
+
+  for (let i = 0; i < masses.length; i++) {
+    const m = masses[i];
+    const seg = detail > 0.5 ? (i === 0 ? 10 : 9) : 6;
+    const piece = mesh(ellipsoid(m.rx, m.ry, m.rz, seg), c.body, bodyGroup, m.cx, m.cy, 0);
+    piece.castShadow = true;
+  }
+
+  /** The widest mass at this point along the body, or null past both ends. */
+  const surfaceAt = (along: number): Mass | null => {
+    let best: Mass | null = null;
+    let bestR = 0;
+    for (const m of masses) {
+      const t = (along - m.cx) / m.rx;
+      if (Math.abs(t) >= 1) continue;
+      const shrink = Math.sqrt(1 - t * t);
+      if (m.rz * shrink > bestR) {
+        bestR = m.rz * shrink;
+        best = m;
+      }
+    }
+    return best;
+  };
+
+  if (detail > 0.4) {
+    /*
+     * Belly, a lighter underside.
+     *
+     * Tucked *into* the barrel rather than slung under it. At its old radius and
+     * height it hung a hand's width below the torso and read as a grey slab
+     * bolted to the animal's underside — a shelf, from any angle but head-on.
+     * An underside is a colour change on the bottom of a body, so it has to sit
+     * inside the body's own silhouette and only show where the light does not
+     * reach.
+     */
+    const belly = mesh(
+      ellipsoid(L * 0.26, barrelR * 0.5, barrelR * 0.58, detail > 0.5 ? 9 : 5),
+      c.belly,
       bodyGroup,
-      -L * 0.26,
-      H * 0.02,
+      0,
+      -barrelR * 0.5,
       0,
     );
-    // Belly, a lighter underside — cheap, and it makes the silhouette read.
-    const belly = mesh(capsule(W * 0.4, L * 0.44, 7), c.belly, bodyGroup, 0, -H * 0.2, 0);
-    belly.rotation.z = Math.PI / 2;
+    belly.castShadow = false;
     // Shoulder blades, standing a little proud of the back.
     if (detail > 0.6) {
       for (const side of [-1, 1]) {
@@ -600,10 +737,31 @@ function buildQuadruped(
       rx: L * 0.32,
       ry: barrelR * 0.92,
       rz: barrelR * (style === 1 ? 0.82 : 0.94),
-      count: shaggy ? 54 : 38,
-      length: (shaggy ? 0.3 : 0.19) * W,
-      colors: [c.body, c.accent, c.body, c.belly],
+      count: shaggy ? 90 : 66,
+      length: (shaggy ? 0.34 : 0.22) * W,
+      // Coat colours only. A cream tuft on a tiger's back reads as a chip of
+      // bone stuck to it, because a tiger's pale fur is on its underside.
+      colors: [c.body, c.accent, c.body],
       topOnly: true,
+    });
+    /*
+     * A ruff at the throat and a longer guard coat along the spine.
+     *
+     * The coat over the barrel alone leaves the join between neck and shoulder
+     * as a hard seam, which is the one place a procedural animal most obviously
+     * gives itself away as two shapes pushed together. Cats especially carry a
+     * visible thickening there, and it costs a second call.
+     */
+    addFur(bodyGroup, {
+      rx: L * 0.12,
+      ry: barrelR * 0.7,
+      rz: barrelR * 0.78,
+      count: 34,
+      length: (shaggy ? 0.3 : 0.22) * W,
+      // Coat colours only. A pale tuft in the ruff reads as a chip of bone
+      // stuck to the animal's neck, not as fur catching the light.
+      colors: [c.body, c.accent, c.body],
+      centre: [L * 0.3, 0, 0],
     });
   }
 
@@ -677,14 +835,31 @@ function buildQuadruped(
       }
     }
 
+    /*
+     * The lower jaw, in coat colour rather than in belly colour. A cream box
+     * under the muzzle reads as something the animal is carrying, not as part of
+     * its head — the pale underside belongs on the *throat*, below the jaw, and
+     * that is where it goes now.
+     */
     addJaw(model, neck, {
       hingeX: L * 0.1,
-      hingeY: -H * 0.11,
-      length: L * 0.19,
-      height: H * 0.08,
-      width: W * 0.32,
-      color: c.belly,
+      hingeY: -H * 0.105,
+      length: L * 0.155,
+      height: H * 0.065,
+      width: W * 0.26,
+      color: c.body,
     });
+    if (detail > 0.6) {
+      const chin = mesh(
+        ellipsoid(L * 0.07, H * 0.045, W * 0.16, 6),
+        c.belly,
+        neck,
+        L * 0.09,
+        -H * 0.15,
+        0,
+      );
+      chin.castShadow = false;
+    }
 
     /*
      * Teeth, for the animals that have a bite worth showing.
@@ -756,97 +931,213 @@ function buildQuadruped(
     }
   }
 
-  // Legs. Front pair slightly forward of centre, back pair behind.
+  /*
+   * Legs.
+   *
+   * Thicker and set wider than they were. A big cat's foreleg is about as thick
+   * as its own head, and at the old radius the tiger stood on four pencils —
+   * which reads as a toy horse no matter how good the body is. The front pair
+   * also sit further forward, under the shoulder rather than behind it, because
+   * the chest hanging out past its own legs is the other half of that look.
+   */
   if (detail > 0.25) {
     const legLen = H * 0.92;
-    const legR = W * 0.13;
+    const legR = W * (style === 1 ? 0.17 : 0.155);
     const positions: [number, number, 1 | -1][] = [
-      [L * 0.3, W * 0.32, 1],
-      [L * 0.3, -W * 0.32, 1],
-      [-L * 0.3, W * 0.34, -1],
-      [-L * 0.3, -W * 0.34, -1],
+      [L * 0.33, W * 0.36, 1],
+      [L * 0.33, -W * 0.36, 1],
+      [-L * 0.31, W * 0.38, -1],
+      [-L * 0.31, -W * 0.38, -1],
     ];
     for (const [x, z, forward] of positions) {
       addJointedLeg(model, bodyGroup, {
         x,
-        y: -H * 0.1,
+        y: -H * 0.08,
         z,
         length: legLen,
         radius: legR,
         color: c.body,
-        footColor: c.accent,
+        footColor: c.body,
         forward,
         detail,
-        toes: style === 1 ? 3 : 0,
+        toes: style === 1 ? 4 : 0,
       });
+      /*
+       * The upper leg, where it meets the body: a shoulder on the front pair and
+       * a haunch on the back. Attached to the hip group so it swings with the
+       * limb, which is what a shoulder does and what makes the gait read as
+       * driven from the body rather than from the ankle.
+       */
+      if (detail > 0.5) {
+        const hip = model.legs[model.legs.length - 1];
+        const mass = mesh(
+          ellipsoid(
+            legR * (forward > 0 ? 1.5 : 1.9),
+            legLen * 0.3,
+            legR * 1.45,
+            detail > 0.7 ? 8 : 5,
+          ),
+          c.body,
+          hip,
+          forward > 0 ? -legR * 0.15 : -legR * 0.35,
+          -legLen * 0.16,
+          0,
+        );
+        mass.castShadow = true;
+      }
+      // Claws, on the animals that have any use for them.
+      if (detail > 0.7 && (def.diet === Diet.Carnivore || def.diet === Diet.Omnivore)) {
+        const knee = model.knees[model.knees.length - 1];
+        if (knee) {
+          for (let t = 0; t < 3; t++) {
+            const claw = mesh(
+              cone(legR * 0.16, legR * 0.5),
+              c.belly,
+              knee,
+              forward * legR * 0.45 + legR * 1.5,
+              -legLen * 0.5 - legR * 0.28,
+              (t - 1) * legR * 0.62,
+            );
+            claw.rotation.z = -Math.PI / 2 + 0.5;
+          }
+        }
+      }
     }
   }
 
-  // Tail.
+  // Tail. Anchored inside the hindquarters — see addTail.
   if (s.tail > 0.05 && detail > 0.4) {
-    const tailLen = L * s.tail;
-    const base = new THREE.Group();
-    base.position.set(-L * 0.5, H * 0.12, 0);
-    bodyGroup.add(base);
-    const segments = style === 1 ? 4 : 2;
-    let parent: THREE.Object3D = base;
-    for (let i = 0; i < segments; i++) {
-      const segLen = tailLen / segments;
-      const g = new THREE.Group();
-      g.position.set(i === 0 ? 0 : -segLen, 0, 0);
-      parent.add(g);
-      const seg = new THREE.Mesh(
-        capsule(Math.max(0.02, W * (0.11 - i * 0.02)), segLen * 0.6),
-        material(c.body),
-      );
-      seg.rotation.z = Math.PI / 2;
-      seg.position.x = -segLen * 0.5;
-      g.add(seg);
-      model.tail.push(g);
-      parent = g;
-    }
+    addTail(model, bodyGroup, {
+      x: -L * 0.42,
+      y: H * 0.1,
+      length: L * s.tail,
+      segments: style === 1 ? 5 : 2,
+      rootY: W * 0.13,
+      rootZ: W * 0.13,
+      tipY: W * 0.05,
+      tipZ: W * 0.05,
+      color: c.body,
+      detail,
+      // Cats carry the tail low with a lift at the tip; the stubby ones just
+      // hang. A dead-straight tail is the tell of a model with no weight in it.
+      droop: style === 1 ? 0.16 : 0.28,
+      decorate: (segment, index, radius) => {
+        // A dark tip, and rings on the way to it. Both are free silhouette.
+        if (style !== 1 || detail < 0.7) return;
+        if (index % 2 === 1) {
+          const ring = mesh(ellipsoid(radius * 0.5, radius * 1.1, radius * 1.1, 6), c.accent, segment);
+          ring.position.x = -radius * 0.4;
+        }
+      },
+    });
   }
 
   /*
-   * Jaguar and ocelot rosettes.
+   * --- Markings ----------------------------------------------------------
    *
-   * The old version stepped one angle around a circle and used it for both the
-   * position along the body and the position around it, so the spots traced a
-   * single helix — from most angles a tidy diagonal stripe, which is a marking
-   * no cat has. Rows down the flank, offset half a step from each other and
-   * jittered by a fixed hash, scatter properly.
+   * A tiger and a leopard shared this builder and both came out covered in
+   * rosettes, which is the single loudest thing you can get wrong about a big
+   * cat: a striped animal and a spotted one do not look alike at *any*
+   * distance, and telling one player's species from another at range is
+   * gameplay here, not decoration.
    *
-   * They are placed on both flanks and along the spine, pressed flat against the
-   * body so they read as markings rather than as lumps, and they are slightly
-   * *inside* the surface: a spot floating a millimetre proud z-fights, and a
-   * flat-shaded facet makes that painfully visible.
+   * Both are painted the same way — small flattened ellipsoids set very
+   * slightly inside the barrel's surface and turned to face outwards. Sitting
+   * proud of the surface z-fights, and on flat-shaded facets that is violently
+   * obvious.
    */
-  if (style === 1 && detail > 0.6) {
-    const rows = 3;
-    const perRow = 5;
+  /*
+   * `ring` is the angle around the barrel: 0 is the spine, π/2 is the flank.
+   *
+   * The orientation here is done with an explicit rotation about X rather than
+   * with `lookAt`, and that is the entire reason the stripes work. `lookAt`
+   * turns the *whole* local frame to face outwards, which means the ellipsoid's
+   * long axis ends up pointing wherever the roll happens to leave it — so a
+   * marking built long-and-thin came out as a blob at an arbitrary angle. It
+   * went unnoticed while the only markings were rosettes, because a rosette is
+   * round and a rotated circle is a circle. A stripe is not.
+   *
+   * Rotating about X keeps the marking's X axis along the body's length (so
+   * "narrow" stays narrow front-to-back) and swings its Y/Z into the tangent and
+   * the outward normal, which is exactly the freedom a marking on a cylinder
+   * needs and no more.
+   */
+  const markOnBody = (
+    along: number,
+    ring: number,
+    side: number,
+    rx: number,
+    tangential: number,
+    color: number,
+  ): void => {
+    const mass = surfaceAt(along);
+    if (!mass) return;
+    const t = (along - mass.cx) / mass.rx;
+    const shrink = Math.sqrt(Math.max(0, 1 - t * t));
+    // Straddle the surface: mostly buried, a few millimetres proud. Fully
+    // buried is invisible and fully proud reads as a welt.
+    const y = mass.cy + Math.cos(ring) * mass.ry * shrink * 0.97;
+    const z = side * Math.sin(ring) * mass.rz * shrink * 0.97;
+    const m = mesh(ellipsoid(rx, tangential, rx * 0.3, 5), color, bodyGroup, along, y, z);
+    m.rotation.x = side * (ring - Math.PI / 2);
+  };
+
+  if (detail > 0.6 && def.species === Species.Tiger) {
+    /*
+     * Stripes: vertical bands over the spine and down both flanks, built as a
+     * run of overlapping marks around a ring so they follow the curve of the
+     * barrel instead of cutting through it.
+     *
+     * Real tiger stripes are irregular, uneven in width and often forked, and
+     * the cheapest convincing version of that is to vary the length and the
+     * width of each band from a fixed hash rather than to draw them all alike.
+     */
+    const bands = 11;
+    for (let b = 0; b < bands; b++) {
+      const h = Math.sin(b * 78.233) * 43758.5453;
+      const jitter = h - Math.floor(h);
+      const along = ((b + 0.5) / bands - 0.5) * L * 0.86;
+      // How far down the flank this one reaches. Short bands over the shoulder,
+      // long ones over the ribs — which is where a tiger's are longest.
+      const reach = 1.05 + Math.sin((b / bands) * Math.PI) * 0.75 + jitter * 0.3;
+      const width = L * (0.017 + jitter * 0.012);
+      for (const side of [-1, 1]) {
+        const steps = 8;
+        for (let i = 0; i <= steps; i++) {
+          const ring = (i / steps) * reach;
+          // Each patch has to reach at least to the next one, or the stripe
+          // comes out as a dotted line down the flank.
+          const span = (reach / steps) * barrelR * 0.75;
+          // Lean the band backwards as it descends: they are not vertical.
+          markOnBody(along - ring * L * 0.05, ring, side, width, span, c.accent);
+        }
+      }
+    }
+  } else if (style === 1 && detail > 0.6) {
+    /*
+     * Rosettes, for the leopard and the smaller spotted cats.
+     *
+     * The old version stepped one angle around a circle and used it for both the
+     * position along the body and the position around it, so the spots traced a
+     * single helix — from most angles a tidy diagonal stripe, which is a marking
+     * no cat has. Rows down the flank, offset half a step from each other and
+     * jittered by a fixed hash, scatter properly.
+     */
+    const rows = 4;
+    const perRow = 6;
     for (let r = 0; r < rows; r++) {
       for (let i = 0; i < perRow; i++) {
-        // A cheap deterministic jitter, so the grid does not read as a grid.
         const j = Math.sin((r * 13.7 + i * 7.3) * 12.9898) * 43758.5453;
         const jitter = j - Math.floor(j);
         const along = ((i + (r % 2) * 0.5 + jitter * 0.4) / perRow - 0.45) * L * 0.82;
-        // Row 0 sits over the spine, rows 1–2 down each flank.
-        const ring = -0.35 + r * 0.62 + jitter * 0.2;
+        // Row 0 sits over the spine, the rest down each flank.
+        const ring = -0.3 + r * 0.5 + jitter * 0.18;
         for (const side of [-1, 1]) {
           if (r === 0 && side < 0) continue; // the spine row exists once
-          const y = Math.cos(ring) * barrelR * 0.9;
-          const z = side * Math.sin(ring) * barrelR * 0.86;
-          const spot = mesh(
-            ellipsoid(W * 0.07 + jitter * W * 0.03, W * 0.055, W * 0.07, 5),
-            c.accent,
-            bodyGroup,
-            along,
-            y,
-            z,
-          );
-          // Flatten onto the surface and face outwards.
-          spot.lookAt(spot.position.x, spot.position.y * 3, spot.position.z * 3);
-          spot.scale.set(1, 1, 0.35);
+          const rx = W * 0.07 + jitter * W * 0.03;
+          markOnBody(along, ring, side, rx, rx * 0.85, c.accent);
+          // The pale centre that makes a rosette a rosette rather than a spot.
+          if (detail > 0.8) markOnBody(along, ring, side, rx * 0.42, rx * 0.36, c.body);
         }
       }
     }
@@ -1127,32 +1418,51 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
     }
   }
 
-  // Heavy tapering tail — the crocodile's whole back half.
-  const tailLen = L * s.tail;
-  if (tailLen > 0.05) {
-    const base = new THREE.Group();
-    base.position.set(-L * 0.4, 0, 0);
-    bodyGroup.add(base);
-    let parent: THREE.Object3D = base;
-    const segments = detail > 0.5 ? 5 : 3;
-    for (let i = 0; i < segments; i++) {
-      const segLen = tailLen / segments;
-      const g = new THREE.Group();
-      g.position.x = i === 0 ? 0 : -segLen;
-      parent.add(g);
-      const taper = 1 - i / (segments + 1);
-      const seg = new THREE.Mesh(box(segLen, H * 0.42 * taper, W * 0.62 * taper), material(c.body));
-      seg.position.x = -segLen * 0.5;
-      seg.castShadow = true;
-      g.add(seg);
-      // Dorsal scutes: the ridged back that makes a caiman look like a log.
-      if (detail > 0.6 && i < segments - 1) {
-        const scute = mesh(cone(W * 0.07 * taper, H * 0.2 * taper), c.accent, g, -segLen * 0.5, H * 0.24 * taper, 0);
-        scute.rotation.z = 0;
-      }
-      model.tail.push(g);
-      parent = g;
-    }
+  /*
+   * The tail — the crocodile's whole back half, and half its length.
+   *
+   * Taller than it is wide, and that is not decoration: a crocodilian tail is a
+   * vertical paddle, which is why the animal sculls with it side to side and why
+   * a round tail would look like a lizard's. It is anchored well inside the
+   * torso, because the old anchor sat a fifth of a metre behind the body and
+   * left the animal visibly in two pieces.
+   */
+  if (s.tail > 0.05) {
+    addTail(model, bodyGroup, {
+      x: -L * 0.28,
+      y: 0,
+      length: L * s.tail,
+      segments: detail > 0.5 ? 6 : 3,
+      rootY: W * 0.34,
+      rootZ: W * 0.3,
+      tipY: W * 0.07,
+      tipZ: W * 0.035,
+      color: c.body,
+      detail,
+      droop: 0.02,
+      decorate: (segment, index, radius, segLen) => {
+        if (detail <= 0.6) return;
+        /*
+         * The double caudal crest. It runs as two rows near the base and merges
+         * into one down the last third, exactly as it does on the animal, and it
+         * is the detail that makes a tail in the water read as a crocodile
+         * rather than as a floating branch.
+         */
+        const single = index >= 3;
+        for (const side of single ? [0] : [-1, 1]) {
+          const keel = mesh(
+            box(segLen * 0.45, radius * 0.46, radius * 0.26),
+            c.accent,
+            segment,
+            -segLen * 0.5,
+            radius * 0.78,
+            side * radius * 0.34,
+          );
+          keel.rotation.z = 0.05;
+          keel.castShadow = true;
+        }
+      },
+    });
   }
 }
 
@@ -1305,6 +1615,233 @@ function buildPrimate(model: AnimalModel, def: AnimalDef, detail: number): void 
       g.add(seg);
       model.tail.push(g);
       parent = g;
+    }
+  }
+}
+
+/**
+ * The gorilla, and any other great ape.
+ *
+ * ## Why this is not the monkey builder
+ *
+ * `buildPrimate` makes a light, long-limbed, long-tailed animal that holds its
+ * torso upright on a narrow chest — a howler monkey, which is what it was
+ * written for. Feeding a gorilla through it produced a horizontal black sausage
+ * on four identical sticks, and no amount of tuning the numbers fixes that,
+ * because the thing that makes an ape an ape is a set of proportions the monkey
+ * builder cannot express:
+ *
+ *  • The mass is at the top. A gorilla is a huge chest and shoulders tapering to
+ *    small hips, which is the exact inverse of most quadrupeds and the reason a
+ *    silverback reads as "powerful" from a hundred metres away.
+ *  • The arms are longer than the legs, and it walks on its knuckles. That is
+ *    what tilts the spine — shoulders high, hips low — and the tilt is the pose
+ *    everyone recognises.
+ *  • The skull has a crest on top and a brow over the front, and almost no
+ *    forehead between them.
+ *  • And there is a saddle of grey across the back, which is the single most
+ *    identifiable marking on any animal in this game.
+ */
+function buildApe(model: AnimalModel, def: AnimalDef, detail: number): void {
+  const s = def.silhouette;
+  const c = s.colors;
+  const L = s.length;
+  const H = s.height;
+  const W = s.width;
+
+  const bodyGroup = new THREE.Group();
+  bodyGroup.position.y = H * 0.72;
+  model.root.add(bodyGroup);
+  model.body = bodyGroup;
+
+  // --- Torso: heavy at the shoulder, tapering to the hips ----------------
+  /*
+   * Described as data first, for the same reason the quadruped's barrel is: the
+   * silverback saddle has to be laid on the *actual* top of the back, and the
+   * back is a union of three ellipsoids whose top surface drops by a quarter of
+   * a metre from the shoulder to the hip. A single flat plate at a guessed
+   * height ended up buried inside the chest, invisible — which cost the animal
+   * its one unmistakable marking.
+   */
+  type Mass = { cx: number; cy: number; rx: number; ry: number; rz: number };
+  const masses: Mass[] = [
+    // Chest.
+    { cx: L * 0.1, cy: H * 0.16, rx: L * 0.27, ry: W * 0.44, rz: W * 0.5 },
+    // Gut, lower and further back.
+    { cx: -L * 0.14, cy: -H * 0.06, rx: L * 0.25, ry: W * 0.38, rz: W * 0.42 },
+  ];
+  if (detail > 0.4) {
+    // The shoulder yoke: the widest part of the animal, and the reason it can
+    // pull a small tree over.
+    masses.push({ cx: L * 0.16, cy: H * 0.28, rx: L * 0.14, ry: W * 0.26, rz: W * 0.62 });
+  }
+  for (const m of masses) {
+    const piece = mesh(
+      ellipsoid(m.rx, m.ry, m.rz, detail > 0.5 ? 10 : 6),
+      c.body,
+      bodyGroup,
+      m.cx,
+      m.cy,
+      0,
+    );
+    piece.castShadow = true;
+  }
+
+  /** Height of the topmost surface of the back at this point along the body. */
+  const backTop = (x: number): number => {
+    let top = -Infinity;
+    for (const m of masses) {
+      const t = (x - m.cx) / m.rx;
+      if (Math.abs(t) >= 1) continue;
+      top = Math.max(top, m.cy + m.ry * Math.sqrt(1 - t * t));
+    }
+    return top;
+  };
+
+  if (detail >= 1) {
+    /*
+     * The coat, over the barrel. Lighter tufts than the body, not darker: fur is
+     * legible because it catches light along its edges, and darkening it only
+     * fills the silhouette back in.
+     */
+    addFur(bodyGroup, {
+      rx: L * 0.25,
+      ry: W * 0.4,
+      rz: W * 0.46,
+      count: 96,
+      length: W * 0.13,
+      colors: [c.body, c.belly, c.body, 0x2f2b2d],
+      centre: [-L * 0.06, H * 0.02, 0],
+    });
+  }
+
+  if (detail > 0.4) {
+    /*
+     * The silverback saddle, laid along the back in patches that each sit on the
+     * surface where they are, and applied after the coat so it reads over it.
+     */
+    const patches = detail > 0.6 ? 7 : 4;
+    for (let i = 0; i < patches; i++) {
+      const x = L * (-0.24 + (i / (patches - 1)) * 0.5);
+      const top = backTop(x);
+      if (!Number.isFinite(top)) continue;
+      // Wider over the shoulders, narrowing towards the hips, like the animal's.
+      const width = W * (0.34 - (i / (patches - 1)) * 0.12);
+      const patch = mesh(
+        ellipsoid(L * 0.06, W * 0.08, width, detail > 0.6 ? 8 : 5),
+        c.accent,
+        bodyGroup,
+        x,
+        top - W * 0.03,
+        0,
+      );
+      patch.castShadow = false;
+    }
+  }
+
+  // --- Head --------------------------------------------------------------
+  const head = new THREE.Group();
+  head.position.set(L * 0.3, H * 0.34, 0);
+  bodyGroup.add(head);
+  model.head = head;
+
+  // A neck you cannot really see on the animal, only a thickening.
+  if (detail > 0.4) {
+    mesh(ellipsoid(W * 0.16, W * 0.14, W * 0.22, 7), c.body, bodyGroup, L * 0.24, H * 0.3, 0);
+  }
+
+  const skull = mesh(
+    ellipsoid(W * 0.21, W * 0.24, W * 0.23, detail > 0.5 ? 10 : 6),
+    c.body,
+    head,
+  );
+  skull.castShadow = true;
+
+  if (detail > 0.4) {
+    /*
+     * The sagittal crest: the bony ridge along the top of the skull that anchors
+     * the jaw muscles. On a big male it is the tallest thing on the animal, and
+     * without it an ape's head is a ball.
+     */
+    const crest = mesh(box(W * 0.3, W * 0.11, W * 0.06), c.body, head, -W * 0.02, W * 0.24, 0);
+    crest.castShadow = true;
+    // Brow ridge, a single heavy shelf rather than two lumps.
+    mesh(box(W * 0.09, W * 0.07, W * 0.34), c.body, head, W * 0.16, W * 0.1, 0);
+    // Prognathic muzzle: forward and *down*, which is what an ape's face does.
+    mesh(ellipsoid(W * 0.15, W * 0.12, W * 0.19, detail > 0.5 ? 8 : 5), c.belly, head, W * 0.2, -W * 0.09, 0);
+    mesh(ellipsoid(W * 0.04, W * 0.035, W * 0.08, 6), 0x141112, head, W * 0.34, -W * 0.04, 0);
+
+    addJaw(model, head, {
+      hingeX: W * 0.04,
+      hingeY: -W * 0.18,
+      length: W * 0.28,
+      height: W * 0.08,
+      width: W * 0.22,
+      color: c.belly,
+    });
+
+    for (const side of [-1, 1]) {
+      // Deep-set eyes under the brow.
+      mesh(sphere(W * 0.032, 6), 0x2a1c10, head, W * 0.19, W * 0.03, side * W * 0.09);
+      // Small ears, flat to the skull — nothing like a monkey's.
+      mesh(ellipsoid(W * 0.02, W * 0.05, W * 0.03, 5), c.belly, head, -W * 0.06, W * 0.02, side * W * 0.21);
+    }
+  }
+
+  // --- Limbs -------------------------------------------------------------
+  /*
+   * Arms first, then legs, because the gait animator pairs index 0 with index 3
+   * and index 1 with index 2 — which for this order is a correct diagonal walk.
+   *
+   * The arms are long enough to reach the ground from a shoulder that is at the
+   * animal's full height, so it stands on its knuckles; the legs are barely half
+   * that, which is what tips the spine forward. Getting the ratio wrong in
+   * either direction turns a gorilla into a bear or into a chimp.
+   */
+  if (detail > 0.25) {
+    const armLen = H * 0.97;
+    const legLen = H * 0.68;
+
+    for (const side of [1, -1]) {
+      addJointedLeg(model, bodyGroup, {
+        x: L * 0.16,
+        y: H * 0.24,
+        z: side * W * 0.46,
+        length: armLen,
+        radius: W * 0.135,
+        color: c.body,
+        // Bare knuckles, paler than the coat: the part of a gorilla that
+        // actually touches the ground.
+        footColor: c.belly,
+        forward: -1,
+        detail,
+        toes: 4,
+      });
+      // A deltoid over the shoulder joint, so the arm does not appear to be
+      // pegged into the side of the chest.
+      if (detail > 0.5) {
+        const hip = model.legs[model.legs.length - 1];
+        mesh(ellipsoid(W * 0.17, W * 0.2, W * 0.16, 8), c.body, hip, 0, -W * 0.06, 0);
+      }
+    }
+
+    for (const side of [1, -1]) {
+      addJointedLeg(model, bodyGroup, {
+        x: -L * 0.24,
+        y: -H * 0.06,
+        z: side * W * 0.26,
+        length: legLen,
+        radius: W * 0.15,
+        color: c.body,
+        footColor: c.belly,
+        forward: 1,
+        detail,
+        toes: 4,
+      });
+      if (detail > 0.5) {
+        const hip = model.legs[model.legs.length - 1];
+        mesh(ellipsoid(W * 0.17, W * 0.19, W * 0.17, 8), c.body, hip, 0, -W * 0.08, 0);
+      }
     }
   }
 }
