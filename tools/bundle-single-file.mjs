@@ -47,7 +47,7 @@ const body = `
 <noscript>
   <div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
               background:#0a1410;color:#f3ede1;font-family:sans-serif;text-align:center;padding:24px;">
-    Jungle Jukebox needs JavaScript and WebGL to run.
+    JukeJungle needs JavaScript and WebGL to run.
   </div>
 </noscript>
 `.trim();
@@ -84,7 +84,7 @@ const output = full
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>🌴 Jungle Jukebox</title>
+<title>JukeJungle</title>
 </head>
 <body>
 ${content}</body>

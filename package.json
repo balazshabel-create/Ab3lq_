@@ -2,7 +2,7 @@
   "name": "jungle-jukebox",
   "version": "0.1.0",
   "private": true,
-  "description": "Jungle Jukebox - a 3D multiplayer social-deduction survival game set in the Amazon rainforest.",
+  "description": "JukeJungle - a 3D multiplayer social-deduction survival game set in the Amazon rainforest.",
   "type": "module",
   "scripts": {
     "dev": "vite",

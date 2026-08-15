@@ -163,9 +163,30 @@ export function generateWorld(
   // The canopy giants. Density follows the foliage field; nothing grows in
   // water or on cliffs.
   placeScattered(terrain, treeRng, WORLD_PROPS.trees, 0.34, (x, z, y, rng) => {
+    /*
+     * Pick the species first, because everything else depends on it.
+     *
+     * `height` is not decoration: it is what the camera-blocker index uses as the
+     * top of the trunk and what vines are hung from. It used to be an independent
+     * random number in the 11–32 m range while the mesh was a fixed size — so a
+     * vine could be pinned nineteen metres up a tree whose model is six metres
+     * tall, and hang there in open sky. Deriving both from the variant's actual
+     * model height is what keeps the physics and the picture agreeing.
+     *
+     * Uniform over the three geometries. `Rng.int` is inclusive, so the obvious
+     * `int(0, 3)` yields four values for three variants and hands variant 0 twice
+     * the share of the others once the renderer takes it modulo 3 — at four
+     * thousand trees that skew reads as one species being oddly common.
+     */
+    const variant = rng.int(0, 2);
+    // Metres, at scale 1, from the model: willow, conifer, broadleaf.
+    const MODEL_HEIGHT = [13.5, 17.5, 11.5];
+    // Trunk radius at the base, at scale 1, from the same models.
+    const MODEL_RADIUS = [0.78, 0.5, 0.85];
+
     const big = rng.chance(0.16);
     const scale = big ? rng.range(1.5, 2.3) : rng.range(0.75, 1.35);
-    const height = (big ? rng.range(22, 32) : rng.range(11, 20)) * (scale / 1.2);
+    const height = MODEL_HEIGHT[variant] * scale;
     content.trees.push({
       kind: PropKind.Tree,
       x,
@@ -173,17 +194,14 @@ export function generateWorld(
       z,
       rot: rng.range(0, Math.PI * 2),
       scale,
+      variant,
+      radius: MODEL_RADIUS[variant] * scale,
       /*
-       * Uniform over the three tree geometries — see buildTree.
-       *
-       * `Rng.int` is inclusive, so the obvious `int(0, 3)` yields four values for
-       * three variants and, once the renderer takes it modulo 3, hands variant 0
-       * twice the share of the other two. In a forest of four thousand trees that
-       * skew is visible as one shape being conspicuously the common one.
+       * Where the lowest branches actually are on each model: a willow forks low
+       * (62% of its height), a conifer's skirt starts higher, and a broadleaf
+       * carries its limbs just under the crown.
        */
-      variant: rng.int(0, 2),
-      radius: 0.42 * scale + (big ? 0.5 : 0),
-      branchHeight: height * rng.range(0.42, 0.6),
+      branchHeight: height * [0.6, 0.32, 0.7][variant],
       height,
     });
   });

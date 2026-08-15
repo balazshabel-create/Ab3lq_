@@ -1,4 +1,4 @@
-# 🌴 Jungle Jukebox
+# JukeJungle
 
 A 3D multiplayer social-deduction survival game set in the Amazon rainforest.
 

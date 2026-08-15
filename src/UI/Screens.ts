@@ -78,7 +78,7 @@ export class LoadingScreen {
 
   constructor() {
     this.root = el('div', { class: 'loading-screen' });
-    const title = el('div', { class: 'loading-title' }, '🌴 JUNGLE JUKEBOX');
+    const title = el('div', { class: 'loading-title' }, 'JUKEJUNGLE');
     const bar = el('div', { class: 'loading-bar' });
     this.fill = el('div', { class: 'loading-fill' });
     bar.appendChild(this.fill);
@@ -121,34 +121,49 @@ export class MainMenu {
   constructor(actions: ScreenActions) {
     this.root = el('div', { id: 'screen-menu', class: 'screen' });
 
+    /*
+     * The wordmark, in two halves.
+     *
+     * "JukeJungle" is one word, but setting it as one word gives a single very
+     * wide block of identical lettering and nothing for the eye to catch on.
+     * Splitting it lets the two halves carry different weight — a light "JUKE"
+     * against a heavy "JUNGLE" — which is what makes a compound name read as a
+     * logo rather than as a heading. Two spans, no images.
+     */
     const logo = el('div', { class: 'logo' });
+    const title = el('h1', { class: 'logo-title' });
+    title.append(
+      el('span', { class: 'logo-juke' }, 'JUKE'),
+      el('span', { class: 'logo-jungle' }, 'JUNGLE'),
+    );
     logo.append(
-      el('div', { class: 'logo-emoji' }, '🌴🦜'),
-      el('h1', { class: 'logo-title' }, 'Jungle Jukebox'),
-      el('div', { class: 'logo-sub' }, 'Which animal is the player?'),
+      title,
+      // A hairline rule that draws itself in under the title.
+      el('div', { class: 'logo-rule' }),
+      el('div', { class: 'logo-sub' }, 'One of these animals is a player'),
     );
 
     const buttons = el('div', { class: 'menu-buttons' });
 
-    const play = el('button', { class: 'btn btn-primary' }, '▶  Play');
+    const play = el('button', { class: 'btn btn-primary' }, 'Play');
     play.addEventListener('click', () => {
       audioSystem.playUiClick('confirm');
       actions.onPlaySolo();
     });
 
-    const online = el('button', { class: 'btn' }, '🌐  Multiplayer');
+    const online = el('button', { class: 'btn' }, 'Multiplayer');
     online.addEventListener('click', () => {
       audioSystem.playUiClick();
       this.showOnlineDialog(actions);
     });
 
-    const settings = el('button', { class: 'btn' }, '⚙  Settings');
+    const settings = el('button', { class: 'btn' }, 'Settings');
     settings.addEventListener('click', () => {
       audioSystem.playUiClick();
       actions.onOpenSettings();
     });
 
-    const exit = el('button', { class: 'btn btn-danger' }, '❌  Exit');
+    const exit = el('button', { class: 'btn btn-danger' }, 'Exit');
     exit.addEventListener('click', () => {
       audioSystem.playUiClick('back');
       // A browser cannot close a tab it did not open, so be honest about it.
@@ -572,7 +587,7 @@ export class LobbyScreen {
 
     const panel = el('div', { class: 'panel' });
     const header = el('div', { class: 'panel-header' });
-    header.append(el('h2', { class: 'panel-title' }, '🌴 Lobby'));
+    header.append(el('h2', { class: 'panel-title' }, 'Lobby'));
     const leave = el('button', { class: 'btn btn-small' }, 'Leave');
     leave.addEventListener('click', () => {
       audioSystem.playUiClick('back');

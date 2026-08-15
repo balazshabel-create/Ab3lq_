@@ -992,190 +992,338 @@ function sweptTrunk(options: {
  *   2  **leaning**    — a bent trunk with a forked top, the tree that lost an
  *                       argument with a storm. Breaks up rows of verticals.
  */
+/** Flared buttress fins around the foot of a trunk. */
+function addRootFlare(
+  parts: MergePart[],
+  options: { count: number; trunkRadius: number; reach: number; height: number; color: number },
+): void {
+  const { count, trunkRadius, reach, height, color } = options;
+  for (let i = 0; i < count; i++) {
+    const a = (i / count) * Math.PI * 2;
+    const cos = Math.cos(a);
+    const sin = Math.sin(a);
+    const t = 0.1;
+    // A wedge: from high on the trunk, down and out to a thin edge on the ground.
+    const positions = [
+      cos * trunkRadius * 0.9, height, sin * trunkRadius * 0.9,
+      cos * reach, 0, sin * reach,
+      cos * trunkRadius * 0.9 - sin * t, 0, sin * trunkRadius * 0.9 + cos * t,
+      cos * trunkRadius * 0.9, height, sin * trunkRadius * 0.9,
+      cos * trunkRadius * 0.9 + sin * t, 0, sin * trunkRadius * 0.9 - cos * t,
+      cos * reach, 0, sin * reach,
+    ];
+    const fin = new THREE.BufferGeometry();
+    fin.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    fin.computeVertexNormals();
+    parts.push({ geometry: fin, color: new THREE.Color(color) });
+  }
+}
+
+/**
+ * A hanging curtain of willow fronds.
+ *
+ * The whole character of a willow is in these: long, thin, nearly vertical
+ * strands that fall from the branch tips almost to the ground. Nothing else in
+ * the silhouette matters as much — a willow with a normal round crown is just a
+ * tree — so they are built as their own thing rather than as leaf cards angled
+ * downwards, which never hangs convincingly.
+ *
+ * Each frond is a narrow tapering strip that drifts outwards as it falls, so the
+ * curtain bells out slightly instead of dropping like a plumb line.
+ */
+function addWillowFronds(
+  parts: MergePart[],
+  options: {
+    centre: [number, number, number];
+    radius: number;
+    count: number;
+    length: number;
+    palette: number[];
+  },
+): void {
+  const { centre, radius, count, length, palette } = options;
+  const [cx, cy, cz] = centre;
+  for (let i = 0; i < count; i++) {
+    // Golden angle, and a radius that varies so the curtain has depth rather
+    // than being a single ring of strands.
+    const a = i * 2.399963;
+    const h = Math.sin(i * 12.9898) * 43758.5453;
+    const jitter = h - Math.floor(h);
+    const r = radius * (0.45 + jitter * 0.55);
+    const len = length * (0.55 + jitter * 0.7);
+    const w = 0.13;
+
+    // Three segments, each drifting a little further out and narrowing.
+    const positions: number[] = [];
+    const segs = 3;
+    for (let sIdx = 0; sIdx < segs; sIdx++) {
+      const t0 = sIdx / segs;
+      const t1 = (sIdx + 1) / segs;
+      const y0 = -len * t0;
+      const y1 = -len * t1;
+      // Bell outwards as it falls, then hang straight.
+      const out0 = r + Math.sin(t0 * Math.PI * 0.5) * radius * 0.25;
+      const out1 = r + Math.sin(t1 * Math.PI * 0.5) * radius * 0.25;
+      const w0 = w * (1 - t0 * 0.7);
+      const w1 = w * (1 - t1 * 0.7);
+      const cosA = Math.cos(a);
+      const sinA = Math.sin(a);
+      // Strip lies in the plane containing the radius and the vertical.
+      const px = (out: number, off: number) => cx + cosA * out - sinA * off;
+      const pz = (out: number, off: number) => cz + sinA * out + cosA * off;
+      positions.push(
+        px(out0, -w0), cy + y0, pz(out0, -w0),
+        px(out0, w0), cy + y0, pz(out0, w0),
+        px(out1, w1), cy + y1, pz(out1, w1),
+        px(out0, -w0), cy + y0, pz(out0, -w0),
+        px(out1, w1), cy + y1, pz(out1, w1),
+        px(out1, -w1), cy + y1, pz(out1, -w1),
+      );
+    }
+    const frond = new THREE.BufferGeometry();
+    frond.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    frond.computeVertexNormals();
+    parts.push({ geometry: frond, color: new THREE.Color(palette[i % palette.length]) });
+  }
+}
+
+/**
+ * One tree.
+ *
+ * ## Variants, and why they matter more than any single tree does
+ *
+ * Every prop kind is drawn from one shared geometry, because an InstancedMesh
+ * can only hold one — so for a long time all four thousand trees in the world
+ * were the *same tree*, repeated. No amount of work on the individual model
+ * fixes that: a forest of identical trees reads as wallpaper however good the
+ * wallpaper is, and the eye finds the repeat within about a second.
+ *
+ * So `variant` selects between three trees that are different *species*, not
+ * three tunings of one shape — which is the point. Three silhouettes that could
+ * not be mistaken for each other do more for a forest than thirty variations on
+ * a lollipop. The batcher splits each chunk by variant (see `buildBatches`).
+ *
+ *   0  **willow**     — short heavy trunk forking low, and a curtain of long
+ *                       drooping fronds falling almost to the ground.
+ *   1  **conifer**    — tall tapering spire, layered whorls of downswept
+ *                       branches, prominent root flare.
+ *   2  **broadleaf**  — short thick trunk under one enormous rounded crown.
+ */
 function buildTree(detail: number, variant = 0): PropAssets {
   const sides = detail >= 2 ? 9 : detail >= 1 ? 7 : 5;
   const rings = detail >= 2 ? 7 : detail >= 1 ? 5 : 3;
   const parts: MergePart[] = [];
   const v = variant % 3;
 
-  // Per-variant proportions. See the note above.
-  const shape =
-    v === 0
-      ? { height: 15.5, base: 0.62, tip: 0.2, lean: 0.5, crownY: 15.0, crownR: 3.0, tiers: 3 }
-      : v === 1
-        ? { height: 11.0, base: 0.72, tip: 0.3, lean: 0.7, crownY: 10.6, crownR: 4.2, tiers: 4 }
-        : { height: 12.5, base: 0.55, tip: 0.22, lean: 2.3, crownY: 12.0, crownR: 3.2, tiers: 3 };
-  const leanAngle = v * 2.1;
-
-  const trunk = sweptTrunk({
-    height: shape.height,
-    baseRadius: shape.base,
-    tipRadius: shape.tip,
-    sides,
-    rings,
-    lean: shape.lean,
-    leanAngle,
-    gnarl: detail >= 1 ? 0.05 : 0,
-    seed: v * 7 + 3,
-  });
-  parts.push({ geometry: trunk.geometry, color: new THREE.Color(v === 1 ? 0x554027 : 0x4b3826) });
-  const [tipX, tipY, tipZ] = trunk.tip;
-
-  /*
-   * Buttress roots — the signature of a big Amazon tree, and the thing that
-   * stops a trunk looking like a pole pushed into the ground.
-   *
-   * Built as flattened fins rather than cones: a buttress is a thin blade of
-   * wood standing out from the trunk, and a cone reads as a tent peg. Each fin
-   * is a triangle from high on the trunk down and out to the ground.
-   */
-  if (detail >= 1) {
-    const fins = v === 1 ? 6 : 5;
-    const finHeight = v === 1 ? 3.2 : 2.4;
-    const reach = shape.base * (v === 1 ? 2.6 : 2.0);
-    for (let i = 0; i < fins; i++) {
-      const a = (i / fins) * Math.PI * 2 + v * 0.4;
-      const cos = Math.cos(a);
-      const sin = Math.sin(a);
-      // A wedge: two triangles from the trunk face out to a thin ground edge.
-      const t = 0.09;
-      const positions = [
-        // Outer face.
-        cos * shape.base * 0.9, finHeight, sin * shape.base * 0.9,
-        cos * reach, 0, sin * reach,
-        cos * shape.base * 0.9 - sin * t, 0, sin * shape.base * 0.9 + cos * t,
-        cos * shape.base * 0.9, finHeight, sin * shape.base * 0.9,
-        cos * shape.base * 0.9 + sin * t, 0, sin * shape.base * 0.9 - cos * t,
-        cos * reach, 0, sin * reach,
-      ];
-      const fin = new THREE.BufferGeometry();
-      fin.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      fin.computeVertexNormals();
-      parts.push({ geometry: fin, color: new THREE.Color(0x3f2f1f) });
+  if (v === 0) {
+    // ---- Willow ----------------------------------------------------------
+    const height = 8.4;
+    const trunk = sweptTrunk({
+      height,
+      baseRadius: 0.78,
+      tipRadius: 0.34,
+      sides,
+      rings,
+      lean: 0.35,
+      leanAngle: 1.1,
+      gnarl: detail >= 1 ? 0.07 : 0,
+      seed: 11,
+    });
+    parts.push({ geometry: trunk.geometry, color: new THREE.Color(0x6b4a2c) });
+    if (detail >= 1) {
+      addRootFlare(parts, { count: 6, trunkRadius: 0.78, reach: 1.7, height: 1.9, color: 0x54381f });
     }
-  }
 
-  /*
-   * Branches, reaching up and out into the canopy.
-   *
-   * These do real work beyond decoration: they are what visually *supports* the
-   * leaf mass. Leaf clusters floating with nothing underneath them read as green
-   * clouds, which is what three smooth domes used to look like.
-   */
-  const branchCount = detail >= 2 ? 5 : detail >= 1 ? 4 : 3;
-  const branchTips: [number, number, number][] = [];
-  for (let i = 0; i < branchCount; i++) {
-    const a = (i / branchCount) * Math.PI * 2 + 0.4 + v;
-    const bend = 0.62 + (i % 2) * 0.16;
-    const len = (shape.crownR * 0.9) + (i % 3) * 0.7;
-    const baseY = shape.crownY - 3.4 + (i % 3) * 0.9;
-    const branch = new THREE.CylinderGeometry(0.07, 0.17, len, 4);
-    branch.translate(0, len * 0.5, 0);
-    branch.rotateZ(bend);
-    branch.rotateY(-a);
-    // Start from the trunk's actual axis at that height, not from x=0 — on a
-    // leaning tree those are metres apart, and branches sprouting from thin air
-    // beside the trunk is worse than no branches at all.
-    const axisT = baseY / shape.height;
-    const drift = shape.lean * axisT * axisT;
-    branch.translate(Math.cos(leanAngle) * drift, baseY, Math.sin(leanAngle) * drift);
-    parts.push({ geometry: branch, color: new THREE.Color(0x483623) });
-    const spread = Math.sin(bend) * len;
-    branchTips.push([
-      Math.cos(leanAngle) * drift + Math.cos(a) * spread,
-      baseY + Math.cos(bend) * len,
-      Math.sin(leanAngle) * drift + Math.sin(a) * spread,
-    ]);
-  }
+    /*
+     * The crown sits on three big limbs that fork low on the trunk — a willow
+     * has no single leader, it splits early, and that fork is visible through
+     * the fronds from underneath.
+     */
+    const limbs = detail >= 1 ? 4 : 3;
+    const palette = [0x69a83a, 0x7cbf47, 0x568f2e, 0x8ecf55];
+    for (let i = 0; i < limbs; i++) {
+      const a = (i / limbs) * Math.PI * 2 + 0.5;
+      const len = 3.3;
+      const bend = 0.72;
+      const limb = new THREE.CylinderGeometry(0.1, 0.26, len, 5);
+      limb.translate(0, len * 0.5, 0);
+      limb.rotateZ(bend);
+      limb.rotateY(-a);
+      limb.translate(0, height * 0.62, 0);
+      parts.push({ geometry: limb, color: new THREE.Color(0x5e4128) });
 
-  /*
-   * The canopy: one leaf cluster per branch tip, plus a crown on top.
-   *
-   * Uneven on purpose — real tree tops form a lumpy roof, and a row of identical
-   * blobs is the single most obvious tell of a procedural forest.
-   */
-  const palette = [0x2f6224, 0x376e29, 0x40802f, 0x2a5620, 0x487f35];
-  const perCluster = detail >= 2 ? 13 : detail >= 1 ? 9 : 5;
-  for (let i = 0; i < branchTips.length; i++) {
-    leafCluster(parts, {
-      count: perCluster,
-      radius: shape.crownR * 0.7 + (i % 3) * 0.55,
-      flatten: 0.78,
-      leafLength: 1.5,
-      leafWidth: 0.66,
-      centre: branchTips[i],
-      palette,
-    });
-  }
-  /*
-   * Stacked crown tiers rather than one dome.
-   *
-   * A single cluster on top gives a hemisphere, and a forest of hemispheres is
-   * a bag of peas. Two or three tiers of decreasing radius, each offset a little
-   * sideways, build the layered roof a real canopy has — and on the broadleaf
-   * variant it is what makes the crown read as *wide* rather than merely big.
-   */
-  for (let tier = 0; tier < shape.tiers; tier++) {
-    const t = tier / Math.max(1, shape.tiers - 1);
-    leafCluster(parts, {
-      count: perCluster + 4 - tier * 2,
-      radius: shape.crownR * (1 - t * 0.38),
-      flatten: 0.62,
-      leafLength: 1.7,
-      leafWidth: 0.72,
-      centre: [
-        tipX + Math.cos(tier * 2.4) * shape.crownR * 0.22,
-        tipY - 0.6 + t * 1.9,
-        tipZ + Math.sin(tier * 2.4) * shape.crownR * 0.22,
-      ],
-      palette,
-    });
-  }
-
-  /*
-   * A lower tier, at four to nine metres.
-   *
-   * Everything above is botanically right for a rainforest — a clean trunk with
-   * all its leaves in a canopy fifteen metres up — and from the game's actual
-   * camera it looked wrong, because the player's eye is half a metre off the
-   * ground and the canopy is entirely out of frame. What filled the screen was a
-   * row of bare brown poles with sky between them.
-   */
-  if (detail >= 1) {
-    const lowPalette = [0x2b5a20, 0x33682a, 0x3c7530, 0x27501d];
-    const lowCount = detail >= 2 ? 3 : 2;
-    for (let i = 0; i < lowCount; i++) {
-      const a = (i / lowCount) * Math.PI * 2 + 1.9 + v * 0.8;
-      const len = 2.2 + (i % 2) * 0.7;
-      const baseY = 4.4 + i * 2.1;
-      const branch = new THREE.CylinderGeometry(0.05, 0.11, len, 4);
-      branch.translate(0, len * 0.5, 0);
-      // Past 90°, so the branch droops rather than reaching up.
-      branch.rotateZ(1.15);
-      branch.rotateY(-a);
-      const axisT = baseY / shape.height;
-      const drift = shape.lean * axisT * axisT;
-      branch.translate(Math.cos(leanAngle) * drift, baseY, Math.sin(leanAngle) * drift);
-      parts.push({ geometry: branch, color: new THREE.Color(0x453320) });
-      const reach = Math.sin(1.15) * len;
+      const reach = Math.sin(bend) * len;
+      const tip: [number, number, number] = [
+        Math.cos(a) * reach,
+        height * 0.62 + Math.cos(bend) * len,
+        Math.sin(a) * reach,
+      ];
+      // A cap of leaves over the top of each limb, so the curtain has a roof.
       leafCluster(parts, {
-        count: detail >= 2 ? 7 : 5,
-        radius: 1.25,
-        flatten: 0.85,
-        leafLength: 1.1,
+        count: detail >= 2 ? 10 : 6,
+        radius: 2.1,
+        flatten: 0.5,
+        leafLength: 1.2,
         leafWidth: 0.5,
+        centre: [tip[0] * 0.8, tip[1] + 0.3, tip[2] * 0.8],
+        palette,
+      });
+      addWillowFronds(parts, {
+        centre: [tip[0] * 0.85, tip[1], tip[2] * 0.85],
+        radius: 1.9,
+        count: detail >= 2 ? 16 : detail >= 1 ? 11 : 6,
+        // Long enough to fall to about knee height on the animals below.
+        length: 5.6,
+        palette,
+      });
+    }
+    // A denser core of fronds straight off the fork, filling the middle.
+    addWillowFronds(parts, {
+      centre: [0, height * 0.92, 0],
+      radius: 1.5,
+      count: detail >= 2 ? 14 : 9,
+      length: 5.0,
+      palette,
+    });
+  } else if (v === 1) {
+    // ---- Conifer ---------------------------------------------------------
+    const height = 17.0;
+    const trunk = sweptTrunk({
+      height,
+      baseRadius: 0.5,
+      tipRadius: 0.06,
+      sides,
+      rings: rings + 1,
+      lean: 0.25,
+      leanAngle: 3.4,
+      gnarl: detail >= 1 ? 0.03 : 0,
+      seed: 23,
+    });
+    parts.push({ geometry: trunk.geometry, color: new THREE.Color(0x7a4f2b) });
+    if (detail >= 1) {
+      // The splayed root claw is a signature of the reference conifer.
+      addRootFlare(parts, { count: 7, trunkRadius: 0.5, reach: 1.5, height: 2.6, color: 0x63401f });
+    }
+
+    /*
+     * Whorls: rings of downswept branches at decreasing radius up the trunk.
+     *
+     * This is the entire conifer read — a stack of tiers narrowing to a spire.
+     * Built bottom-up so the widest tier is lowest, with the tiers thinning out
+     * towards the top, and each whorl rotated off the one below so the branches
+     * do not line up into vertical columns.
+     */
+    const palette = [0x2c5c2a, 0x367033, 0x244d24, 0x3f8038];
+    const whorls = detail >= 2 ? 9 : detail >= 1 ? 7 : 4;
+    const perWhorl = detail >= 2 ? 6 : detail >= 1 ? 5 : 4;
+    for (let w = 0; w < whorls; w++) {
+      const t = w / (whorls - 1);
+      // Start above the bare lower trunk: a conifer's skirt is well off the floor.
+      const y = height * (0.28 + t * 0.66);
+      const spread = 3.5 * Math.pow(1 - t, 0.85) + 0.35;
+      for (let i = 0; i < perWhorl; i++) {
+        const a = (i / perWhorl) * Math.PI * 2 + w * 1.7;
+        // Downswept: past horizontal, more so on the lower tiers.
+        const droop = 1.75 + (1 - t) * 0.25;
+        const len = spread;
+        const branch = new THREE.CylinderGeometry(0.03, 0.07, len, 4);
+        branch.translate(0, len * 0.5, 0);
+        branch.rotateZ(droop);
+        branch.rotateY(-a);
+        branch.translate(0, y, 0);
+        parts.push({ geometry: branch, color: new THREE.Color(0x5c3d22) });
+
+        const reach = Math.sin(droop) * len;
+        leafCluster(parts, {
+          count: detail >= 2 ? 6 : 4,
+          radius: spread * 0.42,
+          // Very flat: a conifer's foliage lies along the branch, not around it.
+          flatten: 0.3,
+          leafLength: 1.1,
+          leafWidth: 0.34,
+          centre: [Math.cos(a) * reach * 0.7, y + Math.cos(droop) * len * 0.7, Math.sin(a) * reach * 0.7],
+          palette,
+        });
+      }
+    }
+    // The spire.
+    leafCluster(parts, {
+      count: detail >= 2 ? 8 : 5,
+      radius: 0.8,
+      flatten: 1.5,
+      leafLength: 1.0,
+      leafWidth: 0.3,
+      centre: [0, height * 0.99, 0],
+      palette,
+    });
+  } else {
+    // ---- Broadleaf -------------------------------------------------------
+    const height = 7.6;
+    const trunk = sweptTrunk({
+      height,
+      baseRadius: 0.85,
+      tipRadius: 0.36,
+      sides,
+      rings,
+      lean: 0.4,
+      leanAngle: 5.0,
+      gnarl: detail >= 1 ? 0.06 : 0,
+      seed: 37,
+    });
+    parts.push({ geometry: trunk.geometry, color: new THREE.Color(0x6d4a2a) });
+    if (detail >= 1) {
+      addRootFlare(parts, { count: 6, trunkRadius: 0.85, reach: 2.1, height: 2.2, color: 0x553a20 });
+    }
+
+    /*
+     * One enormous crown rather than tiers.
+     *
+     * The reference is a single dense dome sitting on a short trunk — the tree
+     * you draw as a child, and the one that makes a treeline read as *lush*
+     * rather than as forest. It is built from overlapping clusters at slightly
+     * different centres so the outline is lumpy rather than a smooth ball, which
+     * is the one thing that would give it away.
+     */
+    const palette = [0x2f6d24, 0x3b8330, 0x4a9938, 0x286020, 0x56a743];
+    const limbs = detail >= 1 ? 4 : 3;
+    for (let i = 0; i < limbs; i++) {
+      const a = (i / limbs) * Math.PI * 2 + 0.9;
+      const len = 2.6;
+      const bend = 0.6;
+      const limb = new THREE.CylinderGeometry(0.11, 0.3, len, 5);
+      limb.translate(0, len * 0.5, 0);
+      limb.rotateZ(bend);
+      limb.rotateY(-a);
+      limb.translate(0, height * 0.72, 0);
+      parts.push({ geometry: limb, color: new THREE.Color(0x5e4128) });
+    }
+
+    const blobs = detail >= 2 ? 7 : detail >= 1 ? 5 : 3;
+    const crownY = height + 2.2;
+    for (let i = 0; i < blobs; i++) {
+      const a = i * 2.399963;
+      const h = Math.sin(i * 91.7) * 43758.5453;
+      const jitter = h - Math.floor(h);
+      const r = i === 0 ? 0 : 2.4 * (0.5 + jitter * 0.6);
+      leafCluster(parts, {
+        count: detail >= 2 ? 16 : detail >= 1 ? 11 : 6,
+        radius: i === 0 ? 4.4 : 3.0 + jitter * 0.9,
+        flatten: 0.82,
+        leafLength: 1.6,
+        leafWidth: 0.78,
         centre: [
-          Math.cos(leanAngle) * drift + Math.cos(a) * reach,
-          baseY + Math.cos(1.15) * len,
-          Math.sin(leanAngle) * drift + Math.sin(a) * reach,
+          Math.cos(a) * r,
+          crownY + (i === 0 ? 0 : (jitter - 0.5) * 2.0),
+          Math.sin(a) * r,
         ],
-        palette: lowPalette,
+        palette,
       });
     }
   }
 
   return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
 }
+
 
 
 /**

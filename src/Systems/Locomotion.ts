@@ -2,7 +2,7 @@
  * Locomotion.ts — one movement solver, used by both the AI and the player.
  *
  * This shared implementation is a deliberate design decision, not a convenience.
- * The entire premise of Jungle Jukebox is that a player capybara is
+ * The entire premise of JukeJungle is that a player capybara is
  * indistinguishable from an AI capybara, and the fastest way to break that
  * illusion is two different movement code paths: players sliding smoothly while
  * AI snaps to waypoints, players clipping through trunks that AI walk around.
