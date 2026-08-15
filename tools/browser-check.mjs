@@ -238,13 +238,26 @@ log('lobby', `${lobbyPlayers} players, ${speciesCards} species to pick`);
 await page.waitForTimeout(600);
 await page.screenshot({ path: `${outDir}/03-lobby.png` });
 
-// Pick a species, then start.
-await page.locator('.species-card').nth(1).click();
+/*
+ * Open one codex entry, then start.
+ *
+ * The species cards used to be a picker; they are a reference now — nobody
+ * chooses their animal — so this clicks one only to prove the detail panel
+ * still populates, and `force` because at two frames a second Playwright's
+ * actionability check decides the element is never "stable".
+ */
+await page.locator('.species-card').nth(1).click({ force: true });
 await page.waitForTimeout(300);
-await page.click('#screen-lobby .btn:has-text("Start Round")');
+await page.click('#screen-lobby .btn:has-text("Start Round")', { force: true });
 
 // --- Role card -------------------------------------------------------------
-await page.waitForSelector('#screen-role.active', { timeout: 20_000 });
+/*
+ * Sixty seconds, not twenty. The role screen appears on the first round-status
+ * packet, which is fast — but on a software rasteriser the frame that carries it
+ * can be several seconds behind the click, and a timeout here reads as "the
+ * round never started" when the truth is only that the machine is slow.
+ */
+await page.waitForSelector('#screen-role.active', { timeout: 60_000 });
 // The card fades in over 0.6s from opacity 0. Screenshotting the instant the
 // screen goes active caught it mid-fade and wrote out a blank frame, which made
 // the artefact this whole check exists for impossible to see by eye.

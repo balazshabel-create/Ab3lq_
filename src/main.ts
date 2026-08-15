@@ -46,6 +46,15 @@ import {
 } from './Networking/Protocol';
 import { ActorFlags, Role, RoundPhase, Weather } from './Core/Types';
 import { ANIMALS, Species } from './Animals/AnimalTypes';
+
+/**
+ * How close a shoal has to be before the game offers to fish, in metres.
+ *
+ * Wider than EAT_REACH on purpose. The prompt is an *invitation* — it says "there
+ * is food here, come and get it" — so it has to appear while you are still
+ * swimming towards the fish rather than only once your nose is already in them.
+ */
+const FISH_PROMPT_RANGE = 9;
 import { WEAKNESSES, type WeaknessId } from './Gameplay/Weaknesses';
 import type { RoleCard, RoundResult, RoundStatus } from './Gameplay/RoundState';
 import { EVENTS } from './Gameplay/RandomEvents';
@@ -971,8 +980,39 @@ class Game {
     if (canGraze && density > 0.28 && !this.terrain.isDeepWater(pos.x, pos.z)) {
       return 'Hold <span class="key-cap">E</span> to graze';
     }
+
+    /*
+     * Fishing, offered only when there is actually something to catch.
+     *
+     * This used to appear the moment a fish-eater touched water, anywhere on the
+     * map, which made it a lie: the prompt promised a meal and the shoal was two
+     * hundred metres upstream. Worse for this game specifically, a prompt that is
+     * always on tells a hunter nothing, while one that appears exactly where the
+     * fish are is a place he knows a hungry crocodile has to come to.
+     *
+     * Two things count as something to catch — a shoal marked in the world, or a
+     * live piranha in the water beside you — because either one is a meal and a
+     * player should not have to know which kind they are looking at.
+     */
     if (def.eats.includes('fish') && inWater) {
-      return 'Hold <span class="key-cap">E</span> to fish';
+      let fishNear = false;
+      for (const food of this.content.foodSources) {
+        if (food.kind !== 'fish' || !food.available) continue;
+        if (Math.hypot(food.x - pos.x, food.z - pos.z) < FISH_PROMPT_RANGE) {
+          fishNear = true;
+          break;
+        }
+      }
+      if (!fishNear && this.state.latestSnapshot) {
+        for (const actor of this.state.latestSnapshot.actors) {
+          if (actor.species !== Species.Piranha) continue;
+          if (Math.hypot(actor.x - pos.x, actor.z - pos.z) < FISH_PROMPT_RANGE) {
+            fishNear = true;
+            break;
+          }
+        }
+      }
+      if (fishNear) return 'Hold <span class="key-cap">E</span> to fish';
     }
     return null;
   }

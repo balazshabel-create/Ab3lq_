@@ -35,6 +35,9 @@
       const q = new URLSearchParams(location.search);
       const num = (k, d) => Number(q.get(k) ?? d);
 
+      // Development knob: try the arc rotation without an edit-and-build cycle.
+      if (q.has('rot')) globalThis.__vitalGapRotation = Number(q.get('rot'));
+
       const hud = new Hud();
       document.body.appendChild(hud.root);
       hud.root.classList.add('active');

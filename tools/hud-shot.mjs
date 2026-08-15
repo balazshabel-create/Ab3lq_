@@ -36,7 +36,7 @@ if (!ready) {
 }
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
-const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const page = await browser.newPage({ viewport: { width: 1440, height: 810 } });
 page.on('pageerror', (e) => console.error('PAGE ERROR:', e.message));
 page.on('console', (m) => {
   if (m.type() === 'error') console.error('CONSOLE:', m.text().slice(0, 300));
@@ -45,8 +45,11 @@ page.on('console', (m) => {
 await page.goto(`http://localhost:5198/tools/hud-view.html?${query}`, { waitUntil: 'load' });
 await page.waitForFunction('window.__hudReady === true', { timeout: 30000 });
 await page.waitForTimeout(700);
+// Crop to the dial rather than the whole screen: the corner is 160 px of a
+// 1440 px frame, and reading it out of a full screenshot is guesswork.
+await page.locator('.vitals').screenshot({ path: `${OUT}/hud-dial.png` });
 await page.screenshot({ path: `${OUT}/hud-panel.png` });
-console.log(`wrote ${OUT}/hud-panel.png`);
+console.log(`wrote ${OUT}/hud-panel.png and ${OUT}/hud-dial.png`);
 
 await browser.close();
 vite.kill();

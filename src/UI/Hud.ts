@@ -36,6 +36,25 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
  */
 const VITAL_SWEEP = 0.75;
 
+/**
+ * Rotation applied to each arc, in degrees, to put the undrawn quarter at the
+ * bottom of the dial, where the two readout numbers sit between its ends.
+ *
+ * Measured, not reasoned about. An SVG `<circle>` has a defined start point and
+ * winding so this *is* derivable, but two attempts at deriving it put the gap on
+ * the left both times; rendering the dial at 0, 90, 180 and 270 and looking took
+ * less time than arguing with the specification. (Unrotated, the gap sits at
+ * about half past four.) tools/hud-view.html accepts `?rot=` so the next person
+ * to doubt it can check in a second rather than reading this comment.
+ */
+function vitalGapRotation(): number {
+  // Read on use, not at module scope: ES imports are evaluated before the
+  // importing script's body runs, so a module-level read happens before any
+  // development page has had a chance to set the override.
+  const override = (globalThis as { __vitalGapRotation?: number }).__vitalGapRotation;
+  return typeof override === 'number' ? override : 90;
+}
+
 export interface HudState {
   health: number;
   maxHealth: number;
@@ -283,15 +302,8 @@ export class Hud {
         circle.setAttribute('r', String(ring.radius));
         circle.setAttribute('stroke-width', String(ring.width));
         circle.setAttribute('stroke-linecap', 'round');
-        /*
-         * The gap sits at the bottom, so the two ends frame the readout below.
-         *
-         * 45°, not 135°. An SVG <circle> is traced anticlockwise on screen from
-         * three o'clock, so the undrawn quarter starts out centred on half past
-         * four; a quarter turn brings it to six. (135° is the answer for a path
-         * traced the other way, and it put the gap out on the left.)
-         */
-        circle.setAttribute('transform', 'rotate(45 50 50)');
+        // The gap sits at the bottom, so the two ends frame the readout below.
+        circle.setAttribute('transform', `rotate(${vitalGapRotation()} 50 50)`);
         circle.setAttribute('stroke-dasharray', `${arc} ${circumference - arc}`);
         circle.setAttribute(
           'class',
