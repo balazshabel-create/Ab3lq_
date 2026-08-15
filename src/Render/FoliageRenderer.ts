@@ -19,7 +19,7 @@
 
 import * as THREE from 'three';
 import { PropKind, type Prop, type WorldContent } from '../World/WorldGen';
-import { WORLD_SIZE } from '../Systems/Config';
+import { BRIDGE_SAG, WORLD_SIZE } from '../Systems/Config';
 import type { GraphicsSettings } from '../Graphics/QualitySettings';
 
 /**
@@ -1641,11 +1641,11 @@ function buildTree(detail: number, variant = 0): PropAssets {
     const tiers: { at: number; limbs: number; length: number; rise: number; tropism: number }[] =
       detail >= 1
         ? [
-            { at: 0.52, limbs: 4, length: 3.0, rise: 0.52, tropism: 0.02 },
-            { at: 0.7, limbs: 4, length: 2.6, rise: 0.85, tropism: 0.1 },
-            { at: 0.88, limbs: 3, length: 1.9, rise: 1.25, tropism: 0.18 },
+            { at: 0.46, limbs: 5, length: 4.1, rise: 0.42, tropism: 0.0 },
+            { at: 0.66, limbs: 4, length: 3.4, rise: 0.78, tropism: 0.08 },
+            { at: 0.86, limbs: 3, length: 2.4, rise: 1.2, tropism: 0.16 },
           ]
-        : [{ at: 0.7, limbs: 3, length: 2.6, rise: 0.9, tropism: 0.1 }];
+        : [{ at: 0.66, limbs: 3, length: 3.2, rise: 0.85, tropism: 0.1 }];
 
     for (let t = 0; t < tiers.length; t++) {
       const tier = tiers[t];
@@ -2422,7 +2422,16 @@ function buildBridge(): PropAssets {
   const parts: MergePart[] = [];
   const deckY = 0;
   const half = 0.5;
-  const sag = 0.09; // matches Terrain.deckAt's cosine sag, in span units
+  /*
+   * The sag, in metres, and it must be exactly the number Terrain.deckAt uses.
+   *
+   * Only Z is scaled when a bridge is instanced, so this stays the same depth of
+   * curve however long the span is — which is the reason it is a shared constant
+   * rather than something derived from the length on either side. They disagreed
+   * once, by a metre and a half, and the hunter sank into the middle of the deck
+   * up to his hips.
+   */
+  const sag = BRIDGE_SAG;
 
   // --- Deck ---------------------------------------------------------------
   const planks = 26;

@@ -303,6 +303,15 @@ class Game {
     const playing = name === 'hud';
     this.input.setEnabled(playing);
     this.renderer.cameraRig.setFreeMode(!playing);
+    /*
+     * The viewmodel is parented to the camera, so it does not go away on its own
+     * when the round does — it would hang in front of the menu's orbit shot of
+     * the river. Anything that leaves the round takes the gun with it.
+     */
+    if (!playing) {
+      this.renderer.setViewWeapon(false);
+      this.hud.setFirstPerson(false);
+    }
     document.body.classList.toggle('playing', playing);
 
     /*
@@ -522,6 +531,10 @@ class Game {
 
         this.renderer.setLocalActor(packet.actorId);
         this.renderer.cameraRig.setSpecies(packet.card.species);
+        // The hunter plays from inside his own head, with a shotgun in front of
+        // him and his own body hidden. Everyone else plays a body they can see.
+        this.renderer.setViewWeapon(this.renderer.cameraRig.firstPerson);
+        this.hud.setFirstPerson(this.renderer.cameraRig.firstPerson);
 
         // Apply the weakness's client-visible effects: a narrowed view for a bad
         // eye, and a matching vignette so the player can feel it.
@@ -630,8 +643,11 @@ class Game {
             ? 'The jungle got you first.'
             : 'Something out there was a player.',
         );
-        // Dead players watch the rest of the round from above.
+        // Dead players watch the rest of the round from above — from outside
+        // their own body, and without a gun in shot.
         this.renderer.cameraRig.setFreeMode(true);
+        this.renderer.setViewWeapon(false);
+        this.hud.setFirstPerson(false);
         this.input.releaseLock();
       }
       // Your own fly swarm buzzes audibly, so you know without looking.
@@ -654,6 +670,8 @@ class Game {
           audioSystem.playAttack(pos.x, pos.y, pos.z, false);
         }
         this.renderer.cameraRig.addShake(0.35);
+        // Kick the gun in the player's own hands, if they are holding one.
+        this.renderer.punchViewWeapon();
       }
       this.lastAttackReady = attackReady;
     }
@@ -800,11 +818,33 @@ class Game {
 
     // A/D steer. The animal faces +X at yaw 0 and its own right-hand side is +Z,
     // so turning right is an increase in yaw.
-    if (Math.abs(right) > 0.01) this.steerYaw += right * STEER_RATE * dt;
+    const steering = Math.abs(right) > 0.01;
+    if (steering) this.steerYaw += right * STEER_RATE * dt;
 
     if (bodyYaw !== null) {
       const lead = angleDelta(bodyYaw, this.steerYaw);
-      this.steerYaw = bodyYaw + clamp(lead, -STEER_MAX_LEAD, STEER_MAX_LEAD);
+      if (steering) {
+        this.steerYaw = bodyYaw + clamp(lead, -STEER_MAX_LEAD, STEER_MAX_LEAD);
+      } else {
+        /*
+         * ## Releasing the key has to stop the turn
+         *
+         * The steering heading deliberately runs *ahead* of the body — that lead
+         * is what keeps the animal turning at its own maximum rate instead of
+         * chasing the key frame by frame. But the lead was only ever clamped,
+         * never cancelled, so letting go of D at ninety degrees left a target
+         * still half a radian further round and the animal kept going to a
+         * hundred and twenty. It read as a stuck key or as absurd sensitivity,
+         * and it made precise aiming impossible: you cannot stop where you meant
+         * to if releasing the control does not mean stop.
+         *
+         * Collapsing the lead towards zero the moment the key is up fixes it.
+         * Quickly rather than instantly, because snapping the heading onto a
+         * body yaw that only arrives ten times a second makes the last few
+         * degrees of every turn stutter.
+         */
+        this.steerYaw = bodyYaw + lead * Math.max(0, 1 - dt * 18);
+      }
     }
 
     const driving = Math.abs(forward) > 0.01;

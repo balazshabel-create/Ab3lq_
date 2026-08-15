@@ -212,13 +212,21 @@ test('the hunter is a player, never AI, and cannot be killed', () => {
   assert.ok(hunter, 'a hunter must exist');
   assert.equal(hunter.kind, ActorKind.Player, 'the hunter is always a person at a keyboard');
 
-  // Nothing the world can do touches him.
+  // Nothing in the jungle touches him.
   sim.damageActor(hunter.id, 99_999, 0, 'attack');
   assert.ok(hunter.health > 0, 'a bite must not kill the hunter');
-  sim.damageActor(hunter.id, 99_999, 0, 'storm');
-  assert.ok(hunter.health > 0, 'the storm must not kill the hunter');
   sim.damageActor(hunter.id, 99_999, 0, 'starvation');
   assert.ok(hunter.health > 0, 'starvation must not kill the hunter');
+
+  /*
+   * The storm does, though. The circle is the clock, and a clock that applies to
+   * everyone except the hunter is not a clock — he would stand outside the ring
+   * in safety and shoot inwards while the survivors were herded past him.
+   */
+  const before = hunter.health;
+  sim.damageActor(hunter.id, 12, 0, 'storm');
+  assert.ok(hunter.health < before, 'the storm must hurt the hunter');
+  hunter.health = hunter.maxHealth;
 
   // Except the one thing that is meant to: his own bullet in the wrong animal.
   let bystander: Actor | null = null;

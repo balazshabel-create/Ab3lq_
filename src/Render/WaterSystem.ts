@@ -224,9 +224,19 @@ const FRAGMENT_SHADER = /* glsl */ `
       return;
     }
 
-    // Fresnel: glancing angles reflect the sky, steep angles show the bottom.
-    float fresnel = pow(1.0 - clamp(dot(viewDir, normal), 0.0, 1.0), 3.0);
-    fresnel = mix(0.04, 1.0, fresnel) * uReflectivity;
+    /*
+     * Fresnel: glancing angles reflect the sky, steep angles show the bottom.
+     *
+     * Capped, and capped harder the deeper the water is. Physically a water
+     * surface does approach a perfect mirror at grazing incidence, and letting
+     * it do that here turned the river into a sheet of pale sky — from the
+     * bridge it read as a bank of wet sand rather than as water at all. This is
+     * a silt-laden tributary: it is nearly opaque in a metre, so what comes back
+     * from deep water is mostly the water itself however flat you look at it.
+     */
+    float grazing = pow(1.0 - clamp(dot(viewDir, normal), 0.0, 1.0), 3.0);
+    float deepness = clamp(depthM / 4.0, 0.0, 1.0);
+    float fresnel = mix(0.04, 0.78 - deepness * 0.3, grazing) * uReflectivity;
 
     // Depth-graded body colour: silty green in the shallows, near-black deep.
     vec3 body = mix(uShallowColor, uDeepColor, clamp(depthM / 3.5, 0.0, 1.0));

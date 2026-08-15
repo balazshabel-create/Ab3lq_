@@ -356,22 +356,26 @@ export class Simulation implements AiContext {
     if (!target || target.flags & ActorFlags.Dead) return false;
 
     /*
-     * The hunter cannot be killed.
+     * Nothing in the jungle can kill the hunter.
      *
-     * Not by a crocodile, not by a gorilla, not by the storm, not by going
-     * hungry. This is a design decision rather than a balance tweak, and the
-     * reason is that every one of those deaths ends the round *by accident*: the
-     * survivors win without having done the thing the game asks of them, and the
-     * hunter loses without having made the mistake the game punishes. A round
-     * that can end because a caiman happened to be in the reeds he walked past
-     * is a round whose central question — can he tell a player from an animal —
-     * never got asked.
+     * Not a crocodile, not a gorilla, not going hungry. Every one of those
+     * deaths would end the round *by accident*: the survivors win without having
+     * done the thing the game asks of them, and the hunter loses without having
+     * made the mistake the game punishes. A round that can end because a caiman
+     * happened to be in the reeds he walked past is a round whose central
+     * question — can he tell a player from an animal — never got asked.
      *
-     * There is exactly one way he goes down, and `unavoidable` is it: he shoots
-     * an animal that was only ever an animal. That death is the whole point, so
-     * it is the one thing immunity must not swallow.
+     * Two things get through, and both are deliberate:
+     *
+     *  • **The storm.** The circle is not the jungle, it is the clock, and a
+     *    clock that applies to everyone except the hunter is not a clock. If he
+     *    could stand outside the ring in perfect safety he would simply wait
+     *    there and shoot inwards while the survivors were herded past him.
+     *  • **His own bullet in the wrong animal** (`unavoidable`). That death is
+     *    the entire point of the role, so it is the one thing immunity must
+     *    never swallow.
      */
-    if (!unavoidable && target.kind === ActorKind.Player) {
+    if (!unavoidable && source !== 'storm' && target.kind === ActorKind.Player) {
       const player = target as PlayerActor;
       if (player.role === Role.Hunter) return false;
     }

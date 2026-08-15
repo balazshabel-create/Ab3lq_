@@ -2339,7 +2339,12 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
   const legLength = H * 0.46;
   const legRadius = H * 0.043;
   const hipY = legLength + legRadius * 0.65;
-  const stance = H * 0.072;
+  /*
+   * Feet apart. At H * 0.072 the two legs were closer together than they were
+   * thick, so from behind they merged into a single column and the man read as a
+   * post — which at two metres tall is a lot of post.
+   */
+  const stance = H * 0.098;
 
   const pelvis = new THREE.Group();
   pelvis.position.y = hipY;
@@ -2351,9 +2356,6 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
   mesh(box(H * 0.135, H * 0.03, H * 0.195), leather, pelvis, 0, H * 0.062, 0);
   if (detail > 0.5) {
     mesh(box(H * 0.018, H * 0.036, H * 0.028), 0xb8973f, pelvis, H * 0.069, H * 0.062, 0);
-    // A cartridge pouch on the hip. Reads as equipment from any angle, and it
-    // is the one thing on him that says he came here intending to shoot.
-    mesh(box(H * 0.05, H * 0.055, H * 0.035), leatherDark, pelvis, -H * 0.02, H * 0.03, H * 0.1);
   }
 
   // --- Legs -------------------------------------------------------------
@@ -2438,10 +2440,6 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
     mesh(box(H * 0.075, H * 0.026, H * 0.115), shirtDark, torso, 0, shoulderY + H * 0.024, 0);
     // Buttoned placket down the front.
     mesh(box(H * 0.01, H * 0.17, H * 0.02), shirtDark, torso, H * 0.062, H * 0.14, 0);
-    // A slung strap across the chest: the diagonal is worth a lot of silhouette
-    // for one box, and it explains where the rifle lives when he is not aiming.
-    const strap = mesh(box(H * 0.012, H * 0.24, H * 0.045), leatherDark, torso, H * 0.06, H * 0.15, 0);
-    strap.rotation.x = 0.55;
   }
 
   // --- Head, and the cap that hides it ----------------------------------
@@ -2465,9 +2463,6 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
   const brim = mesh(box(H * 0.082, H * 0.012, H * 0.115), leather, head, H * 0.075, H * 0.024, 0);
   brim.rotation.z = -0.17;
   if (detail > 0.5) {
-    // A seam across the crown, and the little button at its apex.
-    mesh(box(H * 0.005, H * 0.05, H * 0.118), leatherDark, head, -H * 0.004, H * 0.046, 0);
-    mesh(sphere(H * 0.008, 5), leatherDark, head, -H * 0.004, H * 0.078, 0);
     /*
      * Eyes exist, but only barely — two chips of dull light deep under the brim.
      * Leaving them out entirely made the head read as a bag; two dark specks
@@ -2552,10 +2547,6 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
 
     mesh(sphere(armRadius * 1.25, detail > 0.5 ? 7 : 5), shirt, shoulder);
     mesh(capsule(armRadius, upperArm * 0.66, detail > 0.5 ? 7 : 5), shirt, shoulder, 0, -upperArm * 0.5, 0);
-    if (detail > 0.5) {
-      // Rolled cuff at the elbow — this is a man who has been out here a while.
-      mesh(box(armRadius * 2.3, armRadius * 0.85, armRadius * 2.3), shirtDark, shoulder, 0, -upperArm * 0.88, 0);
-    }
 
     const elbow = new THREE.Group();
     elbow.position.y = -upperArm;
@@ -2581,20 +2572,27 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
   const rightHand = reachArm(-1, gripTarget);
   const leftHand = reachArm(1, foreTarget);
 
-  // --- The rifle --------------------------------------------------------
+  // --- The shotgun --------------------------------------------------------
   /*
-   * Rather than posing the rifle by eye and hoping the hands land near it, the
-   * hands are posed first and the rifle is then *fitted to them*: it sits at the
-   * right hand and its barrel points at the left. Any later change to an arm
-   * angle drags the gun along with it instead of quietly leaving it floating in
-   * front of the chest, which is the failure mode of every hand-tuned prop.
+   * A shotgun, not a scoped rifle.
+   *
+   * The design asks for a simple little man with a gun in his hands, and a
+   * bolt-action with a telescopic sight is not that — it is a piece of
+   * equipment, and reading it takes a second look. Two short barrels and a
+   * wooden stock read as "gun" instantly and from a long way off, which is what
+   * this silhouette is for. It also matches what he sees in his own hands: see
+   * buildShotgunViewmodel.
+   *
+   * Fitted between the hands rather than posed beside them — the arms are solved
+   * to two stated grip positions and the gun is aligned to the result, so
+   * changing an arm drags the weapon with it.
    */
   model.root.updateMatrixWorld(true);
   const grip = rightHand.getWorldPosition(new THREE.Vector3());
   const fore = leftHand.getWorldPosition(new THREE.Vector3());
 
-  const rifle = new THREE.Group();
-  rifle.position.copy(torso.worldToLocal(grip.clone()));
+  const gun = new THREE.Group();
+  gun.position.copy(torso.worldToLocal(grip.clone()));
   /*
    * The direction needs no basis change: every group between the root and the
    * torso is a pure translation at build time, so a direction in model space is
@@ -2602,44 +2600,31 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
    * is what `worldToLocal` above is for.)
    */
   const along = fore.clone().sub(grip).normalize();
-  rifle.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), along);
-  torso.add(rifle);
+  gun.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), along);
+  torso.add(gun);
 
-  // Stock and comb behind the grip, in oiled walnut.
-  const stock = mesh(box(H * 0.16, H * 0.042, H * 0.026), walnut, rifle, -H * 0.115, -H * 0.008, 0);
+  // Butt and wrist, behind the grip.
+  const stock = mesh(box(H * 0.15, H * 0.045, H * 0.03), walnut, gun, -H * 0.105, -H * 0.012, 0);
   stock.castShadow = true;
-  mesh(box(H * 0.045, H * 0.052, H * 0.024), walnut, rifle, -H * 0.195, -H * 0.022, 0);
-  // Receiver, and the fore-end the left hand is holding.
-  mesh(box(H * 0.1, H * 0.036, H * 0.025), gunmetal, rifle, H * 0.005, H * 0.002, 0);
-  mesh(box(H * 0.13, H * 0.03, H * 0.025), walnut, rifle, H * 0.12, 0, 0);
-  // Barrel, running well past the left hand — a rifle is mostly barrel, and
-  // cutting it short is what makes a gun read as a toy.
-  const barrel = new THREE.Mesh(capsule(H * 0.0085, H * 0.24, detail > 0.5 ? 7 : 5), material(gunmetal));
-  barrel.rotation.z = Math.PI / 2;
-  barrel.position.set(H * 0.31, H * 0.006, 0);
-  barrel.castShadow = true;
-  rifle.add(barrel);
-
+  mesh(box(H * 0.05, H * 0.058, H * 0.028), walnut, gun, -H * 0.185, -H * 0.03, 0);
+  // Receiver and the fore-end the left hand holds.
+  mesh(box(H * 0.075, H * 0.042, H * 0.03), gunmetal, gun, H * 0.005, 0, 0);
+  mesh(box(H * 0.1, H * 0.032, H * 0.028), walnut, gun, H * 0.095, -H * 0.006, 0);
+  // Twin barrels side by side — the detail that says shotgun rather than rifle.
+  for (const side of [-1, 1]) {
+    const barrel = new THREE.Mesh(capsule(H * 0.009, H * 0.15, detail > 0.5 ? 7 : 5), material(gunmetal));
+    barrel.rotation.z = Math.PI / 2;
+    barrel.position.set(H * 0.2, H * 0.008, side * H * 0.01);
+    barrel.castShadow = true;
+    gun.add(barrel);
+  }
   if (detail > 0.4) {
-    // Trigger guard, magazine, bolt handle and a scope: the four details that
-    // separate "a rifle" from "a plank".
-    mesh(box(H * 0.028, H * 0.016, H * 0.019), gunmetal, rifle, -H * 0.028, -H * 0.026, 0);
-    mesh(box(H * 0.034, H * 0.028, H * 0.021), gunmetal, rifle, -H * 0.008, -H * 0.034, 0);
-    mesh(box(H * 0.011, H * 0.011, H * 0.042), gunmetal, rifle, -H * 0.02, H * 0.014, -H * 0.019);
-    const scope = new THREE.Mesh(capsule(H * 0.0105, H * 0.066, detail > 0.6 ? 8 : 5), material(0x17181b));
-    scope.rotation.z = Math.PI / 2;
-    scope.position.set(H * 0.025, H * 0.036, 0);
-    rifle.add(scope);
-    for (const x of [-H * 0.012, H * 0.058]) {
-      mesh(box(H * 0.011, H * 0.021, H * 0.013), gunmetal, rifle, x, H * 0.023, 0);
-    }
-    // Front sight, on a ramp near the muzzle.
-    mesh(box(H * 0.01, H * 0.014, H * 0.009), gunmetal, rifle, H * 0.4, H * 0.014, 0);
+    mesh(box(H * 0.026, H * 0.016, H * 0.019), gunmetal, gun, -H * 0.026, -H * 0.026, 0);
   }
 
   /*
    * Muzzle flash: a star of unlit geometry at the barrel's mouth, switched on
-   * for a few frames when the rifle fires.
+   * for a few frames when the gun fires.
    *
    * MeshBasicMaterial rather than the Lambert everything else uses, because a
    * muzzle flash is a light source and a lit one would go dark at night —
@@ -2648,9 +2633,9 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
    * of alignment when the hunter turns.
    */
   const flash = new THREE.Group();
-  flash.position.set(H * 0.44, H * 0.006, 0);
+  flash.position.set(H * 0.29, H * 0.008, 0);
   flash.visible = false;
-  rifle.add(flash);
+  gun.add(flash);
   const flare = new THREE.Mesh(
     cone(H * 0.03, H * 0.07),
     new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 0.95, depthWrite: false }),
@@ -2665,6 +2650,51 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
   flash.add(halo);
   model.materials.push(flare.material as THREE.Material, halo.material as THREE.Material);
   model.muzzle = flash;
+}
+
+/**
+ * The shotgun the hunter sees in his own hands.
+ *
+ * Built here rather than in the renderer because it shares the primitive and
+ * material caches with everything else, and because it has to match the gun on
+ * the model other players see — a viewmodel that disagreed with the world model
+ * would be the game lying about what the man in the clearing is carrying.
+ *
+ * Modelled pointing along -Z, which is the direction a three.js camera looks, so
+ * parenting it to the camera needs no rotation.
+ */
+export function buildShotgunViewmodel(): THREE.Group {
+  const group = new THREE.Group();
+  const walnut = 0x53331c;
+  const gunmetal = 0x2b2c30;
+
+  // Twin barrels, side by side. Short — this is a shotgun, and the stubbiness
+  // is most of what tells it apart from a rifle at a glance.
+  for (const side of [-1, 1]) {
+    const barrel = new THREE.Mesh(capsule(0.021, 0.42, 8), material(gunmetal));
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(side * 0.023, 0.012, -0.26);
+    group.add(barrel);
+  }
+  // Rib between them, and the bead at the muzzle you actually aim with.
+  mesh(box(0.05, 0.012, 0.42), gunmetal, group, 0, 0.03, -0.26);
+  mesh(sphere(0.008, 5), 0xb8a76a, group, 0, 0.04, -0.47);
+
+  // Receiver, then the wrist and butt sweeping back and down to the shoulder.
+  mesh(box(0.062, 0.06, 0.14), gunmetal, group, 0, 0, 0.02);
+  mesh(box(0.05, 0.05, 0.13), walnut, group, 0, -0.014, 0.14);
+  const butt = mesh(box(0.055, 0.075, 0.14), walnut, group, 0, -0.032, 0.26);
+  butt.rotation.x = -0.12;
+  // Fore-end under the barrels, where the left hand is.
+  mesh(box(0.055, 0.042, 0.16), walnut, group, 0, -0.014, -0.16);
+  // Trigger guard.
+  mesh(box(0.03, 0.022, 0.05), gunmetal, group, 0, -0.042, 0.05);
+
+  // The hands. Two blocks, but they are what make it *held* rather than floating.
+  mesh(box(0.05, 0.05, 0.07), 0x38281a, group, 0, -0.048, 0.06);
+  mesh(box(0.05, 0.05, 0.07), 0x38281a, group, 0, -0.05, -0.16);
+
+  return group;
 }
 
 /** Free the shared caches (used when tearing the renderer down). */

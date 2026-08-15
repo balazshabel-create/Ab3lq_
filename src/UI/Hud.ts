@@ -133,6 +133,7 @@ export class Hud {
   private killFeed: HTMLElement;
   private eventBanner: HTMLElement;
   private interactPrompt: HTMLElement;
+  private crosshair!: HTMLElement;
   private damageVignette: HTMLElement;
   private gradeOverlay: HTMLElement;
   private eyeVignette: HTMLElement;
@@ -233,6 +234,20 @@ export class Hud {
     // --- Overlays --------------------------------------------------------
     this.killFeed = el('div', { class: 'kill-feed' });
     this.eventBanner = el('div', { class: 'event-banner' });
+    /*
+     * The crosshair.
+     *
+     * Shown only in first person, which in this game means only to the hunter.
+     * Deliberately tiny and dim: a big reticle would let him sweep the treeline
+     * and register hits by feel, and the whole role is built on him having to
+     * *look* at an animal long enough to decide what it is. Four ticks around a
+     * gap rather than a dot, so it never covers the thing being judged.
+     */
+    this.crosshair = el('div', { class: 'crosshair' });
+    for (const arm of ['n', 'e', 's', 'w']) {
+      this.crosshair.appendChild(el('span', { class: `crosshair-arm ${arm}` }));
+    }
+
     this.interactPrompt = el('div', { class: 'interact-prompt' });
     // A permanent, subtle colour grade. Sits under every other overlay.
     this.gradeOverlay = el('div', { class: 'grade-overlay' });
@@ -257,6 +272,7 @@ export class Hud {
       this.gradeOverlay,
       this.killFeed,
       this.eventBanner,
+      this.crosshair,
       this.interactPrompt,
       this.damageVignette,
       this.eyeVignette,
@@ -549,6 +565,11 @@ export class Hud {
   // -------------------------------------------------------------------------
 
   /** Flash the damage vignette. */
+  /** Show or hide the crosshair. Only the hunter plays in first person. */
+  setFirstPerson(on: boolean): void {
+    this.crosshair.classList.toggle('visible', on);
+  }
+
   showDamage(): void {
     this.damageTimer = 0.8;
   }

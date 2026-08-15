@@ -119,6 +119,14 @@ export class AnimalRenderer {
   private settings: GraphicsSettings;
   /** Actor id of the local player, which is always drawn. */
   private localId = 0;
+  /**
+   * Suppress the local player's own body.
+   *
+   * Set while the camera is inside their head. Without it the first-person view
+   * is filled by the inside of the hunter's own skull — which is not a subtle
+   * artefact, it is an opaque wall two centimetres from the near plane.
+   */
+  private hideLocal = false;
   private tmpVec = new THREE.Vector3();
   /** Supplied by the Renderer, which owns the terrain heightfield. */
   private waterTest: ((x: number, z: number, y: number) => boolean) | null = null;
@@ -137,6 +145,11 @@ export class AnimalRenderer {
 
   setLocalActor(id: number): void {
     this.localId = id;
+  }
+
+  /** Hide (or show) the local player's own model. */
+  setHideLocal(hide: boolean): void {
+    this.hideLocal = hide;
   }
 
   /** Give the renderer a way to ask whether a position is in water. */
@@ -290,6 +303,11 @@ export class AnimalRenderer {
 
     for (const actor of visible) {
       const isLocal = actor.id === this.localId;
+      if (isLocal && this.hideLocal) {
+        this.release(actor);
+        actor.fade = 0;
+        continue;
+      }
       const withinView = actor.distance < viewDistance;
       const budgetLeft = shown < maxVisible;
 

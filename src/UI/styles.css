@@ -1983,3 +1983,63 @@ input[type='text']:focus {
   color: rgba(243, 237, 225, 0.62);
   margin-bottom: 14px;
 }
+
+/* --- Crosshair ------------------------------------------------------------
+ *
+ * Only the hunter sees this, because only the hunter plays in first person.
+ * Four short ticks around an empty centre: the gap is the point, since whatever
+ * he is trying to identify has to stay visible while he decides.
+ */
+.crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.crosshair.visible {
+  opacity: 0.72;
+}
+
+.crosshair-arm {
+  position: absolute;
+  background: rgba(243, 237, 225, 0.92);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
+}
+
+.crosshair-arm.n,
+.crosshair-arm.s {
+  left: 50%;
+  width: 1px;
+  height: 6px;
+  margin-left: -0.5px;
+}
+
+.crosshair-arm.n {
+  top: 0;
+}
+
+.crosshair-arm.s {
+  bottom: 0;
+}
+
+.crosshair-arm.e,
+.crosshair-arm.w {
+  top: 50%;
+  height: 1px;
+  width: 6px;
+  margin-top: -0.5px;
+}
+
+.crosshair-arm.w {
+  left: 0;
+}
+
+.crosshair-arm.e {
+  right: 0;
+}

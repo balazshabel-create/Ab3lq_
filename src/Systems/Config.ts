@@ -379,6 +379,22 @@ export const RIVER_DEPTH = 8.5;
  * The band has to be deeper than RIVER_DEPTH or the gradient saturates and the
  * deep channel renders as one flat colour.
  */
+/**
+ * How far a bridge deck hangs below its two ends, in metres.
+ *
+ * Shared by the mesh builder and by the walkable surface in Terrain, because
+ * they have to agree *exactly*: the deck you stand on and the planks you see are
+ * two separate pieces of code describing one object, and when they disagreed by
+ * a metre and a half the hunter walked out to the middle of the span and sank
+ * into it up to his hips.
+ *
+ * A fixed number of metres rather than a fraction of the span, because every
+ * bridge in the world shares one instanced mesh — there is no way to give a
+ * sixty-metre crossing a deeper curve than a twenty-metre one without building a
+ * second geometry, and a sag you can see is not worth that.
+ */
+export const BRIDGE_SAG = 0.35;
+
 export const WATER_DEPTH_ABOVE = 11;
 export const WATER_DEPTH_BAND = 12;
 

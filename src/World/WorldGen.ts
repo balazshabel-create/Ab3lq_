@@ -11,7 +11,7 @@
 
 import { Rng } from '../Systems/Rng';
 import { clamp01 } from '../Systems/Noise';
-import { WORLD_PROPS } from '../Systems/Config';
+import { BRIDGE_SAG, WORLD_PROPS } from '../Systems/Config';
 import { GroundType, Terrain } from './Terrain';
 
 export enum PropKind {
@@ -332,7 +332,7 @@ export function generateWorld(
      * is skylined against the canopy from a long way off.
      */
     const deckHeight = 4.2;
-    const sag = Math.min(1.6, half * 0.09);
+
     content.bridges.push({
       kind: PropKind.Bridge,
       x: cx,
@@ -362,7 +362,8 @@ export function generateWorld(
       halfLength: half,
       halfWidth: 1.5,
       y: terrain.waterLevel + deckHeight,
-      sag,
+      // The same constant the mesh is built with. See BRIDGE_SAG.
+      sag: BRIDGE_SAG,
     });
   }
 

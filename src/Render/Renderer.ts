@@ -21,6 +21,7 @@ import { GrassField } from './GrassField';
 import { BackdropSystem } from './BackdropSystem';
 import { StormRenderer, type StormCircle } from './StormRenderer';
 import { AnimalRenderer } from './AnimalRenderer';
+import { buildShotgunViewmodel } from './AnimalModels';
 import { EffectsRenderer, type FlySwarmInput } from './EffectsRenderer';
 import { PostProcessing } from './PostProcessing';
 import { CameraRig } from '../Player/CameraRig';
@@ -105,6 +106,10 @@ export class Renderer {
   private stormIntensity = 0;
   /** The colour of the water from inside it — fog, and the scene background. */
   private readonly underwaterColor = new THREE.Color(0x16362c);
+  /** The shotgun drawn in front of the camera, for the hunter. */
+  private viewWeapon: THREE.Object3D | null = null;
+  /** Recoil, 1 immediately after a shot and decaying to 0. */
+  private weaponKick = 0;
   /** Props the camera must not end up inside. */
   private cameraBlockers = new SpatialGrid<CameraBlocker>(16);
 
@@ -293,6 +298,35 @@ export class Renderer {
     this.cameraRig.setTarget(id);
   }
 
+  /**
+   * Put a shotgun in the player's hands, or take it away.
+   *
+   * The *viewmodel* — the weapon drawn in front of the camera rather than in the
+   * world — is the whole reason first person works as a mechanic here. Without
+   * it the hunter is a floating eye: nothing on screen says he is armed, nothing
+   * kicks when he fires, and the shot is a sound effect and a number. With it,
+   * the gun is the thing the player is actually holding, and every shot is a
+   * decision they can feel.
+   *
+   * Parented to the camera, so it needs no per-frame transform of its own and
+   * cannot drift out of the view. It is on its own render layer with a very near
+   * clip plane, because a barrel forty centimetres from the eye would otherwise
+   * be sliced in half by the main camera's near plane.
+   */
+  setViewWeapon(visible: boolean): void {
+    if (visible && !this.viewWeapon) {
+      this.viewWeapon = buildShotgunViewmodel();
+      this.camera.add(this.viewWeapon);
+    }
+    if (this.viewWeapon) this.viewWeapon.visible = visible;
+    this.animals.setHideLocal(visible);
+  }
+
+  /** Kick the viewmodel, for a shot. */
+  punchViewWeapon(): void {
+    this.weaponKick = 1;
+  }
+
   /** Sight multiplier from the player's weakness (Bad Eye narrows the view). */
   setSightModifier(scale: number): void {
     this.fovModifier = clamp01(scale);
@@ -312,6 +346,23 @@ export class Renderer {
     // --- Camera ----------------------------------------------------------
     this.cameraRig.update(dt, this.animals);
     const cameraPos = this.camera.position;
+
+    // --- The gun in your hands -------------------------------------------
+    if (this.viewWeapon && this.viewWeapon.visible) {
+      this.weaponKick = Math.max(0, this.weaponKick - dt * 4.5);
+      const kick = this.weaponKick * this.weaponKick;
+      /*
+       * Two motions, and they are doing different jobs. The sway is a slow
+       * figure of eight driven by walking, which is what stops a viewmodel
+       * looking welded to the screen; the kick is a fast recoil that shoves the
+       * gun back and up and lets it settle, which is the only feedback the
+       * player gets that the trigger actually did something.
+       */
+      const sway = Math.sin(this.time * 2.1) * 0.006;
+      const bob = Math.sin(this.time * 4.2) * 0.004;
+      this.viewWeapon.position.set(0.19 + sway, -0.17 + bob - kick * 0.02, -0.42 + kick * 0.1);
+      this.viewWeapon.rotation.set(kick * 0.34, 0.06, kick * 0.06);
+    }
 
     // --- Sky and lighting ------------------------------------------------
     const skyState = this.sky.update(

@@ -79,13 +79,38 @@ export class CameraRig {
     this.targetId = actorId;
   }
 
-  /** The camera distance depends on how big the animal is. */
+  /**
+   * The camera distance depends on how big the animal is — except for the
+   * hunter, who is filmed from inside his own head.
+   *
+   * ## Why the hunter is first person and nothing else is
+   *
+   * A survivor is playing a *body*: the whole craft of the role is making an
+   * animal move the way an animal moves, and you cannot do that without seeing
+   * it. The hunter is playing a *weapon*. He needs to tell a capybara that is
+   * grazing on a loop from one being driven by a person at sixty metres, and
+   * then put one shot into it — and a third-person camera hanging four metres
+   * behind his shoulder is between him and both of those jobs.
+   *
+   * It also settles the asymmetry the round is built on without a single line
+   * of rules: the survivors can see themselves and each other and he cannot see
+   * himself at all.
+   */
   setSpecies(species: Species): void {
     this.species = species;
+    if (species === Species.Hunter) {
+      this.targetDistance = 0;
+      return;
+    }
     const def = ANIMALS[species];
     const size = Math.max(def.silhouette.length, def.silhouette.height);
     // A frog needs the camera almost on top of it; a 4.6 m anaconda needs room.
     this.targetDistance = clamp(1.4 + size * 1.9, 2.2, 11);
+  }
+
+  /** True while the camera is inside the player's own head. */
+  get firstPerson(): boolean {
+    return this.species === Species.Hunter;
   }
 
   /** Mouse look. Deltas are in radians. */
@@ -96,6 +121,10 @@ export class CameraRig {
 
   /** Mouse wheel zoom, as a fraction of the species' default distance. */
   addZoom(delta: number): void {
+    // The hunter has no zoom. Pulling the camera out of his head would give him
+    // a view over the undergrowth he is supposed to have to walk around, and
+    // pushing it further in has nowhere to go.
+    if (this.species === Species.Hunter) return;
     const def = ANIMALS[this.species];
     const size = Math.max(def.silhouette.length, def.silhouette.height);
     const base = clamp(1.4 + size * 1.9, 2.2, 11);
@@ -143,7 +172,16 @@ export class CameraRig {
     }
 
     const def = ANIMALS[this.species];
-    const shoulder = Math.max(0.35, def.silhouette.height * 1.25);
+    /*
+     * First person puts the focus at eye height rather than above the back, and
+     * the orbit distance is zero — so the "orbit" degenerates to the focus point
+     * itself and the camera simply sits where the eyes are. Everything below
+     * (the collision march, the ground clamp, the shake) then works unchanged
+     * instead of needing a parallel first-person path.
+     */
+    const shoulder = this.firstPerson
+      ? def.silhouette.height * 0.92
+      : Math.max(0.35, def.silhouette.height * 1.25);
 
     // Focus a little above the animal's back, and ahead of it when it moves.
     this.desired.set(this.targetPos.x, this.targetPos.y + shoulder, this.targetPos.z);
