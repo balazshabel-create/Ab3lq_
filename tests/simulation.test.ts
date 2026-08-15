@@ -110,13 +110,18 @@ test('weaknesses are anatomically plausible', () => {
   assert.equal(isWeaknessEligible(Species.Anaconda, WeaknessId.InjuredLeg), false);
   assert.equal(isWeaknessEligible(Species.Anaconda, WeaknessId.NoisySteps), false);
   assert.equal(isWeaknessEligible(Species.Anaconda, WeaknessId.ShortLegs), false);
-  // A capybara cannot climb, so no climbing weaknesses.
-  assert.equal(isWeaknessEligible(Species.Capybara, WeaknessId.WeakGrip), false);
-  assert.equal(isWeaknessEligible(Species.Capybara, WeaknessId.InjuredArm), false);
   // A herbivore has no meaningful bite to lose.
   assert.equal(isWeaknessEligible(Species.Parrot, WeaknessId.MissingTeeth), false);
-  // Monkeys climb, so grip weaknesses are fair game.
-  assert.equal(isWeaknessEligible(Species.Monkey, WeaknessId.WeakGrip), true);
+  /*
+   * The two climbing weaknesses (Weak Grip, Injured Arm) are gone along with
+   * climbing itself. A weakness no species can roll is dead content that still
+   * shows up in the table and still has to be reasoned about, so it was deleted
+   * rather than left permanently ineligible.
+   */
+  assert.ok(
+    !Object.values(WeaknessId).some((w) => /grip|arm/.test(w)),
+    'a climbing weakness survived the removal of climbing',
+  );
   // Every playable species must have at least one option to roll.
   for (const s of PLAYABLE_SPECIES) {
     assert.ok(eligibleWeaknesses(s).length > 0, `${s} has no eligible weakness`);
@@ -844,7 +849,7 @@ test('a crocodilian actually submerges and a capybara cannot', () => {
     player.species = species;
     sim.refreshStats(player);
     player.health = player.maxHealth;
-    player.move = { vy: 0, airborne: false, climbHeight: 0, climbTreeId: 0, smoothSpeed: 0, stepAccumulator: 0 };
+    player.move = { vy: 0, airborne: false, smoothSpeed: 0, stepAccumulator: 0 };
 
     // Search the circle for genuinely deep water.
     let best = { x: zone.x, z: zone.z, depth: 0 };
@@ -1275,5 +1280,53 @@ test('a capybara cannot kill a tiger', () => {
   assert.ok(
     (ANIMALS[Species.Tiger].attackPower ?? 0) > (ANIMALS[Species.Capybara].attackPower ?? 0) * 8,
     'the tiger must hit vastly harder than the capybara',
+  );
+});
+
+test('nothing can climb, and no tree is climbable', () => {
+  /*
+   * Trees are scenery and cover, not terrain.
+   *
+   * Asserted across the whole table rather than the playable six: an ambient
+   * species that could climb would still be seen going up a trunk, and the
+   * whole point is that it never happens.
+   */
+  for (const s of ALL_SPECIES) {
+    assert.equal(
+      ANIMALS[s].locomotion.canClimb,
+      false,
+      `${s} can still climb`,
+    );
+    assert.equal(ANIMALS[s].locomotion.climbSpeed, 0, `${s} still has a climb speed`);
+  }
+
+  /*
+   * And end to end: run a populated round and check nothing ever leaves the
+   * ground except by jumping or flying. A climbing animal parks itself well
+   * above the surface and stays there, which is what this catches.
+   */
+  const sim = new Simulation(515151);
+  for (let i = 0; i < 3; i++) sim.addPlayer(`p${i}`, `P${i}`);
+  sim.startRound();
+
+  let worst = 0;
+  let worstSpecies = '';
+  for (let step = 0; step < Math.round(90 / TICK); step++) {
+    sim.update(TICK);
+    if (step % 20 !== 0) continue;
+    sim.forEachNearby(0, 0, 10_000, (a) => {
+      if (ANIMALS[a.species].locomotion.canFly) return;
+      const ground = sim.terrain.surfaceAt(a.pos.x, a.pos.z);
+      const above = a.pos.y - ground;
+      if (above > worst) {
+        worst = above;
+        worstSpecies = a.species;
+      }
+    });
+  }
+  // A jump arc is the only legitimate way to be off the ground, and it is small.
+  assert.ok(
+    worst < 2.5,
+    `a ${worstSpecies} was ${worst.toFixed(1)}m above the ground — that is a tree, not a jump`,
   );
 });

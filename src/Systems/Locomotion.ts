@@ -38,8 +38,6 @@ export interface MoveIntent {
   sprint: boolean;
   /** Requested this tick. Ignored if the animal cannot jump or is airborne. */
   jump: boolean;
-  /** Climb input for climbers: +1 up, -1 down. */
-  climb: number;
   /** Requested submerge (crocodiles). */
   submerge: boolean;
   /** Flyers: +1 ascend, -1 descend. */
@@ -55,7 +53,6 @@ export function emptyIntent(): MoveIntent {
     throttle: 0,
     sprint: false,
     jump: false,
-    climb: 0,
     submerge: false,
     ascend: 0,
     wantsFlight: false,
@@ -67,10 +64,6 @@ export interface MoveState {
   /** Vertical velocity while airborne or jumping. */
   vy: number;
   airborne: boolean;
-  /** Height climbed up a trunk. 0 = on the ground. */
-  climbHeight: number;
-  /** Id of the tree currently being climbed, or 0. */
-  climbTreeId: number;
   /** Smoothed horizontal speed, so gait animation does not jitter. */
   smoothSpeed: number;
   /** Accumulated distance, for footstep noise and stats. */
@@ -81,8 +74,6 @@ export function newMoveState(): MoveState {
   return {
     vy: 0,
     airborne: false,
-    climbHeight: 0,
-    climbTreeId: 0,
     smoothSpeed: 0,
     stepAccumulator: 0,
   };
@@ -114,16 +105,9 @@ export type ObstacleResolver = (
 ) => boolean;
 
 /** Climb target lookup: is there a climbable trunk near this position? */
-export type ClimbTargetFinder = (
-  x: number,
-  z: number,
-  reach: number,
-) => { id: number; x: number; z: number; height: number; radius: number } | null;
-
 export interface LocomotionEnv {
   terrain: Terrain;
   resolveObstacles?: ObstacleResolver;
-  findClimbTarget?: ClimbTargetFinder;
 }
 
 const scratch = { x: 0, z: 0 };
@@ -173,51 +157,20 @@ export function applyMovement(
     actor.yaw = turnTowards(actor.yaw, wishYaw, stats.turnRate * dt);
   }
 
-  // ---- Climbing ----------------------------------------------------------
-  if (loco.canClimb && env.findClimbTarget) {
-    if (state.climbTreeId !== 0) {
-      // Already on a trunk.
-      const climbing = intent.climb;
-      state.climbHeight = clamp(
-        state.climbHeight + climbing * stats.climbSpeed * dt,
-        0,
-        999,
-      );
-      if (state.climbHeight <= 0.05 && climbing < 0) {
-        // Dropped back to the ground.
-        state.climbTreeId = 0;
-        state.climbHeight = 0;
-      } else {
-        const tree = env.findClimbTarget(actor.pos.x, actor.pos.z, 3.5);
-        const maxH = tree ? tree.height * 0.92 : state.climbHeight;
-        state.climbHeight = Math.min(state.climbHeight, maxH);
-        actor.pos.y = terrain.heightAt(actor.pos.x, actor.pos.z) + state.climbHeight;
-        actor.moveMode = MoveMode.Climb;
-        actor.gait = Math.abs(climbing) * 0.5;
-        result.mode = MoveMode.Climb;
-        result.speed = Math.abs(climbing) * stats.climbSpeed;
-        result.distance = result.speed * dt;
-        // Grip the trunk so the player does not drift off it.
-        if (tree) {
-          const dx = actor.pos.x - tree.x;
-          const dz = actor.pos.z - tree.z;
-          const d = Math.hypot(dx, dz) || 1;
-          const want = tree.radius + 0.25;
-          actor.pos.x = tree.x + (dx / d) * want;
-          actor.pos.z = tree.z + (dz / d) * want;
-        }
-        return result;
-      }
-    } else if (intent.climb > 0.5) {
-      const tree = env.findClimbTarget(actor.pos.x, actor.pos.z, 2.2);
-      if (tree) {
-        state.climbTreeId = tree.id;
-        state.climbHeight = 0.4;
-        state.vy = 0;
-        state.airborne = false;
-      }
-    }
-  }
+  /*
+   * ---- No climbing -------------------------------------------------------
+   *
+   * Trees are scenery and cover, not terrain. The climbing implementation that
+   * used to live here — grip a trunk, ride it up, clamp to 92% of its height —
+   * has been removed outright rather than left switched off, because a mechanic
+   * nothing can reach is a trap for the next reader: it looks supported, it
+   * typechecks, and it silently rots.
+   *
+   * `Locomotion.canClimb` and `climbSpeed` stay in the species table as data
+   * (they are part of the wire-stable shape and every entry now reads false/0),
+   * and `MoveMode.Climb` stays in the protocol enum for the same reason, but
+   * nothing sets either any more.
+   */
 
   // ---- Flight ------------------------------------------------------------
   if (loco.canFly && (intent.wantsFlight || state.airborne)) {

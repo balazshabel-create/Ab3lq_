@@ -24,8 +24,6 @@ const BINDING_ACTIONS = {
   eat: InputAction.Eat,
   attack: InputAction.Attack,
   submerge: InputAction.Submerge,
-  climbUp: InputAction.ClimbUp,
-  climbDown: InputAction.ClimbDown,
   ability: InputAction.Ability,
   listen: InputAction.Listen,
   focus: InputAction.Focus,
@@ -50,8 +48,6 @@ export const DEFAULT_BINDINGS: Binding[] = [
   { action: 'eat', keys: ['KeyE'], label: 'E', description: 'Eat / graze' },
   { action: 'attack', keys: [], label: 'Left click', description: 'Bite / attack' },
   { action: 'submerge', keys: ['KeyC'], label: 'C', description: 'Submerge (water animals)' },
-  { action: 'climbUp', keys: ['KeyR'], label: 'R', description: 'Climb up' },
-  { action: 'climbDown', keys: ['KeyF'], label: 'F', description: 'Climb down' },
   { action: 'ability', keys: ['KeyX'], label: 'X', description: 'Signature ability' },
   { action: 'listen', keys: ['KeyG'], label: 'G', description: 'Listen (hunter)' },
   { action: 'focus', keys: [], label: 'Right click', description: 'Focus / zoom' },
@@ -300,9 +296,10 @@ export class InputManager {
   /**
    * Read the current input state and clear per-frame accumulators.
    *
-   * `canFly` and `isFlying` change what R/F mean — for a flyer they are
-   * ascend/descend, for a climber they are climb up/down. One key doing the
-   * contextually obvious thing beats two keys nobody remembers.
+   * R/F are ascend/descend, and only mean anything to a flyer. They used to
+   * double as climb up/down; nothing climbs any more, so for everything else
+   * they now do nothing rather than quietly emitting a climb the server will
+   * ignore.
    */
   read(context: { canFly: boolean; isFlying: boolean }): InputState {
     let actions = InputAction.None;
@@ -321,15 +318,10 @@ export class InputManager {
     // Eating is held, so the server can cancel the meal when you move.
     if (this.isDown(this.bindingKeys('eat'))) actions |= InputAction.Eat;
 
-    // Context-sensitive vertical keys.
-    const upKeys = ['KeyR'];
-    const downKeys = ['KeyF'];
+    // Vertical keys, for flyers only.
     if (context.canFly && context.isFlying) {
-      if (this.isDown(upKeys)) actions |= InputAction.Ascend;
-      if (this.isDown(downKeys)) actions |= InputAction.Descend;
-    } else {
-      if (this.isDown(upKeys)) actions |= InputAction.ClimbUp;
-      if (this.isDown(downKeys)) actions |= InputAction.ClimbDown;
+      if (this.isDown(['KeyR'])) actions |= InputAction.Ascend;
+      if (this.isDown(['KeyF'])) actions |= InputAction.Descend;
     }
 
     // Mouse. The latch covers clicks too quick to be seen as a held button;

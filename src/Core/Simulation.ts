@@ -172,8 +172,6 @@ interface Obstacle {
   id: number;
   pos: { x: number; z: number };
   radius: number;
-  /** Climbable height, 0 for rocks and huts. */
-  climbHeight: number;
 }
 
 const statBase = {
@@ -405,7 +403,6 @@ export class Simulation implements AiContext {
         id: id++,
         pos: { x: tree.x, z: tree.z },
         radius: tree.radius,
-        climbHeight: tree.height,
       });
     }
     for (const rock of this.world.rocks) {
@@ -414,7 +411,6 @@ export class Simulation implements AiContext {
         id: id++,
         pos: { x: rock.x, z: rock.z },
         radius: rock.scale * 0.55,
-        climbHeight: 0,
       });
     }
     for (const hut of this.world.huts) {
@@ -422,7 +418,6 @@ export class Simulation implements AiContext {
         id: id++,
         pos: { x: hut.x, z: hut.z },
         radius: 2.4 * hut.scale,
-        climbHeight: 0,
       });
     }
     this.obstacleGrid.rebuild(this.obstacles);
@@ -458,20 +453,6 @@ export class Simulation implements AiContext {
     return moved;
   };
 
-  /** LocomotionEnv hook: find a climbable trunk in reach. */
-  findClimbTarget = (x: number, z: number, reach: number) => {
-    const found = this.obstacleGrid.findNearest(x, z, reach + 2, (o) => o.climbHeight > 3);
-    if (!found) return null;
-    const d = Math.hypot(found.pos.x - x, found.pos.z - z);
-    if (d > found.radius + reach) return null;
-    return {
-      id: found.id,
-      x: found.pos.x,
-      z: found.pos.z,
-      height: found.climbHeight,
-      radius: found.radius,
-    };
-  };
 
   /**
    * Populate the world with AI animals.
@@ -1244,9 +1225,6 @@ export class Simulation implements AiContext {
     intent.sprint = hasAction(input.actions, InputAction.Sprint);
     intent.jump = hasAction(input.actions, InputAction.Jump);
     intent.submerge = hasAction(input.actions, InputAction.Submerge);
-    intent.climb =
-      (hasAction(input.actions, InputAction.ClimbUp) ? 1 : 0) -
-      (hasAction(input.actions, InputAction.ClimbDown) ? 1 : 0);
     intent.wantsFlight = hasAction(input.actions, InputAction.Fly);
     intent.ascend =
       (hasAction(input.actions, InputAction.Ascend) ? 1 : 0) -

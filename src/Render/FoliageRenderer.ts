@@ -50,6 +50,16 @@ interface KindConfig {
   /** Chunk grid resolution. Defaults to COARSE_GRID. */
   chunkGrid?: number;
   /**
+   * How many distinct geometries this kind has, selected by `prop.variant`.
+   *
+   * Defaults to 1. Only trees use more: with one shared mesh the whole forest is
+   * the same tree repeated four thousand times, which reads as wallpaper no
+   * matter how good that tree is — the eye finds the repeat in about a second.
+   * Splitting a chunk by variant costs one extra draw call per variant present
+   * in it, and trees are a small fraction of the frame.
+   */
+  variants?: number;
+  /**
    * How the per-instance colour is chosen.
    *
    * `foliage` is the green brightness/warmth jitter that stops a canopy reading
@@ -106,6 +116,8 @@ const KIND_CONFIG: Partial<Record<PropKind, KindConfig>> = {
     density: () => 1,
     wind: 0.35,
     castShadow: true,
+    // Emergent, broadleaf and leaning. See buildTree.
+    variants: 3,
   },
   [PropKind.Bush]: {
     distance: (s) => Math.min(s.viewDistance, 110),
@@ -403,11 +415,33 @@ export class FoliageRenderer {
         // Thin the list according to the preset. Deterministic (take every Nth)
         // rather than random, so lowering the preset never changes *which* props
         // exist in a way that could differ between two players.
-        const keep =
+        const thinned =
           density >= 1 ? props : props.filter((_, i) => i % Math.ceil(1 / density) === 0);
+        if (thinned.length === 0) continue;
+
+        /*
+         * Split the chunk by variant.
+         *
+         * An InstancedMesh draws one geometry, so a kind with several geometries
+         * needs one mesh per variant present in this chunk. Kinds with a single
+         * variant (everything except trees) fall through this as a single group
+         * and pay nothing.
+         */
+        const variantCount = config.variants ?? 1;
+        const groups: Prop[][] =
+          variantCount <= 1
+            ? [thinned]
+            : (() => {
+                const out: Prop[][] = Array.from({ length: variantCount }, () => []);
+                for (const p of thinned) out[((p.variant ?? 0) % variantCount + variantCount) % variantCount].push(p);
+                return out;
+              })();
+
+        for (let variant = 0; variant < groups.length; variant++) {
+        const keep = groups[variant];
         if (keep.length === 0) continue;
 
-        const built = buildPropGeometry(kind, this.settings);
+        const built = buildPropGeometry(kind, this.settings, variant);
         if (!built) continue;
         const { geometry, material } = built;
 
@@ -492,6 +526,7 @@ export class FoliageRenderer {
           radius: Math.hypot(maxX - minX, maxZ - minZ) * 0.5,
         });
         this.group.add(mesh);
+        }
       }
     }
   }
@@ -577,7 +612,15 @@ interface PropAssets {
   material: THREE.Material;
 }
 
-const propGeometryCache = new Map<PropKind, PropAssets>();
+/*
+ * Keyed on kind *and* variant.
+ *
+ * Most kinds have a single geometry, but trees have three — see buildTree. The
+ * key packs both into one number rather than a string, because this is looked up
+ * once per chunk per rebuild and a string key allocates.
+ */
+const propGeometryCache = new Map<number, PropAssets>();
+const assetKey = (kind: PropKind, variant: number): number => kind * 8 + (variant & 7);
 
 /**
  * Build one prop's geometry.
@@ -586,8 +629,13 @@ const propGeometryCache = new Map<PropKind, PropAssets>();
  * only draw one geometry — so a whole tree (trunk plus three canopy layers) has
  * to be one mesh.
  */
-function buildPropGeometry(kind: PropKind, settings: GraphicsSettings): PropAssets | null {
-  const cached = propGeometryCache.get(kind);
+function buildPropGeometry(
+  kind: PropKind,
+  settings: GraphicsSettings,
+  variant = 0,
+): PropAssets | null {
+  const key = assetKey(kind, variant);
+  const cached = propGeometryCache.get(key);
   if (cached) return cached;
 
   const detail = settings.foliageQuality === 'high' ? 2 : settings.foliageQuality === 'medium' ? 1 : 0;
@@ -595,7 +643,7 @@ function buildPropGeometry(kind: PropKind, settings: GraphicsSettings): PropAsse
 
   switch (kind) {
     case PropKind.Tree:
-      assets = buildTree(detail);
+      assets = buildTree(detail, variant);
       break;
     case PropKind.Bush:
       assets = buildBush(detail, 0x4a7530);
@@ -646,7 +694,7 @@ function buildPropGeometry(kind: PropKind, settings: GraphicsSettings): PropAsse
   if (assets) {
     const config = KIND_CONFIG[kind];
     if (config && config.wind > 0) applyWind(assets.material, config.wind);
-    propGeometryCache.set(kind, assets);
+    propGeometryCache.set(key, assets);
   }
   return assets;
 }
@@ -837,28 +885,173 @@ function leafCluster(
 }
 
 /** A rainforest tree: bare trunk, real branches, and a canopy of leaves. */
-function buildTree(detail: number): PropAssets {
-  const segments = detail >= 2 ? 7 : detail >= 1 ? 5 : 4;
+/**
+ * A tapered trunk swept along a gently curving axis.
+ *
+ * ## Why not stacked cylinders
+ *
+ * The trunk used to be two `CylinderGeometry` sections butted together. Two
+ * problems, both visible at any distance: the join is a hard step in radius
+ * wherever the tapers disagree, and — much worse — every trunk in the forest is
+ * exactly, perfectly vertical. Nothing in a real forest is, and a few thousand
+ * parallel vertical lines is the single most artificial thing a procedural
+ * jungle can put on screen.
+ *
+ * Sweeping a ring of vertices along a curve fixes both at once. The radius is a
+ * continuous function of height, so there is no seam to see; the axis drifts, so
+ * each trunk has its own lean and a slight bend; and the radius carries a little
+ * per-ring noise, so the silhouette is not a mathematically smooth cone.
+ *
+ * Returns the tip position so the caller can put the crown where the trunk
+ * actually ends rather than where a straight one would have.
+ */
+function sweptTrunk(options: {
+  height: number;
+  baseRadius: number;
+  tipRadius: number;
+  sides: number;
+  rings: number;
+  /** Horizontal drift of the top, in metres. */
+  lean: number;
+  leanAngle: number;
+  /** Deterministic wobble amount on each ring's radius. */
+  gnarl: number;
+  seed: number;
+}): { geometry: THREE.BufferGeometry; tip: [number, number, number] } {
+  const { height, baseRadius, tipRadius, sides, rings, lean, leanAngle, gnarl, seed } = options;
+  const positions: number[] = [];
+
+  const hash = (i: number): number => {
+    const n = Math.sin((i * 12.9898 + seed * 78.233) * 43758.5453);
+    return n - Math.floor(n);
+  };
+
+  // Ring centres and radii along the trunk.
+  const centre: [number, number, number][] = [];
+  const radius: number[] = [];
+  for (let r = 0; r <= rings; r++) {
+    const t = r / rings;
+    // Ease the drift so the base stays planted and the top does the moving —
+    // a trunk that leans from the ground up looks pushed over, not grown.
+    const drift = lean * t * t;
+    centre.push([Math.cos(leanAngle) * drift, height * t, Math.sin(leanAngle) * drift]);
+    /*
+     * Radius falls off faster near the ground than a straight taper, which is
+     * what gives a rainforest trunk its flared foot and its long clean shaft.
+     */
+    const taper = Math.pow(1 - t, 1.7);
+    radius.push(tipRadius + (baseRadius - tipRadius) * taper + (hash(r) - 0.5) * gnarl);
+  }
+
+  for (let r = 0; r < rings; r++) {
+    for (let i = 0; i < sides; i++) {
+      const a0 = (i / sides) * Math.PI * 2;
+      const a1 = ((i + 1) / sides) * Math.PI * 2;
+      const [cx0, cy0, cz0] = centre[r];
+      const [cx1, cy1, cz1] = centre[r + 1];
+      const r0 = radius[r];
+      const r1 = radius[r + 1];
+      const p = (cx: number, cy: number, cz: number, rad: number, a: number) => {
+        positions.push(cx + Math.cos(a) * rad, cy, cz + Math.sin(a) * rad);
+      };
+      p(cx0, cy0, cz0, r0, a0);
+      p(cx1, cy1, cz1, r1, a0);
+      p(cx1, cy1, cz1, r1, a1);
+      p(cx0, cy0, cz0, r0, a0);
+      p(cx1, cy1, cz1, r1, a1);
+      p(cx0, cy0, cz0, r0, a1);
+    }
+  }
+
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.computeVertexNormals();
+  return { geometry: g, tip: centre[rings] };
+}
+
+/**
+ * One tree.
+ *
+ * ## Variants, and why they matter more than any single tree does
+ *
+ * Every prop kind is drawn from one shared geometry, because an InstancedMesh
+ * can only hold one — so for a long time all four thousand trees in the world
+ * were the *same tree*, repeated. No amount of work on the individual model
+ * fixes that: a forest of identical trees reads as wallpaper however good the
+ * wallpaper is, and the eye finds the repeat within about a second.
+ *
+ * So `variant` selects between three quite different trees, and the batcher
+ * splits each chunk by variant (see `buildBatches`). Three is the number where
+ * the repeat stops being findable at a glance while the tree draw calls only
+ * triple — they are a small fraction of the frame.
+ *
+ *   0  **emergent**   — the tall one that breaks through the canopy. Very long
+ *                       clean shaft, narrow high crown, heavy buttresses.
+ *   1  **broadleaf**  — shorter and much wider, a spreading roof of a crown.
+ *                       This is the one that makes the canopy feel closed.
+ *   2  **leaning**    — a bent trunk with a forked top, the tree that lost an
+ *                       argument with a storm. Breaks up rows of verticals.
+ */
+function buildTree(detail: number, variant = 0): PropAssets {
+  const sides = detail >= 2 ? 9 : detail >= 1 ? 7 : 5;
+  const rings = detail >= 2 ? 7 : detail >= 1 ? 5 : 3;
   const parts: MergePart[] = [];
+  const v = variant % 3;
 
-  // Trunk — tall and clean, as rainforest trunks are. Two stacked sections with
-  // different tapers read as a real trunk rather than as a pole.
-  const lower = new THREE.CylinderGeometry(0.42, 0.56, 7, segments);
-  lower.translate(0, 3.5, 0);
-  parts.push({ geometry: lower, color: new THREE.Color(0x4b3826) });
-  const upper = new THREE.CylinderGeometry(0.26, 0.42, 6.4, segments);
-  upper.translate(0, 10.1, 0);
-  parts.push({ geometry: upper, color: new THREE.Color(0x554027) });
+  // Per-variant proportions. See the note above.
+  const shape =
+    v === 0
+      ? { height: 15.5, base: 0.62, tip: 0.2, lean: 0.5, crownY: 15.0, crownR: 3.0, tiers: 3 }
+      : v === 1
+        ? { height: 11.0, base: 0.72, tip: 0.3, lean: 0.7, crownY: 10.6, crownR: 4.2, tiers: 4 }
+        : { height: 12.5, base: 0.55, tip: 0.22, lean: 2.3, crownY: 12.0, crownR: 3.2, tiers: 3 };
+  const leanAngle = v * 2.1;
 
-  // Buttress roots, the signature of a big Amazon tree.
+  const trunk = sweptTrunk({
+    height: shape.height,
+    baseRadius: shape.base,
+    tipRadius: shape.tip,
+    sides,
+    rings,
+    lean: shape.lean,
+    leanAngle,
+    gnarl: detail >= 1 ? 0.05 : 0,
+    seed: v * 7 + 3,
+  });
+  parts.push({ geometry: trunk.geometry, color: new THREE.Color(v === 1 ? 0x554027 : 0x4b3826) });
+  const [tipX, tipY, tipZ] = trunk.tip;
+
+  /*
+   * Buttress roots — the signature of a big Amazon tree, and the thing that
+   * stops a trunk looking like a pole pushed into the ground.
+   *
+   * Built as flattened fins rather than cones: a buttress is a thin blade of
+   * wood standing out from the trunk, and a cone reads as a tent peg. Each fin
+   * is a triangle from high on the trunk down and out to the ground.
+   */
   if (detail >= 1) {
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2;
-      const root = new THREE.ConeGeometry(0.4, 2.8, 4);
-      root.rotateZ(0.13);
-      root.rotateY(a);
-      root.translate(Math.cos(a) * 0.55, 1.2, Math.sin(a) * 0.55);
-      parts.push({ geometry: root, color: new THREE.Color(0x3f2f1f) });
+    const fins = v === 1 ? 6 : 5;
+    const finHeight = v === 1 ? 3.2 : 2.4;
+    const reach = shape.base * (v === 1 ? 2.6 : 2.0);
+    for (let i = 0; i < fins; i++) {
+      const a = (i / fins) * Math.PI * 2 + v * 0.4;
+      const cos = Math.cos(a);
+      const sin = Math.sin(a);
+      // A wedge: two triangles from the trunk face out to a thin ground edge.
+      const t = 0.09;
+      const positions = [
+        // Outer face.
+        cos * shape.base * 0.9, finHeight, sin * shape.base * 0.9,
+        cos * reach, 0, sin * reach,
+        cos * shape.base * 0.9 - sin * t, 0, sin * shape.base * 0.9 + cos * t,
+        cos * shape.base * 0.9, finHeight, sin * shape.base * 0.9,
+        cos * shape.base * 0.9 + sin * t, 0, sin * shape.base * 0.9 - cos * t,
+        cos * reach, 0, sin * reach,
+      ];
+      const fin = new THREE.BufferGeometry();
+      fin.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      fin.computeVertexNormals();
+      parts.push({ geometry: fin, color: new THREE.Color(0x3f2f1f) });
     }
   }
 
@@ -866,29 +1059,32 @@ function buildTree(detail: number): PropAssets {
    * Branches, reaching up and out into the canopy.
    *
    * These do real work beyond decoration: they are what visually *supports* the
-   * leaf mass. Leaf clusters floating with nothing underneath them read as
-   * green clouds, which is what the three smooth domes here used to look like.
+   * leaf mass. Leaf clusters floating with nothing underneath them read as green
+   * clouds, which is what three smooth domes used to look like.
    */
   const branchCount = detail >= 2 ? 5 : detail >= 1 ? 4 : 3;
   const branchTips: [number, number, number][] = [];
   for (let i = 0; i < branchCount; i++) {
-    const a = (i / branchCount) * Math.PI * 2 + 0.4;
-    const lean = 0.62 + (i % 2) * 0.16;
-    const len = 3.6 + (i % 3) * 0.9;
-    const baseY = 11.4 + (i % 3) * 0.9;
+    const a = (i / branchCount) * Math.PI * 2 + 0.4 + v;
+    const bend = 0.62 + (i % 2) * 0.16;
+    const len = (shape.crownR * 0.9) + (i % 3) * 0.7;
+    const baseY = shape.crownY - 3.4 + (i % 3) * 0.9;
     const branch = new THREE.CylinderGeometry(0.07, 0.17, len, 4);
-    // Stand it up, tip it out, then swing it round to its bearing.
     branch.translate(0, len * 0.5, 0);
-    branch.rotateZ(lean);
+    branch.rotateZ(bend);
     branch.rotateY(-a);
-    branch.translate(0, baseY, 0);
+    // Start from the trunk's actual axis at that height, not from x=0 — on a
+    // leaning tree those are metres apart, and branches sprouting from thin air
+    // beside the trunk is worse than no branches at all.
+    const axisT = baseY / shape.height;
+    const drift = shape.lean * axisT * axisT;
+    branch.translate(Math.cos(leanAngle) * drift, baseY, Math.sin(leanAngle) * drift);
     parts.push({ geometry: branch, color: new THREE.Color(0x483623) });
-    // Where the leaves for this branch belong.
-    const reach = Math.sin(lean) * len;
+    const spread = Math.sin(bend) * len;
     branchTips.push([
-      Math.cos(a) * reach,
-      baseY + Math.cos(lean) * len,
-      Math.sin(a) * reach,
+      Math.cos(leanAngle) * drift + Math.cos(a) * spread,
+      baseY + Math.cos(bend) * len,
+      Math.sin(leanAngle) * drift + Math.sin(a) * spread,
     ]);
   }
 
@@ -903,7 +1099,7 @@ function buildTree(detail: number): PropAssets {
   for (let i = 0; i < branchTips.length; i++) {
     leafCluster(parts, {
       count: perCluster,
-      radius: 2.5 + (i % 3) * 0.55,
+      radius: shape.crownR * 0.7 + (i % 3) * 0.55,
       flatten: 0.78,
       leafLength: 1.5,
       leafWidth: 0.66,
@@ -911,15 +1107,30 @@ function buildTree(detail: number): PropAssets {
       palette,
     });
   }
-  leafCluster(parts, {
-    count: perCluster + 4,
-    radius: 3.1,
-    flatten: 0.62,
-    leafLength: 1.7,
-    leafWidth: 0.72,
-    centre: [0, 15.4, 0],
-    palette,
-  });
+  /*
+   * Stacked crown tiers rather than one dome.
+   *
+   * A single cluster on top gives a hemisphere, and a forest of hemispheres is
+   * a bag of peas. Two or three tiers of decreasing radius, each offset a little
+   * sideways, build the layered roof a real canopy has — and on the broadleaf
+   * variant it is what makes the crown read as *wide* rather than merely big.
+   */
+  for (let tier = 0; tier < shape.tiers; tier++) {
+    const t = tier / Math.max(1, shape.tiers - 1);
+    leafCluster(parts, {
+      count: perCluster + 4 - tier * 2,
+      radius: shape.crownR * (1 - t * 0.38),
+      flatten: 0.62,
+      leafLength: 1.7,
+      leafWidth: 0.72,
+      centre: [
+        tipX + Math.cos(tier * 2.4) * shape.crownR * 0.22,
+        tipY - 0.6 + t * 1.9,
+        tipZ + Math.sin(tier * 2.4) * shape.crownR * 0.22,
+      ],
+      palette,
+    });
+  }
 
   /*
    * A lower tier, at four to nine metres.
@@ -929,19 +1140,12 @@ function buildTree(detail: number): PropAssets {
    * camera it looked wrong, because the player's eye is half a metre off the
    * ground and the canopy is entirely out of frame. What filled the screen was a
    * row of bare brown poles with sky between them.
-   *
-   * Real forest fills that band with saplings, epiphytes and the lower branches
-   * of smaller trees. Rather than add another prop for it, each tree carries two
-   * short drooping branches down at eye level. They cost about a tenth of the
-   * canopy and they are the difference between looking at a jungle and looking
-   * through one — which also matters for play, since this is the band that
-   * actually breaks line of sight between two animals.
    */
   if (detail >= 1) {
     const lowPalette = [0x2b5a20, 0x33682a, 0x3c7530, 0x27501d];
     const lowCount = detail >= 2 ? 3 : 2;
     for (let i = 0; i < lowCount; i++) {
-      const a = (i / lowCount) * Math.PI * 2 + 1.9;
+      const a = (i / lowCount) * Math.PI * 2 + 1.9 + v * 0.8;
       const len = 2.2 + (i % 2) * 0.7;
       const baseY = 4.4 + i * 2.1;
       const branch = new THREE.CylinderGeometry(0.05, 0.11, len, 4);
@@ -949,7 +1153,9 @@ function buildTree(detail: number): PropAssets {
       // Past 90°, so the branch droops rather than reaching up.
       branch.rotateZ(1.15);
       branch.rotateY(-a);
-      branch.translate(0, baseY, 0);
+      const axisT = baseY / shape.height;
+      const drift = shape.lean * axisT * axisT;
+      branch.translate(Math.cos(leanAngle) * drift, baseY, Math.sin(leanAngle) * drift);
       parts.push({ geometry: branch, color: new THREE.Color(0x453320) });
       const reach = Math.sin(1.15) * len;
       leafCluster(parts, {
@@ -958,7 +1164,11 @@ function buildTree(detail: number): PropAssets {
         flatten: 0.85,
         leafLength: 1.1,
         leafWidth: 0.5,
-        centre: [Math.cos(a) * reach, baseY + Math.cos(1.15) * len, Math.sin(a) * reach],
+        centre: [
+          Math.cos(leanAngle) * drift + Math.cos(a) * reach,
+          baseY + Math.cos(1.15) * len,
+          Math.sin(leanAngle) * drift + Math.sin(a) * reach,
+        ],
         palette: lowPalette,
       });
     }
@@ -966,6 +1176,7 @@ function buildTree(detail: number): PropAssets {
 
   return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
 }
+
 
 /**
  * A bush: stems and a mass of leaves. The primary hiding place in the game.

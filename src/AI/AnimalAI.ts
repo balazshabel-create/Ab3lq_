@@ -433,13 +433,12 @@ function resetIntent(): void {
   intent.throttle = 0;
   intent.sprint = false;
   intent.jump = false;
-  intent.climb = 0;
   intent.submerge = false;
   intent.ascend = 0;
   intent.wantsFlight = false;
 }
 
-/** Stand still. Flyers land, climbers stay put, everything else just breathes. */
+/** Stand still. Flyers land, everything else just breathes. */
 function doIdle(animal: AiAnimal, ctx: AiContext): void {
   const def = ANIMALS[animal.species];
   if (def.locomotion.canFly) {
@@ -481,10 +480,6 @@ function doSeek(animal: AiAnimal, ctx: AiContext, throttle: number): void {
 
   const def = ANIMALS[animal.species];
   if (def.locomotion.canFly) intent.wantsFlight = d > 14;
-  if (def.locomotion.canClimb && def.temperament.arboreal > 0.7) {
-    // Arboreal animals prefer to be up a tree; climb when one is to hand.
-    intent.climb = animal.move.climbTreeId !== 0 ? 0 : ctx.rng.chance(0.02) ? 1 : 0;
-  }
 }
 
 /** Nose to the ground, shuffling in small steps. */
@@ -526,9 +521,13 @@ function doFlee(animal: AiAnimal, ctx: AiContext): void {
   if (def.temperament.aquatic > 0.5) {
     const river = nearestWaterDirection(animal, ctx);
     if (river !== null) away = blendAngles(away, river, 0.45);
-  } else if (def.temperament.arboreal > 0.6) {
-    intent.climb = 1;
   }
+  /*
+   * No "flee up a tree" branch any more: nothing can climb. An arboreal animal
+   * now runs for cover on the ground like everything else, which is also the
+   * only escape a player has, so the AI and the player still behave alike —
+   * which is the property the whole disguise depends on.
+   */
 
   // Panicked animals do not run in a perfectly straight line either.
   away += Math.sin(ctx.time * 3.1 + animal.personality * 6) * 0.22;

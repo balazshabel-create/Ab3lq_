@@ -4,7 +4,7 @@
  * Split into two passes:
  *   • gameplay props (trees, fruit bushes, fishing spots, huts, bridges, caves)
  *     are generated on both the server and the client from the same seed, since
- *     they collide, can be climbed, or can be eaten;
+ *     they collide or can be eaten;
  *   • cosmetic props (grass, ferns, vines, small rocks) are client-only and
  *     scale with the graphics preset.
  */
@@ -64,12 +64,18 @@ export interface Prop {
   variant: number;
 }
 
-/** Trees carry extra data because they are climbable and block movement. */
+/**
+ * Trees carry extra data because they block movement and camera booms.
+ *
+ * (They used to be climbable too; nothing climbs any more, but `branchHeight` is
+ * still what vines hang from and what the camera-blocker index uses as the top
+ * of the trunk.)
+ */
 export interface TreeProp extends Prop {
   kind: PropKind.Tree;
   /** Trunk radius at the base, used for collision. */
   radius: number;
-  /** Height of the lowest climbable branch. */
+  /** Height of the lowest branch: where vines hang from, and the blocker top. */
   branchHeight: number;
   /** Total trunk height. */
   height: number;
@@ -167,7 +173,15 @@ export function generateWorld(
       z,
       rot: rng.range(0, Math.PI * 2),
       scale,
-      variant: rng.int(0, 3),
+      /*
+       * Uniform over the three tree geometries — see buildTree.
+       *
+       * `Rng.int` is inclusive, so the obvious `int(0, 3)` yields four values for
+       * three variants and, once the renderer takes it modulo 3, hands variant 0
+       * twice the share of the other two. In a forest of four thousand trees that
+       * skew is visible as one shape being conspicuously the common one.
+       */
+      variant: rng.int(0, 2),
       radius: 0.42 * scale + (big ? 0.5 : 0),
       branchHeight: height * rng.range(0.42, 0.6),
       height,

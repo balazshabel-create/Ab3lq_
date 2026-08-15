@@ -17,7 +17,6 @@ import { Species, ANIMALS, BodyPlan } from '../Animals/AnimalTypes';
 
 export enum WeaknessId {
   InjuredLeg = 'injured_leg',
-  InjuredArm = 'injured_arm',
   MissingTeeth = 'missing_teeth',
   BadEye = 'bad_eye',
   WeakLungs = 'weak_lungs',
@@ -27,7 +26,6 @@ export enum WeaknessId {
   EasilyScared = 'easily_scared',
   WeakBody = 'weak_body',
   ShortLegs = 'short_legs',
-  WeakGrip = 'weak_grip',
   HeavyBreather = 'heavy_breather',
   StiffJoints = 'stiff_joints',
   DullSenses = 'dull_senses',
@@ -104,7 +102,7 @@ export interface WeaknessDef {
   /** Species that can never roll this, regardless of body plan. */
   excludeSpecies?: Species[];
   /** Only species that can climb / fly / etc. */
-  requires?: 'climb' | 'fly' | 'teeth' | 'legs';
+  requires?: 'fly' | 'teeth' | 'legs';
 }
 
 /** Relative likelihood of each rarity tier being rolled. */
@@ -181,16 +179,6 @@ export const WEAKNESSES: Record<WeaknessId, WeaknessDef> = {
     requires: 'legs',
   },
 
-  [WeaknessId.InjuredArm]: {
-    id: WeaknessId.InjuredArm,
-    name: 'Injured Arm',
-    emoji: '💪',
-    description: 'One forelimb hangs badly. Climbing is slow and awkward.',
-    advice: 'The canopy is no longer your escape route. Plan a ground exit.',
-    rarity: Rarity.Uncommon,
-    modifiers: { climbMultiplier: 0.6, speedMultiplier: 0.95 },
-    requires: 'climb',
-  },
 
   [WeaknessId.WeakLungs]: {
     id: WeaknessId.WeakLungs,
@@ -234,16 +222,6 @@ export const WEAKNESSES: Record<WeaknessId, WeaknessDef> = {
     modifiers: { hungerRateMultiplier: 1.45 },
   },
 
-  [WeaknessId.WeakGrip]: {
-    id: WeaknessId.WeakGrip,
-    name: 'Weak Grip',
-    emoji: '🖐️',
-    description: 'Your hold on branches is unreliable. Climbing is slow and jumps fall short.',
-    advice: 'Treat height as a hiding place, not as a highway.',
-    rarity: Rarity.Uncommon,
-    modifiers: { climbMultiplier: 0.55, agilityMultiplier: 0.9 },
-    requires: 'climb',
-  },
 
   // --- Rare: reshapes how you play the whole round ------------------------
 
@@ -335,8 +313,6 @@ export function isWeaknessEligible(species: Species, id: WeaknessId): boolean {
       if (!LEGGED_PLANS.includes(animal.silhouette.bodyPlan)) return false;
       if (animal.locomotion.canFly && animal.locomotion.landSpeed < 0.6) return false;
       return true;
-    case 'climb':
-      return animal.locomotion.canClimb;
     case 'fly':
       return animal.locomotion.canFly;
     case 'teeth':

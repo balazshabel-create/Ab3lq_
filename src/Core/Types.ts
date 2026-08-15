@@ -12,7 +12,6 @@ import type { Rng } from '../Systems/Rng';
 // Type-only import: erased at compile time, so this does not create a runtime
 // cycle with Locomotion (which imports the Actor types from here).
 import type {
-  ClimbTargetFinder,
   MoveState,
   ObstacleResolver,
 } from '../Systems/Locomotion';
@@ -317,7 +316,6 @@ export interface AiContext {
    * same movement solver with the same world constraints.
    */
   resolveObstacles?: ObstacleResolver;
-  findClimbTarget?: ClimbTargetFinder;
   rng: Rng;
   /** Simulation time in seconds since the round started. */
   time: number;

@@ -974,9 +974,6 @@ class Game {
     if (def.eats.includes('fish') && inWater) {
       return 'Hold <span class="key-cap">E</span> to fish';
     }
-    if (def.locomotion.canClimb) {
-      return '<span class="key-cap">R</span> to climb a nearby tree';
-    }
     return null;
   }
 

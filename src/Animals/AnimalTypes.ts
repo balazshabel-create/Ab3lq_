@@ -75,7 +75,14 @@ export interface Locomotion {
   landSpeed: number;
   /** Swim speed multiplier. 0 means it cannot enter deep water. */
   swimSpeed: number;
-  /** Can it climb tree trunks? */
+  /**
+   * Can it climb tree trunks?
+   *
+   * Always false. Climbing was removed — trees are scenery and cover, not
+   * terrain — and the field is kept only so the shape of the table stays stable
+   * for anything that reads it. Setting it true will not make an animal climb;
+   * the movement solver has no climbing code left.
+   */
   canClimb: boolean;
   /** Climb speed multiplier. */
   climbSpeed: number;
@@ -249,7 +256,7 @@ function loco(partial: Partial<Locomotion>): Locomotion {
     landSpeed: 1,
     swimSpeed: 0.5,
     canClimb: false,
-    climbSpeed: 0,
+      climbSpeed: 0,
     canJump: true,
     jumpPower: 1,
     canFly: false,
@@ -385,13 +392,13 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     playable: false,
     canBeHunter: false,
     ability: AbilityId.BranchLeap,
-    pros: ['Climbs and leaps', 'Travels through the canopy', 'Very agile', 'Hard to corner'],
+    pros: ['Very agile', 'Hard to corner'],
     cons: ['Hungry constantly', 'Fragile', 'Noisy in the branches'],
     locomotion: loco({
       landSpeed: 1.12,
       swimSpeed: 0.35,
-      canClimb: true,
-      climbSpeed: 1.5,
+      canClimb: false,
+      climbSpeed: 0,
       jumpPower: 1.45,
       sprintMultiplier: 1.7,
       agility: 1.4,
@@ -437,8 +444,8 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     locomotion: loco({
       landSpeed: 0.26,
       swimSpeed: 0.55,
-      canClimb: true,
-      climbSpeed: 0.75,
+      canClimb: false,
+      climbSpeed: 0,
       canJump: false,
       sprintMultiplier: 1.2,
       agility: 0.4,
@@ -485,13 +492,13 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     playable: false,
     canBeHunter: false,
     ability: AbilityId.Pounce,
-    pros: ['Explosive sprint', 'Pounces from cover', 'Climbs trees', 'Swims well for a cat'],
+    pros: ['Explosive sprint', 'Pounces from cover', 'Swims well for a cat'],
     cons: ['Starves fast', 'Every animal flees on sight', 'Few AI jaguars to hide among'],
     locomotion: loco({
       landSpeed: 1.32,
       swimSpeed: 0.85,
-      canClimb: true,
-      climbSpeed: 1.1,
+      canClimb: false,
+      climbSpeed: 0,
       jumpPower: 1.3,
       sprintMultiplier: 2.05,
       agility: 1.25,
@@ -615,13 +622,13 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     playable: false,
     canBeHunter: false,
     ability: AbilityId.Pounce,
-    pros: ['Quiet and quick', 'Small target', 'Climbs', 'Easy to mistake for scenery at dusk'],
+    pros: ['Quiet and quick', 'Small target', 'Easy to mistake for scenery at dusk'],
     cons: ['Fragile', 'Cannot take down large prey', 'Hungry'],
     locomotion: loco({
       landSpeed: 1.2,
       swimSpeed: 0.6,
-      canClimb: true,
-      climbSpeed: 1.2,
+      canClimb: false,
+      climbSpeed: 0,
       jumpPower: 1.25,
       sprintMultiplier: 1.95,
       agility: 1.45,
@@ -740,13 +747,13 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     playable: false,
     canBeHunter: false,
     ability: AbilityId.ColorShift,
-    pros: ['Low hunger', 'Blends into foliage', 'Climbs', 'Swims'],
+    pros: ['Low hunger', 'Blends into foliage', 'Swims'],
     cons: ['Weak', 'Slow when cold', 'Basks in the open by instinct'],
     locomotion: loco({
       landSpeed: 0.85,
       swimSpeed: 0.9,
-      canClimb: true,
-      climbSpeed: 0.9,
+      canClimb: false,
+      climbSpeed: 0,
       sprintMultiplier: 1.7,
       agility: 1.1,
     }),
@@ -778,7 +785,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     playable: false,
     canBeHunter: false,
     pros: ['Sturdy', 'Big noisy herds to hide in', 'Decent sprint'],
-    cons: ['Very loud', 'Poor swimmer', 'Cannot climb'],
+    cons: ['Very loud', 'Poor swimmer'],
     locomotion: loco({ landSpeed: 1.05, swimSpeed: 0.45, sprintMultiplier: 1.75, agility: 1 }),
     silhouette: {
       length: 1.0,
@@ -839,7 +846,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     canBeHunter: false,
     ability: AbilityId.CurlUp,
     pros: ['Armour plating', 'Curls up to survive a hit', 'Low profile'],
-    cons: ['Slow', 'Poor eyesight', 'Cannot swim or climb'],
+    cons: ['Slow', 'Poor eyesight', 'Cannot swim'],
     locomotion: loco({ landSpeed: 0.7, swimSpeed: 0.2, canJump: false, sprintMultiplier: 1.5, agility: 0.8 }),
     silhouette: {
       length: 0.85,
@@ -1024,13 +1031,13 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     playable: false,
     canBeHunter: false,
     ability: AbilityId.ColorShift,
-    pros: ['Best camouflage in the game', 'Silent', 'Climbs'],
+    pros: ['Best camouflage in the game', 'Silent'],
     cons: ['Painfully slow', 'Dies instantly', 'Camouflage breaks if you move'],
     locomotion: loco({
       landSpeed: 0.4,
       swimSpeed: 0.1,
-      canClimb: true,
-      climbSpeed: 0.8,
+      canClimb: false,
+      climbSpeed: 0,
       canJump: false,
       sprintMultiplier: 1.3,
       agility: 0.8,
@@ -1064,13 +1071,13 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     playable: false,
     canBeHunter: false,
     ability: AbilityId.BranchLeap,
-    pros: ['Canopy travel', 'Constant AI howling masks your noise', 'Climbs fast'],
+    pros: ['Constant AI howling masks your noise'],
     cons: ['The loudest animal alive', 'Slow on the ground'],
     locomotion: loco({
       landSpeed: 0.85,
       swimSpeed: 0.3,
-      canClimb: true,
-      climbSpeed: 1.35,
+      canClimb: false,
+      climbSpeed: 0,
       jumpPower: 1.3,
       sprintMultiplier: 1.55,
       agility: 1.2,
@@ -1219,8 +1226,8 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     locomotion: loco({
       landSpeed: 1.24,
       swimSpeed: 0.9,
-      canClimb: true,
-      climbSpeed: 0.85,
+      canClimb: false,
+      climbSpeed: 0,
       jumpPower: 1.25,
       sprintMultiplier: 1.95,
       agility: 1.1,
@@ -1262,13 +1269,13 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     playable: true,
     canBeHunter: true,
     ability: AbilityId.Pounce,
-    pros: ['Fastest animal alive', 'Huge stamina', 'Climbs anything', 'Nearly silent'],
+    pros: ['Fastest animal alive', 'Huge stamina', 'Nearly silent'],
     cons: ['Starves fast', 'Weak bite for a cat', 'Thin hide'],
     locomotion: loco({
       landSpeed: 1.5,
       swimSpeed: 0.7,
-      canClimb: true,
-      climbSpeed: 1.3,
+      canClimb: false,
+      climbSpeed: 0,
       jumpPower: 1.45,
       sprintMultiplier: 2.35,
       agility: 1.4,
@@ -1310,7 +1317,7 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     playable: true,
     canBeHunter: true,
     ability: AbilityId.HerdBlend,
-    pros: ['Strongest attack in the game', 'Stands up to look around', 'Climbs well'],
+    pros: ['Strongest attack in the game', 'Stands up to look around'],
     cons: ['Cannot swim — deep water drowns it', 'Noisy', 'Only average speed'],
     /*
      * swimSpeed 0 is load-bearing, not a rounding of "swims badly".
@@ -1323,8 +1330,8 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     locomotion: loco({
       landSpeed: 1.05,
       swimSpeed: 0,
-      canClimb: true,
-      climbSpeed: 1.0,
+      canClimb: false,
+      climbSpeed: 0,
       jumpPower: 0.9,
       sprintMultiplier: 1.7,
       agility: 0.85,
