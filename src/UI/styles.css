@@ -891,60 +891,134 @@ input[type='text']:focus {
 }
 
 /* Stat bars */
-.stat-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.stat-icon {
-  font-size: 15px;
-  width: 20px;
-  text-align: center;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8));
-}
-
-.stat-track {
+/* --- The vitals dial ------------------------------------------------------
+ *
+ * Three concentric arcs round the animal you are wearing. The arcs differ in
+ * length as well as in colour, so they are told apart by shape at a glance —
+ * which three identical stacked bars never were.
+ */
+.vitals {
   position: relative;
-  width: 168px;
-  height: 9px;
-  background: rgba(0, 0, 0, 0.62);
-  border: 1px solid rgba(0, 0, 0, 0.8);
-  border-radius: 2px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  width: 148px;
+  height: 148px;
+  /* The arcs run to the very edge of the box and the readout sits below them,
+     so the corner needs more room than the 16px every other corner gets. */
+  margin: 0 0 10px 10px;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.75));
 }
 
-.stat-fill {
+.vitals-svg {
   position: absolute;
   inset: 0;
-  transform-origin: left center;
-  transition: transform 0.22s ease, background-color 0.4s ease;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
-.stat-fill.health {
-  background: linear-gradient(90deg, #a83232, var(--health));
+.vitals-svg circle {
+  fill: none;
 }
 
-.stat-fill.hunger {
-  background: linear-gradient(90deg, #a35d1c, var(--hunger));
+.vital-track {
+  stroke: rgba(8, 10, 7, 0.66);
 }
 
-.stat-fill.stamina {
-  background: linear-gradient(90deg, #a89a2a, var(--stamina));
+.vital-fill {
+  /* Transition the dash offset, not a transform: the arc then *drains* round
+     the ring instead of the whole ring rescaling. */
+  transition: stroke-dashoffset 0.24s ease, stroke 0.4s ease;
 }
 
-.stat-fill.low {
+.vital-fill.health {
+  stroke: var(--health);
+}
+
+.vital-fill.hunger {
+  stroke: var(--hunger);
+}
+
+.vital-fill.stamina {
+  stroke: var(--stamina);
+}
+
+.vital-fill.low {
   animation: pulse-warn 0.85s ease-in-out infinite;
 }
 
-.stat-text {
-  font-size: 11px;
+.vitals-core {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  pointer-events: none;
+}
+
+.vitals-glyph {
+  font-size: 25px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.9));
+}
+
+.vitals-glyph.hunter {
+  /* The hunter's own dial runs cold, so he never mistakes it for an animal's. */
+  filter: drop-shadow(0 0 5px rgba(196, 74, 62, 0.9));
+}
+
+.vitals-health {
+  font-size: 22px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: rgba(243, 237, 225, 0.82);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
-  min-width: 34px;
+  letter-spacing: 0.02em;
+  color: rgba(243, 237, 225, 0.95);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+
+.vitals-health.low {
+  color: var(--health);
+  animation: pulse-warn 0.85s ease-in-out infinite;
+}
+
+/* Sits in the gap the arcs leave at the bottom. */
+.vitals-readout {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+
+.vitals-stat.hunger {
+  color: var(--hunger);
+  margin-right: 6px;
+}
+
+.vitals-stat.stamina {
+  color: var(--stamina);
+}
+
+.vitals-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.vitals-dot.hunger {
+  background: var(--hunger);
+}
+
+.vitals-dot.stamina {
+  background: var(--stamina);
 }
 
 @keyframes pulse-warn {

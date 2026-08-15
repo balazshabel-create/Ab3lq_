@@ -1,7 +1,7 @@
 /**
  * HungerSystem.ts — the second clock every survivor is racing.
  *
- * Hunger is what stops "hide in a bush for ten minutes" from being a winning
+ * Hunger is what stops "hide in a bush for the whole round" from being a winning
  * strategy. Because each species drains at a different rate, it also creates
  * genuinely different rounds: a sloth can afford to sit in a tree and do
  * nothing, while a jaguar has to keep hunting in the open and keeps walking

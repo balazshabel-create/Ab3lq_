@@ -1,0 +1,83 @@
+<!doctype html>
+<!--
+  hud-view.html — the HUD on its own, with no 3D scene behind it.
+
+  A development page. The HUD is plain DOM, but the only way to look at it used
+  to be to play a round — which means booting the renderer, generating a world
+  and waiting out the intro, and on a software rasteriser that is minutes per
+  screenshot. Here it renders in about fifty milliseconds, which is the
+  difference between checking a layout change and not bothering.
+
+  Query string picks the numbers: ?health=22&hunger=8&stamina=40
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>JukeJungle HUD</title>
+    <link rel="stylesheet" href="/src/UI/styles.css" />
+    <style>
+      /* Stand-in for the game behind it, so contrast is judged fairly. */
+      body {
+        margin: 0;
+        height: 100vh;
+        background:
+          radial-gradient(circle at 30% 30%, #4c5f3d 0%, #2b3626 60%, #161d13 100%);
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      import { Hud } from '/src/UI/Hud.ts';
+      import { Species } from '/src/Animals/AnimalTypes.ts';
+      import { Role } from '/src/Core/Types.ts';
+      import { WeaknessId } from '/src/Gameplay/Weaknesses.ts';
+
+      const q = new URLSearchParams(location.search);
+      const num = (k, d) => Number(q.get(k) ?? d);
+
+      const hud = new Hud();
+      document.body.appendChild(hud.root);
+      hud.root.classList.add('active');
+      hud.setVisible(true);
+
+      hud.update(
+        {
+          health: num('health', 62),
+          maxHealth: 100,
+          hunger: num('hunger', 34),
+          stamina: num('stamina', 48),
+          maxStamina: 100,
+          sinceWhistle: 39,
+          flies: 0.2,
+          role: q.get('role') === 'hunter' ? Role.Hunter : Role.Survivor,
+          species: q.get('species') ?? Species.Leopard,
+          weakness: WeaknessId.EasilyScared,
+          timeLeft: num('timeLeft', 812),
+          survivorsAlive: 3,
+          survivorsTotal: 5,
+          weatherLabel: 'Rain',
+          weatherEmoji: '🌧️',
+          timeOfDay: 'Dusk',
+          abilityReady: true,
+          listenReady: true,
+          eating: false,
+          dead: false,
+          underwater: false,
+          zone: {
+            stage: 2,
+            totalStages: 5,
+            shrinking: true,
+            untilShrink: 34,
+            distanceOutside: -120,
+          },
+          interactPrompt: null,
+          pointerLocked: true,
+          pointerLockUnavailable: false,
+        },
+        0.016,
+      );
+
+      window.__hudReady = true;
+    </script>
+  </body>
+</html>

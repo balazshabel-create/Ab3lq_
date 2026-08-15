@@ -24,6 +24,18 @@ import type { KillFeedEntry } from '../Networking/Protocol';
 import { clamp01 } from '../Systems/Noise';
 import { el, formatTime } from './UiUtils';
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * How much of each vitals ring is drawn, as a fraction of the full circle.
+ *
+ * Three quarters, leaving a quarter-circle gap at the bottom. The gap is not
+ * decoration — a closed ring has no beginning, so "nearly full" and "nearly
+ * empty" look alike at a glance, and the two ends of an open arc give the eye
+ * the reference points it needs. The numbers sit in the gap.
+ */
+const VITAL_SWEEP = 0.75;
+
 export interface HudState {
   health: number;
   maxHealth: number;
@@ -74,12 +86,14 @@ export interface HudState {
 export class Hud {
   readonly root: HTMLElement;
 
-  private healthFill: HTMLElement;
-  private healthText: HTMLElement;
-  private hungerFill: HTMLElement;
-  private hungerText: HTMLElement;
-  private staminaFill: HTMLElement;
-  private staminaText: HTMLElement;
+  // Assigned by buildVitalsDial(), which the constructor calls — TypeScript
+  // cannot see through the helper, hence the definite-assignment marks.
+  private healthText!: HTMLElement;
+  private hungerText!: HTMLElement;
+  private staminaText!: HTMLElement;
+  private vitalGlyph!: HTMLElement;
+  /** The three arc elements, with the dash length that means "full". */
+  private vitalArcs = new Map<string, { node: SVGCircleElement; arc: number }>();
 
   private timerEl: HTMLElement;
   private roundMeta: HTMLElement;
@@ -120,29 +134,30 @@ export class Hud {
   constructor() {
     this.root = el('div', { id: 'screen-hud', class: 'screen' });
 
-    // --- Bottom left: health, hunger, stamina ---------------------------
+    /*
+     * --- Bottom left: the vitals dial -------------------------------------
+     *
+     * Three concentric arcs around the animal you are wearing, rather than
+     * three horizontal bars stacked in a corner.
+     *
+     * The bars were not wrong, they were *mute*. Three identical rectangles
+     * differing only in colour make you read a label to know which is which,
+     * and reading a label is exactly what nobody does while something with a
+     * rifle is walking towards them. A ring has three properties a bar does
+     * not: the arcs are different lengths so they are told apart by shape as
+     * well as by hue, the whole cluster occupies one glance instead of three,
+     * and there is a hole in the middle — which is where the species glyph
+     * goes, so the one question a player asks most often ("what am I?") is
+     * answered by the same object that answers "how am I doing?".
+     */
     const bottomLeft = el('div', { class: 'hud-corner hud-bottom-left' });
-
-    const health = this.buildBar('❤️', 'health');
-    this.healthFill = health.fill;
-    this.healthText = health.text;
-    bottomLeft.appendChild(health.row);
-
-    const hunger = this.buildBar('🍖', 'hunger');
-    this.hungerFill = hunger.fill;
-    this.hungerText = hunger.text;
-    bottomLeft.appendChild(hunger.row);
-
-    const stamina = this.buildBar('⚡', 'stamina');
-    this.staminaFill = stamina.fill;
-    this.staminaText = stamina.text;
-    bottomLeft.appendChild(stamina.row);
-
+    const dial = this.buildVitalsDial();
+    bottomLeft.appendChild(dial);
     this.root.appendChild(bottomLeft);
 
     // --- Top left: timer and weather ------------------------------------
     const topLeft = el('div', { class: 'hud-corner hud-top-left' });
-    this.timerEl = el('div', { class: 'round-timer' }, '10:00');
+    this.timerEl = el('div', { class: 'round-timer' }, '15:00');
     this.roundMeta = el('div', { class: 'round-meta' }, 'Survivors 0/0');
     this.weatherEl = el('div', { class: 'weather-strip' }, '☀️ Sunny · Afternoon');
     topLeft.append(this.timerEl, this.roundMeta, this.weatherEl);
@@ -235,19 +250,92 @@ export class Hud {
     );
   }
 
-  private buildBar(icon: string, kind: string): {
-    row: HTMLElement;
-    fill: HTMLElement;
-    text: HTMLElement;
-  } {
-    const row = el('div', { class: 'stat-bar' });
-    const iconEl = el('div', { class: 'stat-icon' }, icon);
-    const track = el('div', { class: 'stat-track' });
-    const fill = el('div', { class: `stat-fill ${kind}` });
-    track.appendChild(fill);
-    const text = el('div', { class: 'stat-text' }, '100%');
-    row.append(iconEl, track, text);
-    return { row, fill, text };
+  /**
+   * Build the vitals dial: three concentric SVG arcs and a glyph in the hole.
+   *
+   * Each arc is a full circle whose dash pattern draws only three quarters of
+   * it, leaving a gap at the bottom, and the *filled* portion is then set by
+   * moving the dash offset. That is the whole mechanism — one number per arc
+   * per frame, no path rebuilding, and the browser interpolates the change for
+   * free through a CSS transition on stroke-dashoffset.
+   */
+  private buildVitalsDial(): HTMLElement {
+    const wrap = el('div', { class: 'vitals' });
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 100 100');
+    svg.setAttribute('class', 'vitals-svg');
+
+    // Outer to inner: health, food, breath. Health is outermost because it is
+    // the one you must never have to look for.
+    const rings: { kind: string; radius: number; width: number }[] = [
+      { kind: 'health', radius: 43, width: 7.5 },
+      { kind: 'hunger', radius: 33, width: 6.5 },
+      { kind: 'stamina', radius: 24, width: 5.5 },
+    ];
+
+    for (const ring of rings) {
+      const circumference = 2 * Math.PI * ring.radius;
+      const arc = circumference * VITAL_SWEEP;
+      for (const role of ['track', 'fill'] as const) {
+        const circle = document.createElementNS(SVG_NS, 'circle');
+        circle.setAttribute('cx', '50');
+        circle.setAttribute('cy', '50');
+        circle.setAttribute('r', String(ring.radius));
+        circle.setAttribute('stroke-width', String(ring.width));
+        circle.setAttribute('stroke-linecap', 'round');
+        /*
+         * The gap sits at the bottom, so the two ends frame the readout below.
+         *
+         * 45°, not 135°. An SVG <circle> is traced anticlockwise on screen from
+         * three o'clock, so the undrawn quarter starts out centred on half past
+         * four; a quarter turn brings it to six. (135° is the answer for a path
+         * traced the other way, and it put the gap out on the left.)
+         */
+        circle.setAttribute('transform', 'rotate(45 50 50)');
+        circle.setAttribute('stroke-dasharray', `${arc} ${circumference - arc}`);
+        circle.setAttribute(
+          'class',
+          role === 'track' ? 'vital-track' : `vital-fill ${ring.kind}`,
+        );
+        svg.appendChild(circle);
+        if (role === 'fill') {
+          this.vitalArcs.set(ring.kind, { node: circle, arc });
+        }
+      }
+    }
+
+    wrap.appendChild(svg);
+
+    const core = el('div', { class: 'vitals-core' });
+    this.vitalGlyph = el('div', { class: 'vitals-glyph' }, '🐾');
+    this.healthText = el('div', { class: 'vitals-health' }, '100');
+    core.append(this.vitalGlyph, this.healthText);
+    wrap.appendChild(core);
+
+    // The two secondary numbers live under the gap in the arcs, which is what
+    // the gap is for.
+    const readout = el('div', { class: 'vitals-readout' });
+    this.hungerText = el('div', { class: 'vitals-stat hunger' }, '100');
+    this.staminaText = el('div', { class: 'vitals-stat stamina' }, '100');
+    // A dot in each arc's own colour, so the two numbers are attributable
+    // without a legend and without reading a word.
+    readout.append(
+      el('span', { class: 'vitals-dot hunger' }),
+      this.hungerText,
+      el('span', { class: 'vitals-dot stamina' }),
+      this.staminaText,
+    );
+    wrap.appendChild(readout);
+
+    return wrap;
+  }
+
+  /** Drive one arc from a 0..1 fraction. */
+  private setArc(kind: string, fraction: number, low: boolean): void {
+    const ring = this.vitalArcs.get(kind);
+    if (!ring) return;
+    ring.node.style.strokeDashoffset = String(ring.arc * (1 - clamp01(fraction)));
+    ring.node.classList.toggle('low', low);
   }
 
   private buildAbility(icon: string, key: string): HTMLElement {
@@ -264,20 +352,19 @@ export class Hud {
   // -------------------------------------------------------------------------
 
   update(state: HudState, dt: number): void {
-    // --- Bars ------------------------------------------------------------
+    // --- Vitals ----------------------------------------------------------
     const healthPct = clamp01(state.health / Math.max(1, state.maxHealth));
-    this.healthFill.style.transform = `scaleX(${healthPct})`;
+    this.setArc('health', healthPct, healthPct < 0.3);
     this.healthText.textContent = `${Math.ceil(state.health)}`;
-    this.healthFill.classList.toggle('low', healthPct < 0.3);
+    this.healthText.classList.toggle('low', healthPct < 0.3);
 
     const hungerPct = clamp01(state.hunger / 100);
-    this.hungerFill.style.transform = `scaleX(${hungerPct})`;
-    this.hungerText.textContent = `${Math.round(state.hunger)}%`;
-    this.hungerFill.classList.toggle('low', hungerPct < 0.25);
+    this.setArc('hunger', hungerPct, hungerPct < 0.25);
+    this.hungerText.textContent = `${Math.round(state.hunger)}`;
 
     const staminaPct = clamp01(state.stamina / Math.max(1, state.maxStamina));
-    this.staminaFill.style.transform = `scaleX(${staminaPct})`;
-    this.staminaText.textContent = `${Math.round(staminaPct * 100)}%`;
+    this.setArc('stamina', staminaPct, staminaPct < 0.2);
+    this.staminaText.textContent = `${Math.round(staminaPct * 100)}`;
 
     // --- Timer -----------------------------------------------------------
     this.timerEl.textContent = formatTime(state.timeLeft);
@@ -294,6 +381,9 @@ export class Hud {
     this.roleBadge.textContent = isHunter
       ? `${def.emoji} HUNTER · ${def.name}`
       : `${def.emoji} ${def.name}`;
+    // The hole in the middle of the dial answers "what am I?".
+    if (this.vitalGlyph.textContent !== def.emoji) this.vitalGlyph.textContent = def.emoji;
+    this.vitalGlyph.classList.toggle('hunter', isHunter);
     this.roleBadge.classList.toggle('hunter', isHunter);
 
     if (state.weakness) {

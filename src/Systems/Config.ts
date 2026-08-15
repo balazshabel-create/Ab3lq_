@@ -10,8 +10,15 @@
 // Round / match flow
 // ---------------------------------------------------------------------------
 
-/** Length of one round, in seconds. 10 minutes by design. */
-export const ROUND_DURATION = 600;
+/**
+ * Length of one round, in seconds. Fifteen minutes.
+ *
+ * Long enough that the hunter cannot win by rushing. He has to find several
+ * players and be *sure* about each one before he fires, and being sure means
+ * watching an animal for a while — at ten minutes the arithmetic pushed him
+ * towards shooting on a hunch, which is the one thing the design cannot afford.
+ */
+export const ROUND_DURATION = 900;
 
 /** Countdown after all players are ready, before the round actually starts. */
 export const ROUND_INTRO_DURATION = 8;
@@ -38,7 +45,7 @@ export const SNAPSHOT_RATE = 10;
  * Base hunger drain in percent per second, before the species multiplier and
  * before any weakness modifier.
  *
- * Tuned so that hunger is a real clock inside a single ten minute round rather
+ * Tuned so that hunger is a real clock inside a single round rather
  * than a decoration. At 0.24 %/s an average animal (multiplier 1.0) empties its
  * bar in about seven minutes, which lands the species spread where the design
  * wants it:
@@ -188,8 +195,13 @@ export const RIFLE_WINDUP = 0.34;
  */
 export const ATTACK_STRIKE_TIME = 0.34;
 
-/** Damage an AI apex predator deals to a player (less than a real hunter). */
-export const AI_PREDATOR_DAMAGE = 16;
+/**
+ * How often an AI predator can strike.
+ *
+ * The damage it deals is no longer a constant — it comes from FoodChain's
+ * biteDamage, the same function the player's attack uses, because a flat value
+ * here meant an AI and a player of the same species fought differently.
+ */
 export const AI_PREDATOR_ATTACK_COOLDOWN = 3.0;
 
 /** Health regeneration per second while not starving and not recently hit. */

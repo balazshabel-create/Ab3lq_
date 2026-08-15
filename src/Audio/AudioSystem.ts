@@ -933,48 +933,113 @@ export class AudioSystem {
   /**
    * The flies.
    *
-   * A buzzing drone that gets louder and more insistent as the swarm grows.
-   * Non-positional for your own swarm — you should be able to *hear* that you
-   * are in trouble even when the camera is pointed away.
+   * ## What was wrong with it
+   *
+   * One sawtooth through a narrow bandpass, with an LFO on its *frequency*.
+   * That is a siren, not an insect: a single steady pitch wobbling up and down
+   * a few hertz. It read as a synth left switched on, and since this sound is
+   * the game's central punishment — it is what tells you, and everyone near
+   * you, that you have not whistled — sounding like a synth is a real problem.
+   *
+   * ## What a buzz actually is
+   *
+   * Three things, none of which the old version had:
+   *
+   *  1. **Amplitude modulation at the wingbeat rate.** The rasp in "bzzzz" is
+   *     the wings chopping the sound roughly two hundred times a second; that is
+   *     amplitude, not pitch. Modulating pitch instead gives a wobble, which is
+   *     the sound of a theremin.
+   *  2. **Several insects, detuned.** A swarm is many wingbeats at slightly
+   *     different rates beating against each other, and that beating is the
+   *     entire difference between "a fly" and "flies". Three voices a few hertz
+   *     apart is enough; the interference does the rest for free.
+   *  3. **Wandering.** Each voice drifts in pitch and in loudness at its own
+   *     slow, unrelated rate, so the swarm never settles into a chord — which is
+   *     what a sustained detuned drone does if you leave it alone.
+   *
+   * Non-positional for your own swarm: you should be able to *hear* that you are
+   * in trouble even when the camera is pointed away from you.
    */
-  private flyOsc: { osc: OscillatorNode; gain: GainNode; filter: BiquadFilterNode } | null = null;
+  private flySwarm: {
+    gain: GainNode;
+    filter: BiquadFilterNode;
+    voices: { osc: OscillatorNode; drift: OscillatorNode; driftGain: GainNode }[];
+  } | null = null;
 
   updateFlyBuzz(intensity: number): void {
     const ctx = this.ctx;
     if (!ctx || !this.sfxBus) return;
 
     if (intensity <= 0.01) {
-      if (this.flyOsc) {
-        this.flyOsc.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.2);
-      }
+      if (this.flySwarm) this.flySwarm.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.25);
       return;
     }
 
-    if (!this.flyOsc) {
-      const osc = ctx.createOscillator();
-      osc.type = 'sawtooth';
-      osc.frequency.value = 148;
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'bandpass';
-      filter.frequency.value = 420;
-      filter.Q.value = 3.5;
-      // Amplitude wobble, so it sounds like insects rather than a synth.
-      const lfo = ctx.createOscillator();
-      lfo.frequency.value = 7.5;
-      const lfoGain = ctx.createGain();
-      lfoGain.gain.value = 26;
-      lfo.connect(lfoGain).connect(osc.frequency);
-      lfo.start();
+    if (!this.flySwarm) {
       const gain = ctx.createGain();
       gain.gain.value = 0;
-      osc.connect(filter).connect(gain).connect(this.sfxBus);
-      osc.start();
-      this.flyOsc = { osc, gain, filter };
+
+      /*
+       * Wide enough to pass the harmonics. The old filter's Q of 3.5 around
+       * 420 Hz left a single narrow band, which is exactly why it hummed
+       * instead of buzzing — a buzz *is* its harmonics.
+       */
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 700;
+      filter.Q.value = 1.1;
+      filter.connect(gain).connect(this.sfxBus);
+
+      // Wingbeat rates of three separate insects, in hertz. Close enough to
+      // beat against each other, far enough apart not to sound like one.
+      const wingbeats = [158, 172, 197];
+      const voices: { osc: OscillatorNode; drift: OscillatorNode; driftGain: GainNode }[] = [];
+      for (let i = 0; i < wingbeats.length; i++) {
+        const osc = ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.value = wingbeats[i];
+
+        /*
+         * The rasp: a gain node whose level is driven by a square wave at the
+         * wingbeat rate. Square rather than sine because a wing is either in the
+         * downstroke or it is not — the hard edges are the buzz.
+         */
+        const chopper = ctx.createGain();
+        chopper.gain.value = 0.55;
+        const beat = ctx.createOscillator();
+        beat.type = 'square';
+        beat.frequency.value = wingbeats[i] * 0.5;
+        const beatDepth = ctx.createGain();
+        beatDepth.gain.value = 0.45;
+        beat.connect(beatDepth).connect(chopper.gain);
+        beat.start();
+
+        // Wandering: a slow, deliberately irrational rate per voice, so the
+        // three never line up into a steady chord.
+        const drift = ctx.createOscillator();
+        drift.frequency.value = 0.23 + i * 0.17;
+        const driftGain = ctx.createGain();
+        driftGain.gain.value = 9 + i * 4;
+        drift.connect(driftGain).connect(osc.frequency);
+        drift.start();
+
+        osc.connect(chopper).connect(filter);
+        osc.start();
+        voices.push({ osc, drift, driftGain });
+      }
+
+      this.flySwarm = { gain, filter, voices };
     }
 
     const t = ctx.currentTime;
-    this.flyOsc.gain.gain.setTargetAtTime(clamp01(intensity) * 0.17, t, 0.25);
-    this.flyOsc.filter.frequency.setTargetAtTime(380 + intensity * 260, t, 0.3);
+    const level = clamp01(intensity);
+    this.flySwarm.gain.gain.setTargetAtTime(level * 0.2, t, 0.3);
+    // A bigger swarm is brighter and more agitated, not merely louder.
+    this.flySwarm.filter.frequency.setTargetAtTime(560 + level * 620, t, 0.35);
+    for (let i = 0; i < this.flySwarm.voices.length; i++) {
+      const voice = this.flySwarm.voices[i];
+      voice.driftGain.gain.setTargetAtTime(6 + level * (10 + i * 6), t, 0.5);
+    }
   }
 
   /** A bite landing. Meaty, short, and unmistakable. */
@@ -1166,7 +1231,7 @@ export class AudioSystem {
     this.ctx = null;
     this.started = false;
     this.layers.clear();
-    this.flyOsc = null;
+    this.flySwarm = null;
   }
 }
 

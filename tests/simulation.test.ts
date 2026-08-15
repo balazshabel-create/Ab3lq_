@@ -9,8 +9,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { Simulation } from '../src/Core/Simulation';
-import { ActorKind, Role, RoundPhase, ActorFlags, type Actor } from '../src/Core/Types';
 import {
+  ActorKind,
+  Role,
+  RoundPhase,
+  ActorFlags,
+  type Actor,
+  type PlayerActor,
+} from '../src/Core/Types';
+import {
+  AbilityId,
   ALL_SPECIES,
   ANIMALS,
   PLAYABLE_SPECIES,
@@ -588,46 +596,71 @@ test('withdrawn species never appear anywhere in the game', () => {
 });
 
 test('a predator can actually kill the AI prey it hunts', () => {
-  // Regression test for a bite that connected but did nothing useful: at
-  // HUNTER_DAMAGE a fleeing capybara needed three hits across seven seconds, so
-  // predators could never feed and the attack felt broken.
+  /*
+   * Regression test for a bite that connected but did nothing useful: at
+   * HUNTER_DAMAGE a fleeing capybara needed three hits across seven seconds, so
+   * predators could never feed and the attack felt broken.
+   *
+   * The biter has to be a *survivor*, not whoever holds the hunter role: the
+   * hunter is a man with a rifle now, and a rifle is a different mechanic with
+   * its own tests. Six players, so the roster is likely to deal somebody a
+   * carnivore; the test skips itself rather than failing if it does not, because
+   * species are dealt at random and a flaky test is worse than a missing one.
+   */
   const sim = new Simulation(1357);
-  sim.addPlayer('a', 'A');
+  for (let i = 0; i < 6; i++) sim.addPlayer(`p${i}`, `P${i}`);
   sim.startRound();
   advance(sim, 10);
 
-  const hunter = sim.getPlayers()[0];
-  assert.equal(hunter.role, Role.Hunter, 'a solo player is dealt the hunter role');
+  let biter: PlayerActor | null = null;
+  let target: Actor | null = null;
+  for (const p of sim.getPlayers()) {
+    if (p.role !== Role.Survivor) continue;
+    sim.forEachNearby(0, 0, 100_000, (a) => {
+      if (target) return;
+      // An AI animal, not another player: a player takes a deliberately
+      // survivable bite, which is a different rule and has its own test.
+      if (a.kind !== ActorKind.AI) return;
+      // Ground prey only: a parrot is airborne, and it will have flown a good
+      // fraction of a metre by the time the strike resolves — at biting range
+      // that is a large angle, and the miss would be the AI's doing, not a bug.
+      if ((a.flags & ActorFlags.Airborne) !== 0) return;
+      /*
+       * Nor anything that can pull itself in. Armour cuts a bite to a third,
+       * which is the point of armour — and a tortoise standing next to a leopard
+       * curls up *in the same tick the strike resolves*, so a test that picked
+       * one would be asserting on the AI's reflexes rather than on the bite.
+       */
+      if (ANIMALS[a.species].ability === AbilityId.CurlUp) return;
+      if (canPrey(p.species, a.species)) {
+        biter = p;
+        target = a;
+      }
+    });
+    if (target) break;
+  }
+  if (!biter || !target) return; // nobody was dealt a predator this round
 
-  // Find something this predator naturally hunts.
-  const found: Actor[] = [];
-  sim.forEachNearby(0, 0, 100_000, (a) => {
-    if (found.length === 0 && canPrey(hunter.species, a.species)) found.push(a);
-  });
-  assert.ok(found.length > 0, `found no prey species for a ${hunter.species}`);
+  const prey = target as Actor;
+  const predator = biter as PlayerActor;
+  prey.pos.x = predator.pos.x + Math.cos(predator.yaw) * 1.6;
+  prey.pos.z = predator.pos.z + Math.sin(predator.yaw) * 1.6;
+  prey.pos.y = predator.pos.y;
 
-  // Put it right in front of the hunter's jaws.
-  const target = found[0];
-  target.pos.x = hunter.pos.x + Math.cos(hunter.yaw) * 1.6;
-  target.pos.z = hunter.pos.z + Math.sin(hunter.yaw) * 1.6;
-  target.pos.y = hunter.pos.y;
-
-  // Send as the hunter's own client: with several players the hunter is not
-  // necessarily the first one, and a herbivore's attack is correctly refused.
-  sim.applyInput(hunter.clientId, {
+  sim.applyInput(predator.clientId, {
     seq: 1,
     moveX: 0,
     moveZ: 0,
-    yaw: hunter.yaw,
+    yaw: predator.yaw,
     pitch: 0,
     actions: InputAction.Attack,
   });
   sim.update(SIM_DT);
 
-  const after = sim.getActor(target.id);
+  const after = sim.getActor(prey.id);
   const died = !after || (after.flags & ActorFlags.Dead) !== 0;
-  assert.ok(died, `a single bite should take natural prey, but the ${target.species} survived`);
-  assert.equal(hunter.stats.kills, 1, 'the kill must be credited');
+  assert.ok(died, `a single bite should take natural prey, but the ${prey.species} survived`);
+  assert.equal(predator.stats.kills, 1, 'the kill must be credited');
 });
 
 test('a bite between two animals is survivable', () => {

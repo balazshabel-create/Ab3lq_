@@ -145,11 +145,41 @@ const FRAGMENT_SHADER = /* glsl */ `
     // Anywhere the terrain rises above the water line, there is simply no water.
     if (depthM <= 0.0) discard;
 
+    /*
+     * --- Which way the river is going ------------------------------------
+     *
+     * This is a *river*, and until now it did not move anywhere: the wave trains
+     * crossed each other in place, which is what a lake does. A flowing surface
+     * is one of the few things the eye reads instantly and unconsciously, and
+     * getting it wrong made a fast-moving channel feel like standing water no
+     * matter how good the highlights on it were.
+     *
+     * The direction is taken from the depth map rather than baked in as a
+     * constant, and that is the trick worth keeping: the gradient of the water
+     * depth points straight *across* the channel, from the deep middle towards
+     * the nearer bank — so rotating it a quarter turn gives the direction the
+     * channel runs, at every point, following every bend, for the price of two
+     * texture fetches and no CPU work at all.
+     */
+    float texel = 2.0 / uWorldSize;
+    float gx = texture2D(uDepthMap, uv + vec2(texel, 0.0)).r
+             - texture2D(uDepthMap, uv - vec2(texel, 0.0)).r;
+    float gz = texture2D(uDepthMap, uv + vec2(0.0, texel)).r
+             - texture2D(uDepthMap, uv - vec2(0.0, texel)).r;
+    vec2 across = vec2(gx, gz);
+    // Perpendicular to the cross-channel gradient, normalised safely: in the
+    // exact middle of a straight reach the gradient is zero, and a normalize()
+    // there would produce NaNs across a whole band of the river.
+    vec2 flow = length(across) > 1e-5 ? normalize(vec2(-across.y, across.x)) : vec2(1.0, 0.0);
+    // Faster in the deep middle than in the shallows, the way water actually is.
+    float current = 0.35 + 0.65 * clamp(depthM / 2.5, 0.0, 1.0);
+    vec2 drift = vWorldXZ - flow * uTime * 1.9 * current;
+
     // How much fine surface detail this pixel can actually resolve.
     float camDist = length(uCameraPos - vWorldPos);
     float detail = 1.0 - smoothstep(10.0, 48.0, camDist);
 
-    vec3 normal = waveNormal(vWorldXZ, detail);
+    vec3 normal = waveNormal(drift, detail);
     vec3 viewDir = normalize(uCameraPos - vWorldPos);
 
     /*
@@ -222,6 +252,35 @@ const FRAGMENT_SHADER = /* glsl */ `
     color *= 1.0 + silt * 0.13;
 
     /*
+     * --- Caustics ---------------------------------------------------------
+     *
+     * The net of dancing light on a river bed, and the single most recognisable
+     * thing about shallow sunlit water. There is no bed geometry to project onto
+     * here — the terrain is drawn by its own material — but the effect still
+     * lands, because what you actually see from above is the light *coming back
+     * up through* the water, and brightening the water where the caustic net is
+     * bright is very nearly the same image.
+     *
+     * Built from two crossing sine fields raised to a high power: the product of
+     * two |sin| fields is bright only where both are near their peaks, which is a
+     * network of thin curved lines meeting at knots — the caustic pattern. Driven
+     * by the drifted coordinate, so the net travels downstream with the water
+     * instead of sitting still on top of a moving surface.
+     */
+    float caustic = 0.0;
+    if (depthM < 3.0) {
+      vec2 cp = drift * 0.55;
+      float a = sin(cp.x * 1.7 + sin(cp.y * 0.9 + uTime * 0.7) * 1.6 + uTime * 0.9);
+      float b = sin(cp.y * 1.9 + sin(cp.x * 1.1 - uTime * 0.6) * 1.4 - uTime * 1.1);
+      caustic = pow(abs(a * b), 5.0);
+      // Strongest just under the surface and gone by waist depth, and only where
+      // the sun is actually on the water.
+      float shallow = 1.0 - smoothstep(0.4, 3.0, depthM);
+      caustic *= shallow * detail * max(uSunDirection.y, 0.0);
+    }
+    color += uSunColor * caustic * 0.55;
+
+    /*
      * Foam on the crests, and a wet band in the last half metre of shallows.
      *
      * Both kept deliberately weak. The wave amplitude is around fifteen
@@ -233,6 +292,20 @@ const FRAGMENT_SHADER = /* glsl */ `
     float shore = 1.0 - smoothstep(0.0, 0.5, depthM);
     color += vec3(0.26) * crest * 0.3;
     color = mix(color, vec3(0.58, 0.59, 0.52), shore * 0.32);
+
+    /*
+     * Moving foam along the waterline.
+     *
+     * The wet band above is static — it marks where the shallows are and then
+     * sits there. Water at a bank is never still: it gathers and thins in bands
+     * that slide along the shore. One band of animated noise riding the flow,
+     * confined to the last few tens of centimetres of depth, and the edge of the
+     * river stops looking like a line drawn on the ground.
+     */
+    float edge = (1.0 - smoothstep(0.0, 0.35, depthM)) * smoothstep(0.0, 0.08, depthM);
+    float lace = sin(dot(drift, flow) * 2.3 + uTime * 1.2)
+               * sin(dot(drift, vec2(-flow.y, flow.x)) * 3.7 - uTime * 0.8);
+    color += vec3(0.5, 0.52, 0.48) * edge * smoothstep(0.1, 0.75, abs(lace)) * 0.55;
 
     // Shallow water is nearly clear; deep water hides what is under it.
     float alpha = uOpacity * (0.3 + 0.7 * clamp(depthM / 1.2, 0.0, 1.0));
