@@ -49,6 +49,16 @@ export enum Species {
   Gorilla = 'gorilla',
   /** Ambient only: a column of ants crossing the forest floor. */
   Ant = 'ant',
+  /**
+   * The hunter. A person, not an animal.
+   *
+   * Lives in this enum because every actor in the world is addressed through it —
+   * the snapshot format, the model builder, the AI's threat checks — and giving
+   * the hunter a parallel type would mean a second code path through all of them.
+   * It is never playable as a survivor and never spawns as AI; `assignRoles`
+   * hands it to exactly one player per round.
+   */
+  Hunter = 'hunter',
 }
 
 /** What an animal eats. Drives the food chain and what it can hunt. */
@@ -136,6 +146,8 @@ export interface Silhouette {
 
 /** The procedural mesh archetypes. */
 export enum BodyPlan {
+  /** Two legs, two arms, a rifle. Only the hunter uses it. */
+  Human = 'human',
   Quadruped = 'quadruped',
   Feline = 'feline',
   Reptile = 'reptile',
@@ -1385,6 +1397,62 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     },
     temperament: temper({ skittishness: 0.95, social: true, stillness: 0.05 }),
   },
+
+  /**
+   * The hunter: a person with a rifle.
+   *
+   * Not playable as a survivor and never spawned as AI — `assignRoles` gives it
+   * to exactly one player and nothing else ever uses it. It sits in the same
+   * table as the animals because every system in the game addresses an actor by
+   * species, and a parallel type for the hunter would fork all of them.
+   *
+   * Deliberately unremarkable numbers. The hunter's power is the rifle and the
+   * fact that nothing can be sure whether the animal in front of it is a player;
+   * making them fast or tough as well would just make them a monster.
+   */
+  [Species.Hunter]: {
+    species: Species.Hunter,
+    name: 'The Hunter',
+    emoji: '\u{1F52B}',
+    tagline: 'The only thing out here wearing boots.',
+    diet: Diet.Carnivore,
+    size: SizeClass.Large,
+    hungerRate: 0.5,
+    healthMultiplier: 1.0,
+    noiseMultiplier: 1.25,
+    attackPower: 1.0,
+    eats: ['carrion'],
+    preys: [],
+    playable: false,
+    canBeHunter: true,
+    pros: ['Carries a rifle', 'Kills at range', 'Nothing in the jungle matches it in a fight'],
+    cons: ['Impossible to mistake for wildlife', 'Loud', 'Shooting the wrong animal is fatal'],
+    locomotion: loco({
+      landSpeed: 1.1,
+      swimSpeed: 0.6,
+      jumpPower: 1.0,
+      sprintMultiplier: 1.75,
+      agility: 1.2,
+    }),
+    silhouette: {
+      length: 0.5,
+      height: 1.75,
+      width: 0.46,
+      // Blue shirt, green trousers, brown boots and cap.
+      colors: { body: 0x2f5f9e, belly: 0x3c5a2a, accent: 0x4a3524, eye: 0x1a1a1a },
+      bodyPlan: BodyPlan.Human,
+      legPairs: 1,
+      tail: 0,
+    },
+    temperament: temper({
+      skittishness: 0,
+      aggression: 1,
+      aquatic: 0.2,
+      stillness: 0.2,
+      sight: 1.4,
+      hearing: 1.2,
+    }),
+  },
 };
 
 /**
@@ -1400,17 +1468,21 @@ export function isEnabled(species: Species): boolean {
   return ANIMALS[species].enabled !== false;
 }
 
-/** Species that may appear in the world at all. */
-export const SPAWNABLE_SPECIES: Species[] = ALL_SPECIES.filter(isEnabled);
+/**
+ * Species the world may spawn on its own.
+ *
+ * The hunter is excluded here rather than by `enabled: false`, and the
+ * distinction matters: he is very much in the game, he simply is not *wildlife*.
+ * Exactly one exists per round and he arrives through `assignRoles`, so any
+ * spawner that reached for him would be putting a second man in the jungle.
+ */
+export const SPAWNABLE_SPECIES: Species[] = ALL_SPECIES.filter(
+  (s) => isEnabled(s) && s !== Species.Hunter,
+);
 
 /** Species a survivor may choose. */
 export const PLAYABLE_SPECIES: Species[] = ALL_SPECIES.filter(
   (s) => ANIMALS[s].playable && isEnabled(s),
-);
-
-/** Species that may be dealt the hunter role. */
-export const HUNTER_SPECIES: Species[] = ALL_SPECIES.filter(
-  (s) => ANIMALS[s].canBeHunter && isEnabled(s),
 );
 
 /** Species that only exist as ambient AI. */

@@ -58,6 +58,11 @@ export interface AnimalModel {
   wings: THREE.Object3D[];
   /** Serpent body segments, head-first. */
   segments: THREE.Object3D[];
+  /**
+   * Muzzle flash at the end of the hunter's barrel, hidden except for the two
+   * or three frames after a shot. Null for everything that does not carry a gun.
+   */
+  muzzle: THREE.Object3D | null;
   /** Total body length in metres, for scaling effects. */
   length: number;
   /** Shoulder height, used to place the camera and the fly swarm. */
@@ -184,6 +189,7 @@ export function buildAnimalModel(species: Species, detail = 1): AnimalModel {
     tail: [],
     wings: [],
     segments: [],
+    muzzle: null,
     length: def.silhouette.length,
     height: def.silhouette.height,
     species,
@@ -220,6 +226,9 @@ export function buildAnimalModel(species: Species, detail = 1): AnimalModel {
       break;
     case BodyPlan.Insect:
       buildInsect(model, def, detail);
+      break;
+    case BodyPlan.Human:
+      buildHuman(model, def, detail);
       break;
     default:
       buildQuadruped(model, def, detail, 0);
@@ -1669,6 +1678,385 @@ function buildInsect(model: AnimalModel, def: AnimalDef, detail: number): void {
     }
     model.wings.push(hinge);
   }
+}
+
+/**
+ * The hunter: the only human being in the jungle.
+ *
+ * ## Why this one is built differently
+ *
+ * Every other model in this file is trying to look like an animal, and the way
+ * you do that is with anatomy — a ribcage, a haunch, a skull. A person is not
+ * read that way. At the distance this model is usually seen, a human being is
+ * recognised almost entirely by *clothing*: the horizontal line of a cap brim,
+ * the break at the belt, the way trousers stop and boots begin. A bare humanoid
+ * of correctly proportioned capsules reads as a shop mannequin; the same
+ * proportions with a collar, a belt and boot cuffs read as a man in the trees.
+ *
+ * So the shirt is modelled as a garment *over* the torso rather than as the
+ * torso, and the trousers tuck into the boots instead of merely changing colour.
+ * Those two seams cost four boxes and do most of the work.
+ *
+ * ## The face
+ *
+ * There isn't one, and that is deliberate. The design asks for a cap that covers
+ * the face, and the honest reason it matters is that a hidden face is
+ * frightening in a way a modelled one never is: the players cannot tell where
+ * the hunter is looking, so they must assume he is looking at them. The brim is
+ * wide, the head beneath it is dark cloth, and nothing under it catches light.
+ */
+function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
+  const s = def.silhouette;
+  const c = s.colors;
+  const H = s.height;
+
+  /** Shirt blue, trousers green, leather brown — the three the design names. */
+  const shirt = c.body;
+  const shirtDark = 0x24486f;
+  const trousers = c.belly;
+  const leather = c.accent;
+  const leatherDark = 0x38281a;
+  /** Gun metal, walnut, and the dark cloth under the cap. Nowhere else. */
+  const gunmetal = 0x2b2c30;
+  const walnut = 0x53331c;
+  const shadowCloth = 0x1b1917;
+  const skin = 0x8a6247;
+
+  /*
+   * The pelvis is the root of everything, because it is the part of a walking
+   * human that moves least — the legs swing below it and the torso rides on top
+   * of it, and hanging both off the same group means the gait animator's body
+   * bob carries the whole figure without the legs sliding out of their sockets.
+   */
+  const legLength = H * 0.46;
+  const legRadius = H * 0.043;
+  const hipY = legLength + legRadius * 0.65;
+  const stance = H * 0.072;
+
+  const pelvis = new THREE.Group();
+  pelvis.position.y = hipY;
+  model.root.add(pelvis);
+  model.body = pelvis;
+
+  mesh(box(H * 0.125, H * 0.115, H * 0.185), trousers, pelvis, 0, H * 0.005, 0);
+  // The belt. One box, and it is the difference between "trousers" and "legs".
+  mesh(box(H * 0.135, H * 0.03, H * 0.195), leather, pelvis, 0, H * 0.062, 0);
+  if (detail > 0.5) {
+    mesh(box(H * 0.018, H * 0.036, H * 0.028), 0xb8973f, pelvis, H * 0.069, H * 0.062, 0);
+    // A cartridge pouch on the hip. Reads as equipment from any angle, and it
+    // is the one thing on him that says he came here intending to shoot.
+    mesh(box(H * 0.05, H * 0.055, H * 0.035), leatherDark, pelvis, -H * 0.02, H * 0.03, H * 0.1);
+  }
+
+  // --- Legs -------------------------------------------------------------
+  /*
+   * `forward: 1` is what makes these read as human legs rather than as an
+   * animal's forelegs: it folds the knee backwards, which is the one joint
+   * direction every viewer knows by heart without being able to name it.
+   */
+  const shank = legLength * 0.5;
+  for (const side of [1, -1]) {
+    addJointedLeg(model, pelvis, {
+      x: 0,
+      y: -H * 0.02,
+      z: side * stance,
+      length: legLength,
+      radius: legRadius,
+      color: trousers,
+      footColor: leatherDark,
+      forward: 1,
+      detail,
+    });
+    const knee = model.knees[model.knees.length - 1];
+    if (!knee || detail <= 0.4) continue;
+    /*
+     * The boot, built onto the shank of the leg just added.
+     *
+     * Three pieces rather than one block: a shaft the trousers disappear into,
+     * a flared cuff at the top of it, and a sole that projects forward past the
+     * shin. That last one is what stops a leg ending in a cube — a foot points
+     * somewhere, and which way it points is how you read which way a figure is
+     * facing when it is too far away to see anything else.
+     */
+    mesh(box(legRadius * 2.0, shank * 0.6, legRadius * 2.1), leather, knee, 0, -shank * 0.66, 0);
+    mesh(box(legRadius * 2.4, legRadius * 0.8, legRadius * 2.5), leather, knee, 0, -shank * 0.36, 0);
+    mesh(
+      box(legRadius * 3.4, legRadius * 0.85, legRadius * 2.0),
+      leatherDark,
+      knee,
+      legRadius * 0.7,
+      -shank - legRadius * 0.35,
+      0,
+    );
+    // Toe cap, lower and shorter than the sole, so the boot has a front.
+    mesh(
+      box(legRadius * 1.1, legRadius * 0.6, legRadius * 1.8),
+      leatherDark,
+      knee,
+      legRadius * 2.0,
+      -shank - legRadius * 0.55,
+      0,
+    );
+  }
+
+  // --- Torso ------------------------------------------------------------
+  /*
+   * A V, not a barrel. The first version of this was two ellipsoids of nearly
+   * the same width stacked on top of each other, and it read as a pear — which
+   * is what happens when a torso is as broad at the belt as it is at the
+   * shoulders. Shoulders wide and shallow, waist noticeably narrower, and the
+   * whole thing much flatter front-to-back than it is side-to-side.
+   */
+  const torso = new THREE.Group();
+  torso.position.y = H * 0.075;
+  pelvis.add(torso);
+
+  const chest = mesh(
+    ellipsoid(H * 0.062, H * 0.115, H * 0.1, detail > 0.5 ? 9 : 6),
+    shirt,
+    torso,
+    0,
+    H * 0.175,
+    0,
+  );
+  chest.castShadow = true;
+  mesh(ellipsoid(H * 0.052, H * 0.07, H * 0.078, detail > 0.5 ? 8 : 5), shirt, torso, 0, H * 0.05, 0);
+
+  const shoulderY = H * 0.26;
+  if (detail > 0.35) {
+    // Shoulder yoke — the horizontal line across the top of a shirt, and the
+    // widest thing on him, which is what makes the taper downwards read.
+    mesh(box(H * 0.1, H * 0.032, H * 0.245), shirt, torso, 0, shoulderY, 0);
+    mesh(box(H * 0.075, H * 0.026, H * 0.115), shirtDark, torso, 0, shoulderY + H * 0.024, 0);
+    // Buttoned placket down the front.
+    mesh(box(H * 0.01, H * 0.17, H * 0.02), shirtDark, torso, H * 0.062, H * 0.14, 0);
+    // A slung strap across the chest: the diagonal is worth a lot of silhouette
+    // for one box, and it explains where the rifle lives when he is not aiming.
+    const strap = mesh(box(H * 0.012, H * 0.24, H * 0.045), leatherDark, torso, H * 0.06, H * 0.15, 0);
+    strap.rotation.x = 0.55;
+  }
+
+  // --- Head, and the cap that hides it ----------------------------------
+  const head = new THREE.Group();
+  head.position.set(0, shoulderY + H * 0.1, 0);
+  torso.add(head);
+  model.head = head;
+
+  // Neck: dark, because a lit neck under a dark face gives the face away.
+  mesh(capsule(H * 0.026, H * 0.045, 6), shadowCloth, torso, 0, shoulderY + H * 0.04, 0);
+
+  const skull = mesh(
+    ellipsoid(H * 0.056, H * 0.062, H * 0.052, detail > 0.5 ? 10 : 6),
+    shadowCloth,
+    head,
+  );
+  skull.castShadow = true;
+
+  // The cap: a crown that sits on the skull and a brim that oversails the face.
+  mesh(ellipsoid(H * 0.062, H * 0.05, H * 0.058, detail > 0.5 ? 10 : 6), leather, head, -H * 0.004, H * 0.032, 0);
+  const brim = mesh(box(H * 0.082, H * 0.012, H * 0.115), leather, head, H * 0.075, H * 0.024, 0);
+  brim.rotation.z = -0.17;
+  if (detail > 0.5) {
+    // A seam across the crown, and the little button at its apex.
+    mesh(box(H * 0.005, H * 0.05, H * 0.118), leatherDark, head, -H * 0.004, H * 0.046, 0);
+    mesh(sphere(H * 0.008, 5), leatherDark, head, -H * 0.004, H * 0.078, 0);
+    /*
+     * Eyes exist, but only barely — two chips of dull light deep under the brim.
+     * Leaving them out entirely made the head read as a bag; two dark specks
+     * with almost no value contrast read as a face you cannot quite see, which
+     * is much worse to be looked at by.
+     */
+    mesh(sphere(H * 0.007, 5), 0x6a6256, head, H * 0.046, H * 0.002, H * 0.022);
+    mesh(sphere(H * 0.007, 5), 0x6a6256, head, H * 0.046, H * 0.002, -H * 0.022);
+  }
+
+  // --- Arms, posed on the rifle -----------------------------------------
+  /*
+   * These do not swing. A hunter carrying a rifle at the ready holds it with
+   * both hands, and arms that swung freely while a gun floated in front of the
+   * chest would look far worse than arms that are simply still.
+   *
+   * Facing is +X and up is +Y, so the figure's right-hand side is -Z. Rotating a
+   * downward-hanging limb about X by a positive angle swings it towards -Z, so
+   * the right arm's roll is positive to move it *out* and the left arm's is
+   * positive to bring it *across* — the same sign meaning opposite things on the
+   * two sides, which is exactly the mistake that buried the right arm inside the
+   * ribcage on the first attempt.
+   */
+  const upperArm = H * 0.175;
+  const foreArm = H * 0.165;
+  const armRadius = H * 0.031;
+
+  /**
+   * Build one arm so that its hand lands exactly on `target`.
+   *
+   * ## Why this is solved rather than eyeballed
+   *
+   * The first version set the two joint angles by hand and then placed the rifle
+   * where the hands looked like they were. They were not: the barrel came out
+   * pointing across the hunter's chest and slightly behind him, because a
+   * shoulder rotation about two axes followed by an elbow bend does not put the
+   * hand anywhere a person can predict by reading the numbers. Tuning that by
+   * trial is a losing game — every adjustment to one angle moves the hand in a
+   * direction that depends on the other.
+   *
+   * So the pose is stated the way it is actually meant: *the right hand is on
+   * the grip and the left hand is out on the fore-end*, as two positions. The
+   * two-link solve below is exact (law of cosines — there is no iteration and no
+   * approximation), which means the rifle can then simply be fitted between the
+   * two hands and is guaranteed to line up.
+   *
+   * Of the two mirror solutions the elbow-backwards one is chosen, because the
+   * other one is an arm bending the wrong way at the elbow.
+   */
+  const reachArm = (side: 1 | -1, target: THREE.Vector3): THREE.Object3D => {
+    const shoulder = new THREE.Group();
+    shoulder.position.set(0, shoulderY - H * 0.015, side * H * 0.108);
+    torso.add(shoulder);
+
+    const L1 = upperArm;
+    const L2 = foreArm;
+    const toTarget = target.clone().sub(shoulder.position);
+    // Clamp into the reachable annulus, so an over-ambitious target straightens
+    // the arm instead of producing a NaN.
+    const D = Math.min(L1 + L2 - 1e-4, Math.max(Math.abs(L1 - L2) + 1e-4, toTarget.length()));
+    const dir = toTarget.normalize();
+
+    // Frame: the limb hangs along local -Y, and it bends in the local XY plane,
+    // so local +X has to be the direction the elbow is allowed to travel.
+    const yA = dir.clone().negate();
+    let xA = new THREE.Vector3().crossVectors(yA, new THREE.Vector3(0, 0, 1));
+    if (xA.lengthSq() < 1e-6) xA = new THREE.Vector3(1, 0, 0);
+    xA.normalize();
+    const zA = new THREE.Vector3().crossVectors(xA, yA);
+    shoulder.quaternion.setFromRotationMatrix(
+      new THREE.Matrix4().makeBasis(xA, yA, zA),
+    );
+
+    // Law of cosines. `alpha` is negative so the elbow swings backwards.
+    const alpha = -Math.acos(
+      Math.min(1, Math.max(-1, (L1 * L1 + D * D - L2 * L2) / (2 * L1 * D))),
+    );
+    const gamma = Math.acos(
+      Math.min(1, Math.max(-1, (L2 * L2 + D * D - L1 * L1) / (2 * L2 * D))),
+    );
+    shoulder.rotateZ(alpha);
+
+    mesh(sphere(armRadius * 1.25, detail > 0.5 ? 7 : 5), shirt, shoulder);
+    mesh(capsule(armRadius, upperArm * 0.66, detail > 0.5 ? 7 : 5), shirt, shoulder, 0, -upperArm * 0.5, 0);
+    if (detail > 0.5) {
+      // Rolled cuff at the elbow — this is a man who has been out here a while.
+      mesh(box(armRadius * 2.3, armRadius * 0.85, armRadius * 2.3), shirtDark, shoulder, 0, -upperArm * 0.88, 0);
+    }
+
+    const elbow = new THREE.Group();
+    elbow.position.y = -upperArm;
+    elbow.rotation.z = gamma - alpha;
+    shoulder.add(elbow);
+    // Bare forearm below the rolled sleeve.
+    mesh(capsule(armRadius * 0.8, foreArm * 0.68, detail > 0.5 ? 7 : 5), skin, elbow, 0, -foreArm * 0.5, 0);
+
+    const hand = new THREE.Group();
+    hand.position.y = -foreArm;
+    elbow.add(hand);
+    // Glove.
+    mesh(box(armRadius * 1.8, armRadius * 2.0, armRadius * 1.6), leatherDark, hand);
+    return hand;
+  };
+
+  /*
+   * The pose, stated as the two things a rifle carry actually consists of: the
+   * trigger hand back at the chest and the support hand out along the fore-end.
+   */
+  const gripTarget = new THREE.Vector3(H * 0.085, shoulderY - H * 0.185, -H * 0.085);
+  const foreTarget = new THREE.Vector3(H * 0.275, shoulderY - H * 0.145, 0);
+  const rightHand = reachArm(-1, gripTarget);
+  const leftHand = reachArm(1, foreTarget);
+
+  // --- The rifle --------------------------------------------------------
+  /*
+   * Rather than posing the rifle by eye and hoping the hands land near it, the
+   * hands are posed first and the rifle is then *fitted to them*: it sits at the
+   * right hand and its barrel points at the left. Any later change to an arm
+   * angle drags the gun along with it instead of quietly leaving it floating in
+   * front of the chest, which is the failure mode of every hand-tuned prop.
+   */
+  model.root.updateMatrixWorld(true);
+  const grip = rightHand.getWorldPosition(new THREE.Vector3());
+  const fore = leftHand.getWorldPosition(new THREE.Vector3());
+
+  const rifle = new THREE.Group();
+  rifle.position.copy(torso.worldToLocal(grip.clone()));
+  /*
+   * The direction needs no basis change: every group between the root and the
+   * torso is a pure translation at build time, so a direction in model space is
+   * already a direction in torso space. (The positions do need converting, which
+   * is what `worldToLocal` above is for.)
+   */
+  const along = fore.clone().sub(grip).normalize();
+  rifle.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), along);
+  torso.add(rifle);
+
+  // Stock and comb behind the grip, in oiled walnut.
+  const stock = mesh(box(H * 0.16, H * 0.042, H * 0.026), walnut, rifle, -H * 0.115, -H * 0.008, 0);
+  stock.castShadow = true;
+  mesh(box(H * 0.045, H * 0.052, H * 0.024), walnut, rifle, -H * 0.195, -H * 0.022, 0);
+  // Receiver, and the fore-end the left hand is holding.
+  mesh(box(H * 0.1, H * 0.036, H * 0.025), gunmetal, rifle, H * 0.005, H * 0.002, 0);
+  mesh(box(H * 0.13, H * 0.03, H * 0.025), walnut, rifle, H * 0.12, 0, 0);
+  // Barrel, running well past the left hand — a rifle is mostly barrel, and
+  // cutting it short is what makes a gun read as a toy.
+  const barrel = new THREE.Mesh(capsule(H * 0.0085, H * 0.24, detail > 0.5 ? 7 : 5), material(gunmetal));
+  barrel.rotation.z = Math.PI / 2;
+  barrel.position.set(H * 0.31, H * 0.006, 0);
+  barrel.castShadow = true;
+  rifle.add(barrel);
+
+  if (detail > 0.4) {
+    // Trigger guard, magazine, bolt handle and a scope: the four details that
+    // separate "a rifle" from "a plank".
+    mesh(box(H * 0.028, H * 0.016, H * 0.019), gunmetal, rifle, -H * 0.028, -H * 0.026, 0);
+    mesh(box(H * 0.034, H * 0.028, H * 0.021), gunmetal, rifle, -H * 0.008, -H * 0.034, 0);
+    mesh(box(H * 0.011, H * 0.011, H * 0.042), gunmetal, rifle, -H * 0.02, H * 0.014, -H * 0.019);
+    const scope = new THREE.Mesh(capsule(H * 0.0105, H * 0.066, detail > 0.6 ? 8 : 5), material(0x17181b));
+    scope.rotation.z = Math.PI / 2;
+    scope.position.set(H * 0.025, H * 0.036, 0);
+    rifle.add(scope);
+    for (const x of [-H * 0.012, H * 0.058]) {
+      mesh(box(H * 0.011, H * 0.021, H * 0.013), gunmetal, rifle, x, H * 0.023, 0);
+    }
+    // Front sight, on a ramp near the muzzle.
+    mesh(box(H * 0.01, H * 0.014, H * 0.009), gunmetal, rifle, H * 0.4, H * 0.014, 0);
+  }
+
+  /*
+   * Muzzle flash: a star of unlit geometry at the barrel's mouth, switched on
+   * for a few frames when the rifle fires.
+   *
+   * MeshBasicMaterial rather than the Lambert everything else uses, because a
+   * muzzle flash is a light source and a lit one would go dark at night —
+   * precisely when it is the only thing anybody can see. Built here rather than
+   * in the effects renderer so it is welded to the barrel and cannot drift out
+   * of alignment when the hunter turns.
+   */
+  const flash = new THREE.Group();
+  flash.position.set(H * 0.44, H * 0.006, 0);
+  flash.visible = false;
+  rifle.add(flash);
+  const flare = new THREE.Mesh(
+    cone(H * 0.03, H * 0.07),
+    new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 0.95, depthWrite: false }),
+  );
+  flare.rotation.z = -Math.PI / 2;
+  flare.position.x = H * 0.028;
+  flash.add(flare);
+  const halo = new THREE.Mesh(
+    sphere(H * 0.024, 6),
+    new THREE.MeshBasicMaterial({ color: 0xffc65a, transparent: true, opacity: 0.7, depthWrite: false }),
+  );
+  flash.add(halo);
+  model.materials.push(flare.material as THREE.Material, halo.material as THREE.Material);
+  model.muzzle = flash;
 }
 
 /** Free the shared caches (used when tearing the renderer down). */

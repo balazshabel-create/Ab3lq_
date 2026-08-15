@@ -1,0 +1,94 @@
+<!doctype html>
+<!--
+  model-view.html — a turntable for one animal model.
+
+  This is a development page, not part of the game. It exists because the only
+  way to judge whether a model looks right is to look at it, and finding a
+  particular species inside a live round means playing until the game deals it
+  to you. Here you name it in the query string and it stands in front of you:
+
+      /tools/model-view.html?species=hunter&detail=1
+
+  It builds the model with exactly the function the game uses, so anything you
+  see here is what the game draws.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>JukeJungle model view</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #6f7d63; }
+      canvas { display: block; }
+      #label {
+        position: fixed; left: 12px; top: 10px; font: 13px/1.4 monospace;
+        color: #fff; text-shadow: 0 1px 2px #000; white-space: pre;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="label"></div>
+    <script type="module">
+      import * as THREE from 'three';
+      import { buildAnimalModel } from '/src/Render/AnimalModels.ts';
+      import { ANIMALS } from '/src/Animals/AnimalTypes.ts';
+
+      const params = new URLSearchParams(location.search);
+      const species = params.get('species') ?? 'hunter';
+      const detail = Number(params.get('detail') ?? 1);
+      // 0 = broadside, which is the view that shows a silhouette best.
+      const angle = Number(params.get('angle') ?? 0);
+      const spin = params.get('spin') === '1';
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(1);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      document.body.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x6f7d63);
+
+      // Roughly the game's daylight rig, so colours read the same here.
+      const sun = new THREE.DirectionalLight(0xfff2d8, 2.6);
+      sun.position.set(4, 8, 3);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(1024, 1024);
+      sun.shadow.camera.left = -4;
+      sun.shadow.camera.right = 4;
+      sun.shadow.camera.top = 4;
+      sun.shadow.camera.bottom = -4;
+      scene.add(sun);
+      scene.add(new THREE.HemisphereLight(0xbcd4ff, 0x3f4a30, 1.5));
+
+      const ground = new THREE.Mesh(
+        new THREE.CircleGeometry(14, 48).rotateX(-Math.PI / 2),
+        new THREE.MeshLambertMaterial({ color: 0x5d6b4f }),
+      );
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      const model = buildAnimalModel(species, detail);
+      scene.add(model.root);
+
+      const def = ANIMALS[species];
+      const size = Math.max(def.silhouette.length, def.silhouette.height);
+      const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.05, 200);
+
+      document.getElementById('label').textContent =
+        `${def.name}  (${species})\nlength ${def.silhouette.length}m  height ${def.silhouette.height}m  detail ${detail}`;
+
+      let t = angle;
+      function frame() {
+        if (spin) t += 0.01;
+        const r = size * 2.6;
+        camera.position.set(Math.cos(t) * r, def.silhouette.height * 0.75, Math.sin(t) * r);
+        camera.lookAt(0, def.silhouette.height * 0.45, 0);
+        renderer.render(scene, camera);
+        requestAnimationFrame(frame);
+      }
+      frame();
+      window.__modelReady = true;
+    </script>
+  </body>
+</html>

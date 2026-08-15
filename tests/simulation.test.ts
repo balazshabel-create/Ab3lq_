@@ -9,11 +9,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { Simulation } from '../src/Core/Simulation';
-import { Role, RoundPhase, ActorFlags, type Actor } from '../src/Core/Types';
+import { ActorKind, Role, RoundPhase, ActorFlags, type Actor } from '../src/Core/Types';
 import {
   ALL_SPECIES,
   ANIMALS,
-  HUNTER_SPECIES,
   PLAYABLE_SPECIES,
   SPAWNABLE_SPECIES,
   Species,
@@ -52,6 +51,7 @@ import {
   EVENT_LOCKOUT_START,
   HUNGER_DECAY_RATE,
   HUNTER_ATTACK_COOLDOWN,
+  RIFLE_RANGE,
   ROUND_DURATION,
   SIM_DT,
   WHISTLE_INTERVAL,
@@ -141,7 +141,7 @@ test('rolled weaknesses are always eligible for the species', () => {
   }
 });
 
-test('role dealing produces exactly one hunter, always a predator, never weakened', () => {
+test('role dealing produces exactly one hunter, always the human, never weakened', () => {
   const rng = new Rng(4242);
   for (let trial = 0; trial < 40; trial++) {
     const n = 1 + (trial % 12);
@@ -151,10 +151,15 @@ test('role dealing produces exactly one hunter, always a predator, never weakene
     const hunters = assignments.filter((a) => a.role === Role.Hunter);
     assert.equal(hunters.length, 1, `expected 1 hunter for ${n} players`);
     assert.equal(hunters[0].weakness, null, 'the hunter must never carry a weakness');
-    assert.ok(
-      HUNTER_SPECIES.includes(hunters[0].species),
-      `hunter species ${hunters[0].species} cannot be a hunter`,
+    assert.equal(
+      hunters[0].species,
+      Species.Hunter,
+      'the hunter is a man with a rifle, never an animal',
     );
+    // And no survivor is ever handed the human body.
+    for (const a of assignments.filter((x) => x.role === Role.Survivor)) {
+      assert.notEqual(a.species, Species.Hunter, 'survivors are animals');
+    }
     // Every survivor gets a weakness, and it must fit their species.
     for (const a of assignments.filter((x) => x.role === Role.Survivor)) {
       assert.ok(a.weakness, 'survivors must have a weakness');
@@ -163,34 +168,29 @@ test('role dealing produces exactly one hunter, always a predator, never weakene
   }
 });
 
-test('the hunter is always an animal with AI cover of its own species', () => {
+test('the hunter is the only human in the world', () => {
   const sim = new Simulation(2024);
   for (let i = 0; i < 4; i++) sim.addPlayer(`p${i}`, `Player ${i}`);
   sim.startRound();
 
   const hunter = sim.getPlayers().find((p) => p.role === Role.Hunter);
   assert.ok(hunter, 'a hunter must exist');
-  // The hunter is a normal animal, never a human with a gun.
-  assert.ok(ANIMALS[hunter!.species].canBeHunter);
+  assert.equal(hunter!.species, Species.Hunter, 'the hunter is a man with a rifle');
 
   /*
-   * There must be at least one other animal of the hunter's species.
+   * Nothing else in the world may wear the human body.
    *
-   * This asserted ten, back when the world held 220 AI animals and the game was
-   * about blending into a crowd. At a population of five there is no crowd to
-   * blend into by design — but the guarantee that still has to hold is that a
-   * player is never the *only* animal of their kind, because a lone specimen is
-   * an instant giveaway rather than a deduction. That is what AI_SPECIES_COVER_MIN
-   * now buys, and it is what this checks.
+   * The hunter used to need a crowd of his own species to hide in; now the
+   * opposite invariant is the one that matters. He is meant to be unmistakable,
+   * so a second human anywhere — an AI spawn that reached into the species table
+   * without filtering, an ambient wildlife pass — would quietly hand the
+   * survivors a place to hide that the design never intended them to have.
    */
-  let sameSpecies = 0;
+  let humans = 0;
   sim.forEachNearby(0, 0, 10_000, (a) => {
-    if (a.species === hunter!.species && a.id !== hunter!.id) sameSpecies++;
+    if (a.species === Species.Hunter) humans++;
   });
-  assert.ok(
-    sameSpecies >= AI_SPECIES_COVER_MIN,
-    `hunter needs cover; found only ${sameSpecies} of its species`,
-  );
+  assert.equal(humans, 1, `expected exactly one human in the world, found ${humans}`);
 });
 
 test('every player species gets AI cover to hide among', () => {
@@ -206,7 +206,8 @@ test('every player species gets AI cover to hide among', () => {
   for (let i = 0; i < 3; i++) sim.addPlayer(`p${i}`, `P${i}`);
   sim.startRound();
 
-  for (const player of sim.getPlayers()) {
+  // The hunter is skipped: he is a man, and a man has no cover by design.
+  for (const player of sim.getPlayers().filter((p) => p.role === Role.Survivor)) {
     let count = 0;
     sim.forEachNearby(0, 0, 10_000, (a) => {
       if (a.species === player.species && a.id !== player.id) count++;
@@ -513,13 +514,20 @@ test('snapshots never leak another player role, weakness or hunger', () => {
 });
 
 test('players and AI of the same species are indistinguishable on the wire', () => {
+  /*
+   * Two players, and the comparison is made from the survivor's point of view.
+   * With one player they would be dealt the hunter, and the hunter is a human —
+   * the one actor in the game that has no AI counterpart to be confused with.
+   */
   const sim = new Simulation(2718);
   sim.addPlayer('a', 'A');
+  sim.addPlayer('b', 'B');
   sim.startRound();
   advance(sim, 12);
 
-  const player = sim.getPlayers()[0];
-  const snap = sim.buildSnapshotFor('a');
+  const player = sim.getPlayers().find((p) => p.role === Role.Survivor)!;
+  assert.ok(player, 'need a survivor to compare');
+  const snap = sim.buildSnapshotFor(player.clientId);
   const sameSpecies = snap.actors.filter((a) => a.species === player.species);
   assert.ok(sameSpecies.length > 1, 'need AI of the same species nearby to compare');
 
@@ -564,7 +572,6 @@ test('withdrawn species never appear anywhere in the game', () => {
     assert.ok(ALL_SPECIES.includes(species), 'the table entry must be kept for wire stability');
     assert.ok(!SPAWNABLE_SPECIES.includes(species), `${species} must not be spawnable`);
     assert.ok(!PLAYABLE_SPECIES.includes(species), `${species} must not be selectable`);
-    assert.ok(!HUNTER_SPECIES.includes(species), `${species} must not be dealt the hunter role`);
   }
 
   // And none of them should be in a populated world.
@@ -623,25 +630,54 @@ test('a predator can actually kill the AI prey it hunts', () => {
   assert.equal(hunter.stats.kills, 1, 'the kill must be credited');
 });
 
-test('a bite on another player is survivable', () => {
-  // The other half of the balance: players must NOT die to one bite, or being
+test('a bite between two animals is survivable', () => {
+  // The other half of the balance: an animal must NOT die to one bite, or being
   // found would be the same as being dead and a chase would never be a contest.
+  // (The rifle is the exception, and it has its own tests below.)
   const sim = new Simulation(2468);
-  sim.addPlayer('a', 'A');
-  sim.addPlayer('b', 'B');
+  for (let i = 0; i < 4; i++) sim.addPlayer(`p${i}`, `P${i}`);
+  sim.startRound();
+  advance(sim, 10);
+
+  const animals = sim.getPlayers().filter((p) => p.role === Role.Survivor);
+  const biter = animals[0];
+  const victim = animals[1];
+
+  victim.pos.x = biter.pos.x + Math.cos(biter.yaw) * 1.6;
+  victim.pos.z = biter.pos.z + Math.sin(biter.yaw) * 1.6;
+  victim.pos.y = biter.pos.y;
+  victim.health = victim.maxHealth;
+  const before = victim.health;
+
+  sim.applyInput(biter.clientId, {
+    seq: 1,
+    moveX: 0,
+    moveZ: 0,
+    yaw: biter.yaw,
+    pitch: 0,
+    actions: InputAction.Attack,
+  });
+  sim.update(SIM_DT);
+
+  assert.ok(victim.health < before, 'the bite must land');
+  assert.ok(victim.health > 0, 'a healthy animal should survive a single bite');
+});
+
+test('the rifle kills a player outright', () => {
+  const sim = new Simulation(2469);
+  for (let i = 0; i < 4; i++) sim.addPlayer(`p${i}`, `P${i}`);
   sim.startRound();
   advance(sim, 10);
 
   const hunter = sim.getPlayers().find((p) => p.role === Role.Hunter)!;
   const victim = sim.getPlayers().find((p) => p.role === Role.Survivor)!;
 
-  victim.pos.x = hunter.pos.x + Math.cos(hunter.yaw) * 1.6;
-  victim.pos.z = hunter.pos.z + Math.sin(hunter.yaw) * 1.6;
+  // Well beyond biting distance: this has to be the rifle, not a lunge.
+  victim.pos.x = hunter.pos.x + Math.cos(hunter.yaw) * 30;
+  victim.pos.z = hunter.pos.z + Math.sin(hunter.yaw) * 30;
   victim.pos.y = hunter.pos.y;
-  const before = victim.health;
+  victim.health = victim.maxHealth;
 
-  // Send as the hunter's own client: with several players the hunter is not
-  // necessarily the first one, and a herbivore's attack is correctly refused.
   sim.applyInput(hunter.clientId, {
     seq: 1,
     moveX: 0,
@@ -652,11 +688,94 @@ test('a bite on another player is survivable', () => {
   });
   sim.update(SIM_DT);
 
-  assert.ok(victim.health < before, 'the bite must land');
-  assert.ok(
-    victim.health > 0 || victim.maxHealth < 70,
-    'a healthy player should survive a single bite',
-  );
+  assert.equal(victim.health, 0, 'a rifle round at thirty metres must be lethal');
+  assert.ok((victim.flags & ActorFlags.Dead) !== 0, 'the victim must be dead');
+  assert.ok(hunter.health > 0, 'shooting an actual player must not hurt the hunter');
+});
+
+test('shooting an animal that was only an animal kills the hunter', () => {
+  /*
+   * The rule the round hangs on. Verified by putting an AI animal of a *playable*
+   * species — one a survivor could have been wearing — squarely in the sights and
+   * pulling the trigger.
+   */
+  const sim = new Simulation(2470);
+  for (let i = 0; i < 4; i++) sim.addPlayer(`p${i}`, `P${i}`);
+  sim.startRound();
+  advance(sim, 10);
+
+  const hunter = sim.getPlayers().find((p) => p.role === Role.Hunter)!;
+
+  let bystander: { id: number; species: Species; pos: { x: number; y: number; z: number } } | null =
+    null;
+  sim.forEachNearby(hunter.pos.x, hunter.pos.z, 10_000, (a) => {
+    if (bystander) return;
+    if (a.kind !== ActorKind.AI) return;
+    if (!ANIMALS[a.species].playable) return;
+    bystander = a;
+  });
+  assert.ok(bystander, 'the world must contain an AI animal of a playable species');
+
+  const victim = bystander! as unknown as { id: number; pos: { x: number; y: number; z: number } };
+  victim.pos.x = hunter.pos.x + Math.cos(hunter.yaw) * 20;
+  victim.pos.z = hunter.pos.z + Math.sin(hunter.yaw) * 20;
+  victim.pos.y = hunter.pos.y;
+
+  sim.applyInput(hunter.clientId, {
+    seq: 1,
+    moveX: 0,
+    moveZ: 0,
+    yaw: hunter.yaw,
+    pitch: 0,
+    actions: InputAction.Attack,
+  });
+  sim.update(SIM_DT);
+
+  assert.equal(hunter.health, 0, 'a hunter who shoots wildlife dies for it');
+  assert.ok((hunter.flags & ActorFlags.Dead) !== 0, 'the hunter must be dead');
+});
+
+test('a clean miss costs the hunter nothing but the noise', () => {
+  // If missing were punished as harshly as misidentifying, nobody would ever
+  // fire, and a hunter who never fires is not a hunter.
+  const sim = new Simulation(2471);
+  for (let i = 0; i < 4; i++) sim.addPlayer(`p${i}`, `P${i}`);
+  sim.startRound();
+  advance(sim, 10);
+
+  const hunter = sim.getPlayers().find((p) => p.role === Role.Hunter)!;
+  // Point him at the sky above an empty stretch and make sure nothing is there.
+  let clearYaw = hunter.yaw;
+  for (let attempt = 0; attempt < 64; attempt++) {
+    const yaw = (attempt / 64) * Math.PI * 2 - Math.PI;
+    let blocked = false;
+    sim.forEachNearby(hunter.pos.x, hunter.pos.z, RIFLE_RANGE, (a) => {
+      if (a.id === hunter.id) return;
+      const to = Math.atan2(a.pos.z - hunter.pos.z, a.pos.x - hunter.pos.x);
+      let d = to - yaw;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      if (Math.abs(d) < 0.6) blocked = true;
+    });
+    if (!blocked) {
+      clearYaw = yaw;
+      break;
+    }
+  }
+
+  const missesBefore = hunter.stats.missedAttacks;
+  sim.applyInput(hunter.clientId, {
+    seq: 1,
+    moveX: 0,
+    moveZ: 0,
+    yaw: clearYaw,
+    pitch: 0,
+    actions: InputAction.Attack,
+  });
+  sim.update(SIM_DT);
+
+  assert.ok(hunter.health > 0, 'a miss must not kill the hunter');
+  assert.ok(hunter.stats.missedAttacks > missesBefore, 'the miss must be recorded');
 });
 
 test('a simulation tick stays well inside the frame budget', () => {
@@ -905,11 +1024,16 @@ test('a crocodilian actually submerges and a capybara cannot', () => {
 });
 
 test('every attack raises a fresh Attacking pulse, not a permanent flag', () => {
+  /*
+   * Four players, and the swing is made by a survivor. With one player they
+   * would be dealt the hunter, whose rifle has its own cooldown and strike
+   * window — this test is about the animal bite.
+   */
   const sim = new Simulation(97531);
-  sim.addPlayer('a', 'A');
+  for (let i = 0; i < 4; i++) sim.addPlayer(`p${i}`, `P${i}`);
   sim.startRound();
   advance(sim, 10);
-  const player = sim.getPlayers()[0];
+  const player = sim.getPlayers().find((p) => p.role === Role.Survivor)!;
 
   /*
    * Click attack once, then run the cooldown out, counting rising edges.
@@ -927,7 +1051,7 @@ test('every attack raises a fresh Attacking pulse, not a permanent flag', () => 
     const ticks = Math.round((HUNTER_ATTACK_COOLDOWN + 0.4) / TICK);
     for (let i = 0; i < ticks; i++) {
       // Hold the button only on the first tick, like one click.
-      sim.applyInput('a', {
+      sim.applyInput(player.clientId, {
         seq: ++seq,
         moveX: 0,
         moveZ: 0,
@@ -1051,7 +1175,6 @@ test('withdrawn species never reach the world', () => {
   for (const s of withdrawn) {
     assert.ok(!SPAWNABLE_SPECIES.includes(s), `${s} is still spawnable`);
     assert.ok(!PLAYABLE_SPECIES.includes(s), `${s} is still playable`);
-    assert.ok(!HUNTER_SPECIES.includes(s), `${s} can still be dealt the hunter role`);
   }
 });
 
@@ -1158,9 +1281,8 @@ test('exactly six species are playable, and they are the intended six', () => {
   for (const s of expected) {
     assert.ok(eligibleWeaknesses(s).length > 0, `${s} has no eligible weakness`);
   }
-  // The herbivores must not be dealt the hunter role.
-  assert.ok(!HUNTER_SPECIES.includes(Species.Capybara), 'the capybara cannot be the hunter');
-  assert.ok(!HUNTER_SPECIES.includes(Species.Turtle), 'the tortoise cannot be the hunter');
+  // No animal is ever the hunter any more, and the hunter is never playable.
+  assert.ok(!PLAYABLE_SPECIES.includes(Species.Hunter), 'the human is not a playable animal');
 });
 
 test('the roster plays the way the design says it does', () => {

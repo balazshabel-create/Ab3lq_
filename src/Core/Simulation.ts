@@ -39,6 +39,10 @@ import {
   NOISE_SPLASH,
   NOISE_WALK,
   PLAYER_INTEREST_RANGE,
+  RIFLE_ARC,
+  RIFLE_COOLDOWN,
+  RIFLE_RANGE,
+  RIFLE_WINDUP,
   SENSE_FOCUS_COOLDOWN,
   SENSE_LISTEN_COOLDOWN,
   SENSE_LISTEN_DURATION,
@@ -481,7 +485,13 @@ export class Simulation implements AiContext {
      * each regardless, overshooting the population cap by however many players
      * turned up.
      */
-    const unique = [...new Set(coverSpecies)];
+    /*
+     * The hunter's "species" is filtered out here rather than at every call
+     * site. He is a man, and there is no such thing as cover for a man: spawning
+     * an AI of his kind would put a second human in the jungle and destroy the
+     * one thing the round depends on — that everything on two legs is *him*.
+     */
+    const unique: Species[] = [...new Set(coverSpecies)].filter((s) => s !== Species.Hunter);
     for (const species of unique) {
       if (budget <= 0) break;
       const want = Math.max(AI_SPECIES_COVER_MIN, Math.round(AI_SPECIES_COVER_MIN * 1.2));
@@ -1400,6 +1410,11 @@ export class Simulation implements AiContext {
    */
   private tryAttack(player: PlayerActor, stats: ResolvedStats): void {
     if (player.attackCooldown > 0) return;
+    // The hunter has a rifle, not teeth. Entirely different rules.
+    if (player.species === Species.Hunter) {
+      this.tryShoot(player);
+      return;
+    }
     const def = ANIMALS[player.species];
 
     /*
@@ -1507,6 +1522,105 @@ export class Simulation implements AiContext {
     }
 
     this.damageActor(victim.id, armoured ? damage * 0.3 : damage, player.id);
+  }
+
+  /**
+   * The hunter fires his rifle.
+   *
+   * ## The rule the whole round hangs on
+   *
+   * A bullet into a player kills that player. A bullet into an animal that was
+   * only ever an animal kills *the hunter*, and the round ends with the
+   * survivors winning.
+   *
+   * That is a brutal rule and it is meant to be. Without it the hunter's optimal
+   * play is to shoot everything that moves — six AI animals and four players in a
+   * clearing is ten trigger pulls and a guaranteed win, and no amount of clever
+   * hiding by the survivors can beat arithmetic like that. The penalty is what
+   * converts the round from a shooting exercise into a reading exercise: he has
+   * to watch, and decide, and be *sure*, and the survivors' entire craft is
+   * making him unsure. It is also the only thing that makes acting like an
+   * animal worth the effort, because the reward for a convincing impression is
+   * not that he passes you by — it is that he shoots you and dies for it.
+   *
+   * Two deliberate softenings:
+   *
+   *  • **A clean miss costs nothing but the noise.** If the rule punished
+   *    missing as well as misidentifying, nobody would ever fire, and a hunter
+   *    who never fires is not a hunter.
+   *  • **Ambient wildlife is not covered.** Shooting a parrot out of the canopy
+   *    is a waste of a cartridge and a great deal of noise, but it is not a
+   *    mistake anybody could make about *who* is a player, so it is not fatal.
+   *    Only the species a survivor could actually be wearing carry the penalty.
+   */
+  private tryShoot(player: PlayerActor): void {
+    player.attackCooldown = RIFLE_COOLDOWN;
+    player.attackWindup = RIFLE_WINDUP;
+    player.flags |= ActorFlags.Attacking;
+    cancelEating(player);
+
+    /*
+     * A rifle is the loudest thing in the jungle, and that is a mechanic rather
+     * than flavour: every survivor within earshot learns roughly where he is
+     * standing and that he has just committed to something.
+     */
+    this.emitNoise(player.pos.x, player.pos.z, NOISE_ATTACK * 3.4, NoiseKind.Attack, player.id);
+
+    /*
+     * Hitscan down the aim line, cone-limited rather than swept: the tightest
+     * angular offset wins, not the nearest body, so a distant animal squarely in
+     * the sights beats a near one at the edge of the cone. That is what aiming
+     * means, and it is what lets a careful hunter pick one capybara out of three.
+     */
+    let target: Actor | null = null;
+    let bestOff = RIFLE_ARC;
+    this.grid.forEachInRadius(player.pos.x, player.pos.z, RIFLE_RANGE, (other) => {
+      if (other.id === player.id) return;
+      if (other.flags & ActorFlags.Dead) return;
+      // A submerged crocodile is under the water, not behind it. No shot.
+      if (other.flags & ActorFlags.Submerged) return;
+      const toOther = Math.atan2(other.pos.z - player.pos.z, other.pos.x - player.pos.x);
+      const off = Math.abs(angleDelta(player.yaw, toOther));
+      /*
+       * The cone widens with distance in *world* terms but not in angular ones,
+       * which would make far targets impossible to hit at a fixed arc. Allow the
+       * angular tolerance to grow just enough that a body-width at range is
+       * still hittable, and no further.
+       */
+      const d = Math.max(1, dist2D(player.pos, other.pos));
+      const bodyAngle = Math.atan2(ANIMALS[other.species].silhouette.length * 0.5, d);
+      if (off > RIFLE_ARC + bodyAngle) return;
+      if (off < bestOff) {
+        bestOff = off;
+        target = other;
+      }
+    });
+
+    if (!target) {
+      player.stats.missedAttacks++;
+      return;
+    }
+
+    const victim = target as Actor;
+
+    if (victim.kind === ActorKind.Player) {
+      // A hit on a person. A rifle round does not leave you limping.
+      this.damageActor(victim.id, victim.maxHealth, player.id);
+      return;
+    }
+
+    // An animal. Whether that was a mistake depends on whether a player could
+    // ever have been wearing it.
+    this.damageActor(victim.id, victim.maxHealth, player.id);
+    if (ANIMALS[victim.species].playable) {
+      /*
+       * He was wrong. Attributed to actor 0 rather than to himself so the reveal
+       * reads "the jungle took him" instead of naming him as his own killer,
+       * and flagged as an attack so the round-over screen can tell this apart
+       * from starving to death.
+       */
+      this.damageActor(player.id, player.maxHealth, 0, 'attack');
+    }
   }
 
   /** Activate the species' signature ability. */

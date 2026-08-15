@@ -1,13 +1,25 @@
 /**
  * RoundState.ts — role dealing, the ten minute clock, and the reveal.
  *
- * The role deal is the most sensitive code in the project: if the hunter's
- * identity leaks, the game is over before it starts. So the rules are:
- *   • Exactly one hunter per round, chosen from the species that can plausibly
- *     kill other animals.
- *   • The hunter is always an animal, never a human with a rifle. It looks
- *     exactly like the AI instances of its own species, and the simulation
- *     guarantees a healthy population of those to hide among.
+ * ## The hunter is a man
+ *
+ * This used to be the opposite: the hunter was an animal like everyone else,
+ * hidden in the crowd, and the round was a question of *who*. It is now a
+ * human being with a rifle, in a blue shirt and a cap, and everybody can see
+ * exactly where he is from the moment the round starts.
+ *
+ * That inversion is the whole game. When the hunter was hidden, the survivors'
+ * job was to guess; now the *hunter's* job is to guess, and the survivors' job
+ * is to be un-guessable. He has to walk up to a jungle full of animals and pick
+ * out the ones being driven by people — and if he is wrong, if he puts a bullet
+ * into an animal that was only ever an animal, he dies for it and loses the
+ * round. So the survivors are not hiding from being seen. They are hiding
+ * inside the behaviour of the wildlife, in plain sight, and still having to eat.
+ *
+ * The rules the deal has to guarantee:
+ *   • Exactly one hunter per round, and he is always `Species.Hunter` — the
+ *     only human body plan in the game.
+ *   • Survivors are dealt a random playable animal, never a human.
  *   • Survivors each get a secret weakness; the hunter gets none.
  *   • A player is told their own role and weakness and nothing else. The full
  *     assignment is only broadcast after the final whistle.
@@ -21,7 +33,6 @@ import {
 } from '../Systems/Config';
 import {
   ANIMALS,
-  HUNTER_SPECIES,
   PLAYABLE_SPECIES,
   Species,
   SizeClass,
@@ -146,12 +157,11 @@ export interface RoleAssignment {
  * metagame knowledge that no amount of careful animal impersonation can beat.
  *
  * Being handed a random animal also *is* the round's opening challenge: you find
- * out you are a sloth and have to work out how a sloth survives.
+ * out you are a tortoise and have to work out how a tortoise survives.
  *
- * The hunter is picked at random and then, only if their rolled species could
- * not plausibly kill anything, swapped onto one that can. Survivors keep rolling
- * from the full playable list — predators included — so being dealt a caiman is
- * never by itself a tell that you are the hunter, or that somebody else is.
+ * One player is drawn at random to be the hunter and is given the human body
+ * regardless of what they rolled. Nothing about a survivor's species is a tell
+ * any more — the hunter is visible from across the clearing.
  */
 export function assignRoles(clientIds: string[], rng: Rng): RoleAssignment[] {
   if (clientIds.length === 0) return [];
@@ -160,9 +170,7 @@ export function assignRoles(clientIds: string[], rng: Rng): RoleAssignment[] {
   for (const id of clientIds) species.set(id, rng.pick(PLAYABLE_SPECIES));
 
   const hunterId = rng.pick(clientIds);
-  if (!ANIMALS[species.get(hunterId)!].canBeHunter) {
-    species.set(hunterId, rng.pick(HUNTER_SPECIES));
-  }
+  species.set(hunterId, Species.Hunter);
 
   return clientIds.map((id) => {
     const isHunter = id === hunterId;
@@ -187,9 +195,9 @@ export function buildRoleCard(assignment: RoleAssignment): RoleCard {
       species: assignment.species,
       weakness: null,
       title: 'YOU ARE THE HUNTER',
-      subtitle: `You are a ${animal.name}. So are dozens of animals out there.`,
+      subtitle: 'A man with a rifle in a jungle full of animals. Some of them are people.',
       objective:
-        'Blend in with your own kind. Find the animals that move like people. Kill as many as you can before the night ends.',
+        'Shoot every player and the night is yours. Shoot an animal that was only an animal, and the jungle takes you instead. Be certain before you fire.',
     };
   }
   const weakness = assignment.weakness ? WEAKNESSES[assignment.weakness] : null;
@@ -198,10 +206,10 @@ export function buildRoleCard(assignment: RoleAssignment): RoleCard {
     species: assignment.species,
     weakness: assignment.weakness,
     title: 'YOU ARE PREY',
-    subtitle: `You are a ${animal.name}. One of the animals out there is a player, and it is hunting you.`,
+    subtitle: `You are a ${animal.name}. There is a man out there with a rifle, and he is looking for the animals that move like people.`,
     objective: weakness
-      ? `Survive ten minutes. Whistle every minute. ${weakness.emoji} ${weakness.name}: ${weakness.description}`
-      : 'Survive ten minutes. Whistle every minute. Behave like an animal.',
+      ? `Be an animal for fifteen minutes. Feed, wander, whistle — a ${animal.name} that never eats is a ${animal.name} he shoots. ${weakness.emoji} ${weakness.name}: ${weakness.description}`
+      : `Be an animal for fifteen minutes. Feed, wander, whistle — a ${animal.name} that never eats is a ${animal.name} he shoots.`,
   };
 }
 
@@ -264,7 +272,11 @@ export function checkEndCondition(
     return { ended: true, winner: Winner.Hunter };
   }
 
-  // The hunter died (starvation, an AI jaguar, a very committed capybara).
+  /*
+   * The hunter died — starvation, a crocodile, or, most likely, his own bullet
+   * in the wrong animal. Whichever it was, the round is over the instant he
+   * goes down: with nobody left to hunt, the remaining survivors have won.
+   */
   if (hunter && hunter.health <= 0) {
     return { ended: true, winner: Winner.Survivors };
   }

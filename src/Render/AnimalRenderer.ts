@@ -398,7 +398,19 @@ export class AnimalRenderer {
      */
     let pitch = 0;
     let roll = 0;
-    const onGround = !actor.inWater && !airborne && this.groundAt !== null;
+    /*
+     * The hunter is exempt from all of it.
+     *
+     * Terrain-following pitch is a quadruped idea: it exists because a long,
+     * low body has to lie *along* the slope it is standing on. A person does
+     * not — a person's feet follow the hill and their spine stays vertical, and
+     * a man tilted 30° back because he is walking up a bank reads as a bug
+     * immediately. His body is also only half a metre long, so the sampling
+     * reach would be a quarter of a metre and the measured slope would be pure
+     * noise even where the terrain is smooth.
+     */
+    const upright = def.silhouette.bodyPlan === BodyPlan.Human;
+    const onGround = !upright && !actor.inWater && !airborne && this.groundAt !== null;
     if (onGround) {
       const reach = Math.max(0.25, def.silhouette.length * 0.42);
       const fx = Math.cos(actor.yaw);
@@ -470,7 +482,8 @@ export class AnimalRenderer {
       // Roll into the stride — about X, the lateral axis. See the note above.
       model.body.rotation.x = moving ? swing * 0.05 * actor.gait : 0;
       // Lean forward when sprinting: nose down is a negative pitch about Z.
-      model.body.rotation.z = -actor.gait * 0.12;
+      // A running man leans into it too, but from the hips and much less far.
+      model.body.rotation.z = -actor.gait * (upright ? 0.05 : 0.12);
       if (curled) {
         // Armadillo ball: shrink and hide the limbs.
         model.body.scale.setScalar(lerp(model.body.scale.x, 0.72, dt * 6));
@@ -524,13 +537,38 @@ export class AnimalRenderer {
       const windup = clamp01(t / 0.35);
       const strike = clamp01((t - 0.35) / 0.25);
       const recover = clamp01((t - 0.6) / 0.4);
-      // Open on the windup, slam shut on the strike.
-      actor.jawOpen = Math.max(actor.jawOpen, windup * (1 - strike));
-      // Pull back, then throw the whole body forward.
-      const lunge = -windup * 0.12 + strike * 0.3 - recover * 0.3;
-      pitch += -windup * 0.18 + strike * 0.26 - recover * 0.08;
-      root.position.x += Math.cos(actor.yaw) * lunge;
-      root.position.z += Math.sin(actor.yaw) * lunge;
+      if (upright) {
+        /*
+         * The rifle, which is the opposite shape of a bite.
+         *
+         * A bite is a commitment forward; a shot is a shove backwards. So the
+         * hunter settles for the windup, the muzzle climbs and the whole man
+         * rocks back on his heels at the instant of firing, and he then walks
+         * the sights down again — which is the part that makes it read as recoil
+         * rather than as a flinch, because it takes longer than the kick did.
+         */
+        const kick = strike * (1 - recover);
+        pitch += windup * -0.03 + kick * 0.2;
+        root.position.x -= Math.cos(actor.yaw) * kick * 0.09;
+        root.position.z -= Math.sin(actor.yaw) * kick * 0.09;
+        if (model.muzzle) {
+          // Two or three frames only. A flash you can watch is a flash that
+          // reads as a lamp.
+          model.muzzle.visible = t < 0.5 && t > 0.28;
+          const s = 0.7 + Math.sin(t * 40) * 0.3;
+          model.muzzle.scale.setScalar(s);
+        }
+      } else {
+        // Open on the windup, slam shut on the strike.
+        actor.jawOpen = Math.max(actor.jawOpen, windup * (1 - strike));
+        // Pull back, then throw the whole body forward.
+        const lunge = -windup * 0.12 + strike * 0.3 - recover * 0.3;
+        pitch += -windup * 0.18 + strike * 0.26 - recover * 0.08;
+        root.position.x += Math.cos(actor.yaw) * lunge;
+        root.position.z += Math.sin(actor.yaw) * lunge;
+      }
+    } else if (model.muzzle && model.muzzle.visible) {
+      model.muzzle.visible = false;
     }
 
     // --- Jaw -------------------------------------------------------------

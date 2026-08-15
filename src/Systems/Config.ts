@@ -131,9 +131,46 @@ export const HUNTER_DAMAGE = 46;
 /** Hunter attack cooldown (seconds) — deliberately slow, so misses hurt. */
 export const HUNTER_ATTACK_COOLDOWN = 2.2;
 
-/** Reach and arc of the hunter's bite/pounce. */
+/** Reach and arc of an animal's bite/pounce. */
 export const HUNTER_ATTACK_RANGE = 3.4;
 export const HUNTER_ATTACK_ARC = Math.PI * 0.55;
+
+// --- The rifle -------------------------------------------------------------
+/*
+ * The hunter does not bite. He shoots, and the numbers below are what make that
+ * a different game rather than a longer bite.
+ */
+
+/**
+ * How far a bullet carries, in metres.
+ *
+ * Chosen to be a little further than a player can reliably *identify* an animal.
+ * At sixty metres you can see that something is a capybara; you cannot see
+ * whether it is grazing on a loop or being driven by a person, and that gap
+ * between "in range" and "sure" is the entire tension of the hunter's role.
+ */
+export const RIFLE_RANGE = 70;
+
+/**
+ * Half-angle of the cone a shot can hit inside, in radians.
+ *
+ * Tight — a third of a degree at most — because a rifle that sprays would let
+ * the hunter fire at a thicket and hope. He has to actually pick a target.
+ */
+export const RIFLE_ARC = 0.05;
+
+/** Seconds between shots: a bolt-action's worth of regret. */
+export const RIFLE_COOLDOWN = 2.6;
+
+/**
+ * How long a shot is visibly in progress, in seconds.
+ *
+ * Same constraint as ATTACK_STRIKE_TIME: it has to be comfortably longer than
+ * the 100 ms snapshot interval, or a shot can fall between two snapshots and be
+ * fired without ever being drawn — which, for the one action in the game that
+ * can end a player, would be indefensible.
+ */
+export const RIFLE_WINDUP = 0.34;
 
 /**
  * How long a strike is visibly in progress, in seconds.
