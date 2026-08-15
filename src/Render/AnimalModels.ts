@@ -356,8 +356,14 @@ function addJointedLeg(
   );
   shank.castShadow = true;
 
-  // Foot, flat on the ground at the bottom of the shank.
-  const footLen = radius * 2.6;
+  /*
+   * Foot, flat on the ground at the bottom of the shank.
+   *
+   * Kept close to the width of the leg. At 2.6 radii long it projected well past
+   * the ankle and read as a flipper — a paw is about as long as the leg is
+   * thick, and anything more turns a cat into a duck.
+   */
+  const footLen = radius * 1.9;
   mesh(
     box(footLen, radius * 0.7, radius * 2.1),
     options.footColor,
@@ -810,23 +816,80 @@ function buildQuadruped(
      * narrowing to a nose — give the head a profile, and the profile is most of
      * what distinguishes these species at the distance the game is played at.
      */
+    /*
+     * The muzzle itself carries the pale colour, rather than a patch laid over
+     * it. A patch has to be bigger than the mass underneath to be seen at all,
+     * and one big enough to win ends up looking like a growth; recolouring the
+     * mass costs nothing and is what a pale muzzle actually is.
+     */
     mesh(
       ellipsoid(L * 0.09, H * 0.1, W * 0.19, detail > 0.6 ? 8 : 5),
-      c.body,
+      style === 1 ? c.belly : c.body,
       neck,
       L * 0.19,
       -H * 0.03,
       0,
     );
-    // Nose pad.
+    /*
+     * Nose pad, in the *accent* colour.
+     *
+     * It was using `c.eye`, which on a tiger is a yellow-green — so the animal
+     * had a lime nose. An easy thing to write and an impossible thing to miss
+     * once you look at the face straight on, which is exactly the angle a player
+     * spends the whole round looking at other animals from.
+     */
     mesh(
       ellipsoid(L * 0.025, H * 0.035, W * 0.09, 6),
-      c.eye,
+      c.accent,
       neck,
       L * 0.27,
       -H * 0.01,
       0,
     );
+    /*
+     * Markings on the face, placed on the *surface* of the skull.
+     *
+     * The first attempt put them at hand-picked coordinates and every one of
+     * them ended up inside the head — the skull is an ellipsoid a third of a
+     * metre across and anything placed by eye at "roughly the forehead" is
+     * comfortably within it. Same lesson as the body stripes: a marking has to
+     * be positioned from the shape it is marking, not from a guess.
+     *
+     * `dir` is a direction from the skull's centre; the mark lands where that
+     * direction leaves the ellipsoid.
+     */
+    const skullCentre: [number, number, number] = [L * 0.1, 0, 0];
+    const skullR: [number, number, number] = [W * 0.5, W * 0.4, W * 0.4];
+    const markOnSkull = (
+      dir: [number, number, number],
+      size: [number, number, number],
+      color: number,
+      rotX = 0,
+    ): void => {
+      const len = Math.hypot(dir[0], dir[1], dir[2]) || 1;
+      const m = mesh(
+        ellipsoid(size[0], size[1], size[2], 5),
+        color,
+        neck,
+        skullCentre[0] + (dir[0] / len) * skullR[0] * 0.94,
+        skullCentre[1] + (dir[1] / len) * skullR[1] * 0.94,
+        skullCentre[2] + (dir[2] / len) * skullR[2] * 0.94,
+      );
+      m.rotation.x = rotX;
+      m.castShadow = false;
+    };
+
+    if (detail > 0.5) {
+      // A pale muzzle and pale cheeks. A head of one colour is an egg however
+      // many masses are in it, because nothing inside the outline catches the
+      // light differently.
+      // Pale jowls, low and forward on the cheek. Set any higher or wider and
+      // they read as a pair of earmuffs.
+      for (const side of [-1, 1]) {
+        markOnSkull([0.7, -0.75, side * 0.8], [W * 0.09, W * 0.07, W * 0.07], c.belly);
+      }
+    }
+
     // Brow ridge: a shelf over the eyes. Small, and it does more for a face than
     // anything else here — it is what stops the head reading as a smooth egg.
     if (detail > 0.6) {
@@ -913,9 +976,43 @@ function buildQuadruped(
     // Eyes, with a pupil in front of the eyeball. Two spheres, and the animal
     // suddenly has somewhere it is looking.
     for (const side of [-1, 1]) {
-      mesh(sphere(W * 0.085, 7), c.eye, neck, L * 0.16, H * 0.06, side * W * 0.235);
+      // A dark socket behind the eye, so it sits *in* the skull rather than on
+      // it — the single cheapest thing that stops an eye reading as a bead.
       if (detail > 0.6) {
-        mesh(sphere(W * 0.04, 5), 0x0d0b09, neck, L * 0.185, H * 0.065, side * W * 0.245);
+        mesh(ellipsoid(W * 0.13, W * 0.11, W * 0.06, 6), c.accent, neck, L * 0.145, H * 0.06, side * W * 0.225);
+      }
+      mesh(sphere(W * 0.1, 7), c.eye, neck, L * 0.165, H * 0.06, side * W * 0.24);
+      if (detail > 0.6) {
+        mesh(sphere(W * 0.048, 5), 0x0d0b09, neck, L * 0.195, H * 0.065, side * W * 0.25);
+      }
+    }
+
+    /*
+     * Facial markings.
+     *
+     * A tiger's face carries more pattern than the rest of it — bars across the
+     * forehead and a fan of them down each cheek — and a striped animal with a
+     * blank face reads as a different species from the neck up. Placed on the
+     * skull by angle rather than by hand so they follow its curve.
+     */
+    if (detail > 0.6 && (def.species === Species.Tiger || def.species === Species.Leopard)) {
+      const striped = def.species === Species.Tiger;
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 3; i++) {
+          // Bars across the forehead, fanning back over the skull.
+          markOnSkull(
+            [0.5 - i * 0.28, 1, side * (0.25 + i * 0.3)],
+            striped ? [W * 0.035, W * 0.03, W * 0.09] : [W * 0.045, W * 0.03, W * 0.045],
+            c.accent,
+            side * 0.6,
+          );
+          // Cheek marks, fanning back from the muzzle.
+          markOnSkull(
+            [0.85 - i * 0.25, -0.35 - i * 0.2, side],
+            striped ? [W * 0.07, W * 0.025, W * 0.03] : [W * 0.04, W * 0.03, W * 0.04],
+            c.accent,
+          );
+        }
       }
     }
 
@@ -992,20 +1089,54 @@ function buildQuadruped(
         );
         mass.castShadow = true;
       }
+      /*
+       * Leg bands.
+       *
+       * A tiger is striped to the toes and a leopard is spotted to them, and a
+       * patterned body on four plain legs is the sort of thing you cannot
+       * un-see once you have noticed it. Attached to the hip so they swing with
+       * the limb rather than staying behind on the body.
+       */
+      if (detail > 0.7 && style === 1) {
+        const hip = model.legs[model.legs.length - 1];
+        const spotted = def.species === Species.Leopard;
+        for (let b = 0; b < 4; b++) {
+          const y = -legLen * (0.16 + b * 0.19);
+          const ring = spotted ? [0.6, 2.4, 4.2] : [0, 1.05, 2.1, 3.14, 4.2, 5.25];
+          for (const around of ring) {
+            const j = Math.abs(Math.sin(b * 12.9 + around * 7.7));
+            mesh(
+              ellipsoid(legR * (spotted ? 0.34 : 0.42), legR * 0.26, legR * 0.42, 5),
+              c.accent,
+              hip,
+              Math.cos(around) * legR * 0.86,
+              y - j * legLen * 0.03,
+              Math.sin(around) * legR * 0.86,
+            );
+          }
+        }
+      }
+
       // Claws, on the animals that have any use for them.
       if (detail > 0.7 && (def.diet === Diet.Carnivore || def.diet === Diet.Omnivore)) {
         const knee = model.knees[model.knees.length - 1];
         if (knee) {
+          /*
+           * Claws, tucked under the toes rather than projecting past them.
+           * At half a leg-radius long and sticking out in front of the foot they
+           * read as flippers — a cat's claws are sheathed, and what you see of
+           * them is a hint at the front of the paw, not a set of blades.
+           */
           for (let t = 0; t < 3; t++) {
             const claw = mesh(
-              cone(legR * 0.16, legR * 0.5),
+              cone(legR * 0.1, legR * 0.28),
               c.belly,
               knee,
-              forward * legR * 0.45 + legR * 1.5,
-              -legLen * 0.5 - legR * 0.28,
-              (t - 1) * legR * 0.62,
+              forward * legR * 0.45 + legR * 1.1,
+              -legLen * 0.5 - legR * 0.42,
+              (t - 1) * legR * 0.52,
             );
-            claw.rotation.z = -Math.PI / 2 + 0.5;
+            claw.rotation.z = -Math.PI / 2 + 0.9;
           }
         }
       }
@@ -1834,7 +1965,19 @@ function buildApe(model: AnimalModel, def: AnimalDef, detail: number): void {
      * the jaw muscles. On a big male it is the tallest thing on the animal, and
      * without it an ape's head is a ball.
      */
-    const crest = mesh(box(W * 0.3, W * 0.11, W * 0.06), c.body, head, -W * 0.02, W * 0.24, 0);
+    /*
+     * The sagittal crest: a *ridge* along the skull, not a spike on top of it.
+     * At a tenth of the body width tall and a twentieth wide it stood up off the
+     * head like an aerial; a crest is a low blade you read from the profile.
+     */
+    const crest = mesh(
+      ellipsoid(W * 0.16, W * 0.055, W * 0.035, 6),
+      c.body,
+      head,
+      -W * 0.02,
+      W * 0.21,
+      0,
+    );
     crest.castShadow = true;
     // Brow ridge, a single heavy shelf rather than two lumps.
     mesh(box(W * 0.09, W * 0.07, W * 0.34), c.body, head, W * 0.16, W * 0.1, 0);
@@ -2093,24 +2236,48 @@ function buildShelled(model: AnimalModel, def: AnimalDef, detail: number): void 
    * looks armoured.
    */
   if (detail > 0.5) {
-    const rowY = [H * 0.38, H * 0.3, H * 0.16];
-    const rowZ = [0, W * 0.32, W * 0.5];
-    for (let row = 0; row < 3; row++) {
-      const along = row === 0 ? 5 : 4;
-      for (let i = 0; i < along; i++) {
-        const x = ((i + 0.5) / along - 0.5) * L * 0.72;
-        for (const side of [-1, 1]) {
-          if (row === 0 && side < 0) continue; // the vertebral row exists once
-          const plate = mesh(
-            ellipsoid(L * 0.1, H * 0.07, W * (row === 0 ? 0.15 : 0.13), 6),
-            row === 0 ? c.body : c.belly,
-            bodyGroup,
-            x,
-            rowY[row],
-            side * rowZ[row],
-          );
-          plate.scale.set(1, 1, 1);
-        }
+    /*
+     * Laid on the shell's own surface, and *flat*.
+     *
+     * The plates used to be rounded lumps at hand-picked heights, which from
+     * above read as a row of pebbles glued to a dome — the exact opposite of the
+     * effect wanted, since the point of a scute is that it is a flat plate with
+     * an edge. Placing them by direction from the shell's centre puts them on
+     * the surface wherever that surface happens to be, and flattening them along
+     * the outward normal (a rotation about X, as with the body markings — see
+     * the note there on why `lookAt` will not do) makes them plates rather than
+     * blisters.
+     */
+    const shellR: [number, number, number] = [
+      W * 0.62 * (L / (W * 1.24)),
+      W * 0.62 * 0.62,
+      W * 0.62,
+    ];
+    const shellY = H * 0.1;
+    const plate = (along: number, ring: number, side: number, size: number, color: number): void => {
+      // `along` is -1..1 down the shell, `ring` the angle from the spine.
+      const t = Math.max(-0.999, Math.min(0.999, along));
+      const shrink = Math.sqrt(1 - t * t);
+      const m = mesh(
+        ellipsoid(size * L * 0.5, size * W * 0.5, size * W * 0.14, 6),
+        color,
+        bodyGroup,
+        t * shellR[0] * 0.97,
+        shellY + Math.cos(ring) * shellR[1] * 0.97 * shrink,
+        side * Math.sin(ring) * shellR[2] * 0.97 * shrink,
+      );
+      m.rotation.x = side * (ring - Math.PI / 2);
+      m.castShadow = false;
+    };
+
+    // A central row of vertebrals, flanked by two rows of costals a side.
+    for (let i = 0; i < 5; i++) {
+      plate((i / 4 - 0.5) * 1.35, 0, 1, 0.3, c.body);
+    }
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 4; i++) {
+        plate((i / 3 - 0.5) * 1.3, 0.62, side, 0.28, c.belly);
+        plate((i / 3 - 0.5) * 1.2, 1.18, side, 0.24, c.body);
       }
     }
     // A rim around the lower edge of the carapace, which is what gives a shell

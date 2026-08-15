@@ -1352,10 +1352,11 @@ export const ANIMALS: Record<Species, AnimalDef> = {
       length: 1.5,
       height: 1.05,
       width: 0.72,
-      // Lifted off true black. A gorilla is black, but a black animal in a dark
-          // forest is a hole in the screen — there has to be enough value range
-          // left inside the silhouette for the saddle and the muzzle to read.
-          colors: { body: 0x3c3739, belly: 0x5c5457, accent: 0x9d9891, eye: 0x3a2a18 },
+      // Lifted well off true black, twice now. A gorilla is black, but a black
+          // animal in a dark forest is a hole in the screen: there has to be
+          // enough value range left *inside* the silhouette for the saddle, the
+          // brow and the muzzle to read as anything at all.
+          colors: { body: 0x4a4446, belly: 0x6b6367, accent: 0xa8a39c, eye: 0x3a2a18 },
       bodyPlan: BodyPlan.Primate,
       legPairs: 2,
       tail: 0,
