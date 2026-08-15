@@ -1235,120 +1235,6 @@ function addRootFlare(
   }
 }
 
-/**
- * A hanging curtain of willow fronds.
- *
- * The whole character of a willow is in these: long, thin, nearly vertical
- * strands that fall from the branch tips almost to the ground. Nothing else in
- * the silhouette matters as much — a willow with a normal round crown is just a
- * tree — so they are built as their own thing rather than as leaf cards angled
- * downwards, which never hangs convincingly.
- *
- * Each frond is a narrow tapering strip that drifts outwards as it falls, so the
- * curtain bells out slightly instead of dropping like a plumb line.
- */
-function addWillowFronds(
-  parts: MergePart[],
-  options: {
-    centre: [number, number, number];
-    radius: number;
-    count: number;
-    length: number;
-    palette: number[];
-    /** Small leaf cards scattered down each strand. 0 leaves a bare withe. */
-    leavesPerStrand?: number;
-  },
-): void {
-  const { centre, radius, count, length, palette } = options;
-  const [cx, cy, cz] = centre;
-  const leavesPerStrand = options.leavesPerStrand ?? 0;
-
-  for (let i = 0; i < count; i++) {
-    // Golden angle, and a radius that varies so the curtain has depth rather
-    // than being a single ring of strands.
-    const a = i * 2.399963;
-    const h = Math.sin(i * 12.9898) * 43758.5453;
-    const jitter = h - Math.floor(h);
-    const h2 = Math.sin(i * 78.233 + 1.7) * 43758.5453;
-    const jitter2 = h2 - Math.floor(h2);
-    const r = radius * (0.35 + jitter * 0.65);
-    // A wide spread of lengths. Strands of one length give the curtain a hemmed
-    // edge, which is the most artificial thing about it after the width.
-    const len = length * (0.35 + jitter2 * 0.95);
-    /*
-     * Thin. The strands used to be a quarter of a metre wide and dead straight,
-     * so a willow came out looking like the brushes in a car wash. A withe is a
-     * few millimetres across; a few centimetres is as thin as is worth building
-     * at this distance, and the *number* of them is what makes a curtain.
-     */
-    const w = 0.045;
-
-    const cosA = Math.cos(a);
-    const sinA = Math.sin(a);
-    const px = (out: number, off: number): number => cx + cosA * out - sinA * off;
-    const pz = (out: number, off: number): number => cz + sinA * out + cosA * off;
-
-    /*
-     * The arc.
-     *
-     * A willow strand leaves the branch going outwards and slightly *up*, loses
-     * its argument with gravity about a third of the way along, and falls almost
-     * vertically from there. Interpolating between those two behaviours over the
-     * length is what turns a hanging tape into a weeping branch, and it is the
-     * whole reason this is a chain of segments rather than one strip.
-     */
-    const segs = 6;
-    const outAt = (t: number): number =>
-      r + Math.sin(Math.min(1, t * 2.1) * Math.PI * 0.5) * radius * 0.55;
-    const yAt = (t: number): number =>
-      Math.sin(Math.min(1, t * 8) * Math.PI * 0.5) * len * 0.06 - len * Math.pow(t, 1.35);
-
-    const positions: number[] = [];
-    for (let sIdx = 0; sIdx < segs; sIdx++) {
-      const t0 = sIdx / segs;
-      const t1 = (sIdx + 1) / segs;
-      const out0 = outAt(t0);
-      const out1 = outAt(t1);
-      const y0 = yAt(t0);
-      const y1 = yAt(t1);
-      const w0 = w * (1 - t0 * 0.6);
-      const w1 = w * (1 - t1 * 0.6);
-      positions.push(
-        px(out0, -w0), cy + y0, pz(out0, -w0),
-        px(out0, w0), cy + y0, pz(out0, w0),
-        px(out1, w1), cy + y1, pz(out1, w1),
-        px(out0, -w0), cy + y0, pz(out0, -w0),
-        px(out1, w1), cy + y1, pz(out1, w1),
-        px(out1, -w1), cy + y1, pz(out1, -w1),
-      );
-    }
-    const frond = new THREE.BufferGeometry();
-    frond.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    frond.computeVertexNormals();
-    parts.push({ geometry: frond, color: new THREE.Color(palette[i % palette.length]) });
-
-    /*
-     * Leaves down the strand.
-     *
-     * Without them the curtain is bare withes — correct botany for February, and
-     * from any distance it reads as green string. They are tiny and alternate
-     * sides, as a willow's do, and they are what makes a strand catch light
-     * along its length instead of being a flat ribbon of one colour.
-     */
-    for (let k = 0; k < leavesPerStrand; k++) {
-      const t = 0.15 + ((k + 0.5) / leavesPerStrand) * 0.8;
-      const side = k % 2 === 0 ? 1 : -1;
-      const leaf = leafGeometry(0.34, 0.11, 0.1);
-      leaf.rotateZ(-1.05 - jitter * 0.3);
-      leaf.rotateY(-a + side * 0.7);
-      leaf.translate(px(outAt(t), side * w * 1.2), cy + yAt(t), pz(outAt(t), side * w * 1.2));
-      parts.push({
-        geometry: leaf,
-        color: new THREE.Color(palette[(i + k) % palette.length]),
-      });
-    }
-  }
-}
 
 /**
  * One tree.
@@ -1373,40 +1259,87 @@ function addWillowFronds(
  *   2  **broadleaf**  — short thick trunk under one enormous rounded crown.
  */
 /**
- * One tree.
+ * A crown filled from the inside, not a shell hung on the outside.
  *
- * ## Variants, and why they matter more than any single tree does
+ * Branch-tip clusters alone put every leaf at the end of a twig, so a crown is
+ * hollow and the scaffolding shows through it from every angle — which is the
+ * one thing a rainforest canopy never does. This scatters clusters through the
+ * whole volume of an ellipsoid, biased towards its outside, so the mass is
+ * opaque where it matters and still ragged at the edge.
  *
- * Every prop kind is drawn from one shared geometry, because an InstancedMesh
- * can only hold one — so for a long time all four thousand trees in the world
- * were the *same tree*, repeated. No amount of work on the individual model
- * fixes that: a forest of identical trees reads as wallpaper however good the
- * wallpaper is, and the eye finds the repeat within about a second.
+ * Deterministic from `seed`, like everything else here: every client grows the
+ * same tree.
+ */
+function canopyMass(
+  parts: MergePart[],
+  options: {
+    centre: [number, number, number];
+    /** Horizontal radius of the crown. */
+    radius: number;
+    /** Vertical squash: 1 is a ball, 0.4 an umbrella. */
+    flatten: number;
+    blobs: number;
+    perBlob: number;
+    leafLength: number;
+    leafWidth: number;
+    palette: number[];
+    seed: number;
+  },
+): void {
+  const hash = (i: number): number => {
+    const n = Math.sin((i * 91.73 + options.seed * 47.31) * 43758.5453);
+    return n - Math.floor(n);
+  };
+  for (let i = 0; i < options.blobs; i++) {
+    const theta = hash(i * 3 + 1) * Math.PI * 2;
+    const phi = Math.acos(2 * hash(i * 3 + 2) - 1);
+    // Cube root of a uniform gives an even fill of the volume; the 0.4 floor
+    // then pushes the population outwards, because that is where the light and
+    // the silhouette are.
+    const r = options.radius * (0.4 + 0.6 * Math.cbrt(hash(i * 3 + 3)));
+    leafCluster(parts, {
+      count: options.perBlob,
+      radius: options.radius * 0.33,
+      flatten: 0.85,
+      leafLength: options.leafLength,
+      leafWidth: options.leafWidth,
+      centre: [
+        options.centre[0] + Math.sin(phi) * Math.cos(theta) * r,
+        options.centre[1] + Math.cos(phi) * r * options.flatten,
+        options.centre[2] + Math.sin(phi) * Math.sin(theta) * r,
+      ],
+      palette: options.palette,
+    });
+  }
+}
+
+/**
+ * The three trees of the jungle.
  *
- * So `variant` selects between three trees that are different *species*, not
- * three tunings of one shape. Three silhouettes that could not be mistaken for
- * each other do more for a forest than thirty variations on a lollipop. The
- * batcher splits each chunk by variant (see `buildBatches`).
+ * ## What they are
  *
- *   0  **willow**     — short heavy trunk forking low, and a curtain of long
- *                       drooping fronds falling almost to the ground.
- *   1  **conifer**    — tall tapering spire, layered whorls of downswept
- *                       branches, prominent root flare.
- *   2  **broadleaf**  — short thick trunk under one enormous rounded crown.
+ *   0  **fig**       — a low, wide strangler fig with aerial roots.
+ *   1  **emergent**  — the giant: a bare buttressed column carrying an umbrella
+ *                      of foliage above everything else.
+ *   2  **broadleaf** — short thick trunk under one enormous rounded crown.
+ *
+ * There used to be a willow and a conifer here, and neither belongs within two
+ * thousand kilometres of the Amazon; both are now jungle trees.
+ *
+ * ## Density
+ *
+ * The crowns are grown with `growBranch` — real branching is self-similar three
+ * or four levels deep, the eye reads that depth instantly, and a denser blob is
+ * still a blob. But branching alone gives a crown you can see straight through,
+ * so every tier of every tree also carries foliage *along* its limbs and the
+ * whole crown volume is filled with `canopyMass`. The target is the reference
+ * photograph: you should not be able to find the branch that a leaf hangs on.
  *
  * ## Detail
  *
- * The crowns are grown with `growBranch` rather than assembled from limbs with
- * leaf blobs on the end. That recursion is the single biggest difference between
- * these and a diagram of a tree: real branching is self-similar three or four
- * levels deep, the eye reads that depth instantly, and a denser blob is still a
- * blob. It also means the canopy is genuinely hollow underneath — you can stand
- * under one and look up through the structure.
- *
- * The cost is real: at full detail a tree is a few thousand triangles rather
- * than a few hundred, and there are around thirteen hundred on screen. It is
- * bought back by `detail`, which drops the recursion depth a whole level on the
- * medium and low presets — one level of depth is most of the triangles.
+ * `detail` drops the recursion depth a level on the lower presets — tubes are
+ * what cost triangles — but never strips the leaves, because a leaf card is
+ * four triangles and a tree without them is a dead stick.
  */
 /**
  * Exported for tooling: `tools/tree-view.html` renders one variant on its own,
@@ -1426,177 +1359,182 @@ function buildTree(detail: number, variant = 0): PropAssets {
   const v = variant % 3;
 
   if (v === 0) {
-    // ---- Willow ----------------------------------------------------------
-    const height = 8.4;
+    // ---- Strangler fig ---------------------------------------------------
+    /*
+     * Low, wide and heavy: the fig forks a couple of metres off the ground into
+     * limbs that reach further out than the tree is tall, and drops aerial
+     * roots from them. Its crown is the densest of the three — this is the tree
+     * you cannot see anything through.
+     */
+    const height = 8.2;
     const trunk = sweptTrunk({
       height,
-      baseRadius: 0.78,
-      tipRadius: 0.34,
+      baseRadius: 0.86,
+      tipRadius: 0.4,
       sides,
       rings,
-      lean: 0.35,
+      lean: 0.3,
       leanAngle: 1.1,
-      gnarl: detail >= 1 ? 0.07 : 0,
+      gnarl: detail >= 1 ? 0.09 : 0,
       seed: 11,
     });
     parts.push({ geometry: trunk.geometry, color: new THREE.Color(0x6b4a2c) });
     if (detail >= 1) {
-      addRootFlare(parts, { count: 6, trunkRadius: 0.78, reach: 1.7, height: 1.9, color: 0x54381f });
+      addRootFlare(parts, { count: 7, trunkRadius: 0.86, reach: 2.0, height: 2.1, color: 0x54381f });
     }
 
-    /*
-     * A willow forks low into a few heavy limbs, and those divide again into the
-     * thin whippy branches the fronds hang from. Two levels of division is
-     * enough here because the *fronds* are the silhouette — the branch structure
-     * only has to hold them up and be visible through the gaps.
-     */
-    const palette = [0x69a83a, 0x7cbf47, 0x568f2e, 0x8ecf55];
-    const limbs = detail >= 1 ? 5 : 3;
+    const palette = [0x2f7a2b, 0x3d9235, 0x276a26, 0x4aa63d, 0x5cb84a];
+    const limbs = detail >= 1 ? 5 : 4;
     for (let i = 0; i < limbs; i++) {
       const a = (i / limbs) * Math.PI * 2 + 0.5;
       growBranch(parts, {
-        origin: [0, height * 0.6, 0],
-        dir: [Math.cos(a) * 0.8, 0.62, Math.sin(a) * 0.8],
-        length: 2.5,
-        radius: 0.2,
-        depth: 1,
-        split: 2,
-        spread: 0.6,
-        // Willow limbs arch up and then the twigs fall away.
-        tropism: -0.24,
-        lengthFalloff: 0.72,
+        origin: [0, height * (0.52 + (i % 2) * 0.14), 0],
+        dir: [Math.cos(a) * 0.9, 0.5, Math.sin(a) * 0.9],
+        length: 3.2,
+        radius: 0.24,
+        depth: detail >= 2 ? 2 : 1,
+        split: 3,
+        spread: 0.62,
+        tropism: 0.06,
+        lengthFalloff: 0.66,
         barkColor: 0x5e4128,
-        // Leaves come from the frond curtain instead, so the twigs carry only a
-        // light cap — a willow's branch tips are not leafy, the strands are.
-        leaves: { count: detail >= 2 ? 12 : 9, radius: 0.7, length: 0.4, width: 0.18, palette },
-        along: detail >= 2 ? { perSegment: 2, from: 1, scale: 0.5 } : { perSegment: 1, from: 1, scale: 0.4 },
+        leaves: {
+          count: detail >= 2 ? 13 : detail >= 1 ? 12 : 11,
+          radius: detail >= 2 ? 1.25 : 1.45,
+          length: detail >= 2 ? 0.66 : 0.72,
+          width: detail >= 2 ? 0.36 : 0.4,
+          palette,
+        },
+        along:
+          detail >= 2
+            ? { perSegment: 2, from: 1, scale: 0.55 }
+            : { perSegment: 2, from: 1, scale: 0.6 },
         sides: twigSides,
         seed: 100 + i,
       });
 
-      // The curtain, hung from around each limb's reach.
       /*
-       * The curtain, in two overlapping shells per limb.
-       *
-       * One ring of strands is a fringe you can see straight through, which is
-       * what a willow must never be — the species reads as a solid falling mass
-       * with the trunk showing underneath. Two shells at different radii, plus
-       * the crown shell below, close the silhouette for the price of geometry
-       * strips.
+       * Aerial roots: thin columns dropped from the limbs to the floor. They are
+       * the one silhouette cue that says fig rather than oak, and they cost four
+       * tubes.
        */
-      const reach = 2.6;
-      addWillowFronds(parts, {
-        centre: [Math.cos(a) * reach * 0.8, height * 0.6 + 2.2, Math.sin(a) * reach * 0.8],
-        radius: 2.1,
-        count: detail >= 2 ? 30 : detail >= 1 ? 18 : 11,
-        length: 6.4,
-        palette,
-        leavesPerStrand: detail >= 2 ? 7 : detail >= 1 ? 4 : 3,
-      });
-      if (detail >= 2) {
-        addWillowFronds(parts, {
-          centre: [Math.cos(a) * reach * 0.5, height * 0.6 + 2.9, Math.sin(a) * reach * 0.5],
-          radius: 1.4,
-          count: 18,
-          length: 5.2,
-          palette,
-          leavesPerStrand: 5,
+      if (detail >= 2 && i % 2 === 0) {
+        const rx = Math.cos(a) * 2.4;
+        const rz = Math.sin(a) * 2.4;
+        const top = height * 0.62 + 1.4;
+        growBranch(parts, {
+          origin: [rx, top, rz],
+          dir: [0.06, -1, 0.04],
+          length: top,
+          radius: 0.075,
+          depth: 0,
+          split: 1,
+          spread: 0,
+          tropism: 0,
+          lengthFalloff: 1,
+          barkColor: 0x5b3f26,
+          leaves: null,
+          sides: 4,
+          seed: 160 + i,
         });
       }
     }
-    addWillowFronds(parts, {
+
+    // The crown itself, filled through its whole volume.
+    canopyMass(parts, {
       centre: [0, height * 0.98, 0],
-      radius: 1.7,
-      count: detail >= 2 ? 24 : detail >= 1 ? 14 : 10,
-      length: 5.6,
+      radius: 4.6,
+      flatten: 0.74,
+      blobs: detail >= 2 ? 34 : detail >= 1 ? 18 : 10,
+      perBlob: detail >= 2 ? 15 : detail >= 1 ? 13 : 12,
+      leafLength: detail >= 2 ? 0.7 : 0.78,
+      leafWidth: detail >= 2 ? 0.38 : 0.42,
       palette,
-      leavesPerStrand: detail >= 2 ? 6 : 3,
+      seed: 7,
     });
   } else if (v === 1) {
-    // ---- Conifer ---------------------------------------------------------
+    // ---- Emergent giant --------------------------------------------------
+    /*
+     * The tree in the reference photograph: a clean grey column with nothing on
+     * it for two thirds of its height, buttressed at the foot, carrying a flat
+     * wide crown out above the rest of the canopy. Everything about it is that
+     * proportion — the bare trunk is most of the tree, and the foliage is a lid.
+     */
     const height = 17.0;
     const trunk = sweptTrunk({
       height,
-      baseRadius: 0.5,
-      tipRadius: 0.06,
+      baseRadius: 0.66,
+      tipRadius: 0.24,
       sides,
       rings: rings + 1,
-      lean: 0.25,
+      lean: 0.22,
       leanAngle: 3.4,
-      gnarl: detail >= 1 ? 0.03 : 0,
+      gnarl: detail >= 1 ? 0.04 : 0,
       seed: 23,
     });
-    parts.push({ geometry: trunk.geometry, color: new THREE.Color(0x7a4f2b) });
+    parts.push({ geometry: trunk.geometry, color: new THREE.Color(0x8a7358) });
     if (detail >= 1) {
-      // The splayed root claw is a signature of the reference conifer.
-      addRootFlare(parts, { count: 7, trunkRadius: 0.5, reach: 1.5, height: 2.6, color: 0x63401f });
+      // Buttress roots: the signature of a rainforest giant, and the reason it
+      // stands up in soil half a metre deep.
+      addRootFlare(parts, { count: 6, trunkRadius: 0.66, reach: 2.6, height: 3.4, color: 0x6f5b42 });
     }
 
-    /*
-     * Whorls of downswept branches at decreasing radius up the trunk — the whole
-     * conifer read is a stack of tiers narrowing to a spire.
-     *
-     * Each branch divides once into a spray, which is what turns a tier from a
-     * row of spokes into a continuous skirt of foliage. Whorls are rotated off
-     * each other so the branches never line up into vertical columns.
-     */
-    const palette = [0x2c5c2a, 0x367033, 0x244d24, 0x3f8038];
-    const whorls = detail >= 2 ? 9 : detail >= 1 ? 7 : 5;
-    const perWhorl = detail >= 2 ? 6 : 4;
-    for (let w = 0; w < whorls; w++) {
-      const t = w / (whorls - 1);
-      // Start above the bare lower trunk: a conifer's skirt is well off the floor.
-      const y = height * (0.26 + t * 0.68);
-      const spread = 3.6 * Math.pow(1 - t, 0.85) + 0.3;
-      for (let i = 0; i < perWhorl; i++) {
-        const a = (i / perWhorl) * Math.PI * 2 + w * 1.7;
+    const palette = [0x2b6f28, 0x367f31, 0x21601f, 0x469438, 0x54a844];
+    const tiers: { at: number; limbs: number; length: number; rise: number }[] =
+      detail >= 1
+        ? [
+            { at: 0.7, limbs: 5, length: 3.6, rise: 0.42 },
+            { at: 0.84, limbs: 4, length: 3.0, rise: 0.72 },
+            { at: 0.95, limbs: 3, length: 2.2, rise: 1.05 },
+          ]
+        : [
+            { at: 0.74, limbs: 4, length: 3.4, rise: 0.5 },
+            { at: 0.92, limbs: 3, length: 2.4, rise: 0.95 },
+          ];
+    for (let t = 0; t < tiers.length; t++) {
+      const tier = tiers[t];
+      for (let i = 0; i < tier.limbs; i++) {
+        const a = (i / tier.limbs) * Math.PI * 2 + 0.7 + t * 1.4;
         growBranch(parts, {
-          origin: [0, y, 0],
-          // Downswept: out and below horizontal, more so on the lower tiers.
-          dir: [Math.cos(a), -0.34 - (1 - t) * 0.16, Math.sin(a)],
-          length: spread * 0.62,
-          radius: 0.055 + (1 - t) * 0.03,
-          // One division. A conifer whorl has 54 branches on it already; giving
-          // each of those four grandchildren costs thousands of triangles for a
-          // spray you cannot see the inside of anyway.
-          depth: 1,
-          split: 2,
-          spread: 0.5,
-          tropism: -0.1,
-          lengthFalloff: 0.66,
-          barkColor: 0x5c3d22,
-          /*
-           * Short, wide, thickly packed. The needles used to be long thin cards
-           * radiating from each tip, and at over a metre each they read as a
-           * bundle of grass blades stuck to a pole. Foliage is legible from
-           * coverage, not from card size: small drooping cards packed onto every
-           * tip make a spray, and a stack of sprays makes a conifer.
-           */
+          origin: [0, height * tier.at, 0],
+          dir: [Math.cos(a), tier.rise, Math.sin(a)],
+          length: tier.length,
+          radius: 0.2 - t * 0.035,
+          depth: detail >= 2 ? 2 : 1,
+          split: 3,
+          spread: 0.6,
+          tropism: 0.12,
+          lengthFalloff: 0.68,
+          barkColor: 0x6d5940,
           leaves: {
-            count: detail >= 2 ? 11 : 9,
-            radius: spread * (detail >= 2 ? 0.3 : 0.38),
-            length: 0.6,
-            width: 0.26,
+            count: detail >= 2 ? 13 : detail >= 1 ? 12 : 11,
+            radius: detail >= 2 ? 1.25 : 1.5,
+            length: detail >= 2 ? 0.66 : 0.74,
+            width: detail >= 2 ? 0.36 : 0.4,
             palette,
           },
           along:
             detail >= 2
               ? { perSegment: 2, from: 1, scale: 0.55 }
-              : { perSegment: 1, from: 1, scale: 0.5 },
+              : { perSegment: 2, from: 1, scale: 0.58 },
           sides: twigSides,
-          seed: 300 + w * 11 + i,
+          seed: 300 + t * 31 + i,
         });
       }
     }
-    // The spire.
-    leafCluster(parts, {
-      count: detail >= 2 ? 16 : 10,
-      radius: 0.7,
-      flatten: 1.9,
-      leafLength: 0.6,
-      leafWidth: 0.24,
-      centre: [0, height * 0.99, 0],
+
+    // The lid: wide, shallow, and thick enough that the sky does not come
+    // through it.
+    canopyMass(parts, {
+      centre: [0, height * 1.03, 0],
+      radius: 5.0,
+      flatten: 0.42,
+      blobs: detail >= 2 ? 38 : detail >= 1 ? 20 : 11,
+      perBlob: detail >= 2 ? 15 : detail >= 1 ? 13 : 12,
+      leafLength: detail >= 2 ? 0.7 : 0.78,
+      leafWidth: detail >= 2 ? 0.38 : 0.42,
       palette,
+      seed: 19,
     });
   } else {
     // ---- Broadleaf -------------------------------------------------------
@@ -1617,29 +1555,15 @@ function buildTree(detail: number, variant = 0): PropAssets {
       addRootFlare(parts, { count: 6, trunkRadius: 0.85, reach: 2.1, height: 2.2, color: 0x553a20 });
     }
 
+    const palette = [0x2f7a2b, 0x3b8f34, 0x266722, 0x49a03c, 0x58b247];
     /*
-     * The crown is grown, not stacked.
-     *
-     * The reference is a single dense dome on a short trunk, and the thing that
-     * makes it read as a *tree* rather than as a green ball on a stick is that
-     * you can see the branch structure inside it where the light gets through.
-     * Three levels of division from four primary limbs gives 4 -> 12 -> 36 tips,
-     * each carrying a cluster, which fills a dome from the inside out.
-     */
-    const palette = [0x2f6d24, 0x3b8330, 0x4a9938, 0x286020, 0x56a743];
-    /*
-     * Three tiers, not one.
-     *
-     * Every limb used to leave the trunk at the same height and reach up at the
-     * same angle, so every tip finished on the same plane and the leaves sat on
-     * top of it: a flat green disc on a pole — a mushroom, not a tree. No amount
-     * of extra foliage fixes a crown with no depth in it, because the extra
-     * foliage lands on the same plane as the rest of it.
-     *
      * Tiers at different heights, the lower ones longer and reaching outwards
      * and the upper ones shorter and reaching up, give the crown a volume: tips
      * at every height from two thirds of the trunk to the top of the tree, and
-     * foliage filling the space between them.
+     * foliage filling the space between them. Every limb used to leave the
+     * trunk at the same height and reach up at the same angle, so every tip
+     * finished on the same plane and the leaves sat on top of it: a flat green
+     * disc on a pole.
      */
     const tiers: { at: number; limbs: number; length: number; rise: number; tropism: number }[] =
       detail >= 1
@@ -1656,63 +1580,60 @@ function buildTree(detail: number, variant = 0): PropAssets {
     for (let t = 0; t < tiers.length; t++) {
       const tier = tiers[t];
       for (let i = 0; i < tier.limbs; i++) {
-      // Offset each tier's fan so limbs from different tiers never stack into a
-      // vertical wall of wood.
-      const a = (i / tier.limbs) * Math.PI * 2 + 0.9 + t * 1.3;
-      growBranch(parts, {
-        origin: [0, height * tier.at, 0],
-        dir: [Math.cos(a), tier.rise, Math.sin(a)],
-        length: tier.length,
-        radius: 0.22 - t * 0.04,
-        /*
-         * Depth 2, not 3.
-         *
-         * Measured: at depth 3 this tree was 14,180 triangles and the forest came
-         * to 29.8 million — an order of magnitude past the entire rest of the
-         * scene. Each extra level multiplies the tip count by `split`, and the
-         * tips carry the leaves, so the last level is most of the cost. Two
-         * levels still reads as branching (4 -> 12 -> 36 tips); the third was
-         * paying ten times over for detail no one can resolve through foliage.
-         */
-        depth: detail >= 2 ? 2 : 1,
-        split: 3,
-        spread: 0.66,
-        tropism: tier.tropism,
-        lengthFalloff: 0.68,
-        barkColor: 0x5e4128,
-        /*
-         * Small cards, and a great many of them.
-         *
-         * The world generator scales this mesh up by half again to reach its
-         * target height, so a card built at 1.6 m arrived in the game two and a
-         * half metres long — you could count the leaves on a tree from thirty
-         * metres away, which was the loudest thing wrong with the old canopy.
-         * Three times as many at a third of the length costs about the same and
-         * reads as foliage instead of as bunting.
-         */
-        leaves: {
+        // Offset each tier's fan so limbs from different tiers never stack into
+        // a vertical wall of wood.
+        const a = (i / tier.limbs) * Math.PI * 2 + 0.9 + t * 1.3;
+        growBranch(parts, {
+          origin: [0, height * tier.at, 0],
+          dir: [Math.cos(a), tier.rise, Math.sin(a)],
+          length: tier.length,
+          radius: 0.22 - t * 0.04,
           /*
-           * The low presets drop a level of branching, and that is the right
-           * trade — tubes are what cost triangles. But dropping the leaves with
-           * it is not: a leaf card is two triangles, and a tree with three of
-           * them per tip is a dead stick. Fewer branches, each carrying a
-           * fuller and wider spray, keeps a crown at a fraction of the cost.
+           * Depth 2, not 3. Measured: at depth 3 this tree was 14,180 triangles
+           * and the forest came to 29.8 million. Each extra level multiplies the
+           * tip count by `split`, and the tips carry the leaves, so the last
+           * level is most of the cost.
            */
-          count: detail >= 2 ? 13 : detail >= 1 ? 12 : 11,
-          radius: detail >= 2 ? 1.15 : 1.5,
-          length: detail >= 2 ? 0.54 : 0.66,
-          width: detail >= 2 ? 0.3 : 0.36,
-          palette,
-        },
-        along:
-          detail >= 2
-            ? { perSegment: 2, from: 1, scale: 0.62 }
-            : { perSegment: 1, from: 1, scale: 0.55 },
-        sides: twigSides,
-        seed: 500 + t * 31 + i,
-      });
+          depth: detail >= 2 ? 2 : 1,
+          split: 3,
+          spread: 0.66,
+          tropism: tier.tropism,
+          lengthFalloff: 0.68,
+          barkColor: 0x5e4128,
+          /*
+           * Small cards, and a great many of them. The world generator scales
+           * this mesh up by half again, so a card built at 1.6 m arrived in the
+           * game two and a half metres long — you could count the leaves on a
+           * tree from thirty metres away.
+           */
+          leaves: {
+            count: detail >= 2 ? 13 : detail >= 1 ? 12 : 11,
+            radius: detail >= 2 ? 1.2 : 1.5,
+            length: detail >= 2 ? 0.64 : 0.72,
+            width: detail >= 2 ? 0.34 : 0.4,
+            palette,
+          },
+          along:
+            detail >= 2
+              ? { perSegment: 2, from: 1, scale: 0.55 }
+              : { perSegment: 2, from: 1, scale: 0.58 },
+          sides: twigSides,
+          seed: 500 + t * 31 + i,
+        });
       }
     }
+
+    canopyMass(parts, {
+      centre: [0, height * 1.02, 0],
+      radius: 4.8,
+      flatten: 0.66,
+      blobs: detail >= 2 ? 34 : detail >= 1 ? 18 : 10,
+      perBlob: detail >= 2 ? 15 : detail >= 1 ? 13 : 12,
+      leafLength: detail >= 2 ? 0.68 : 0.76,
+      leafWidth: detail >= 2 ? 0.36 : 0.4,
+      palette,
+      seed: 41,
+    });
   }
 
   return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };

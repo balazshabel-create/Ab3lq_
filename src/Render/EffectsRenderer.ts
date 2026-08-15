@@ -55,12 +55,14 @@ const RAIN_VERTEX = /* glsl */ `
     vec4 mvPosition = viewMatrix * vec4(world, 1.0);
     gl_Position = projectionMatrix * mvPosition;
     /*
-     * Bigger points than a drop needs, because the point is a *canvas* for the
-     * streak the fragment shader draws inside it, not the drop itself. Rain read
-     * as falling dots before — which is snow. What makes rain look like rain is
-     * motion blur: each drop is a short line, not a dot.
+     * The point is a *canvas* for the drop the fragment shader draws inside it,
+     * not the drop itself, so it is bigger than the drop — but only just. At
+     * 420/z the canvas was twenty-six pixels across and the drop drawn in it was
+     * a long bright dash: rain as sheets of falling string. A tropical downpour
+     * is a great many small drops, so the canvas is now less than half that and
+     * the count is more than double.
      */
-    gl_PointSize = clamp(420.0 / -mvPosition.z, 3.0, 26.0);
+    gl_PointSize = clamp(190.0 / -mvPosition.z, 2.0, 11.0);
 
     /*
      * The streak's direction in *screen* space.
@@ -94,16 +96,19 @@ const RAIN_FRAGMENT = /* glsl */ `
   void main() {
     // Point-local coordinates, centred and in -1..1.
     vec2 p = gl_PointCoord * 2.0 - 1.0;
-    // Split into "along the streak" and "across it". Anything more than a hair
-    // off the line is discarded, which is what turns a square sprite into a
-    // slanted line without any texture.
-    float along = dot(p, vStreak);
-    float across = abs(dot(p, vec2(-vStreak.y, vStreak.x)));
-    float line = 1.0 - smoothstep(0.06, 0.34, across);
-    // Taper both ends so the streak has a head and a tail rather than square cuts.
-    line *= 1.0 - smoothstep(0.55, 1.0, abs(along));
-    if (line <= 0.01) discard;
-    gl_FragColor = vec4(uColor * vBright, line * vAlpha * uOpacity);
+    /*
+     * A droplet, not a stripe: an ellipse stretched along the direction of
+     * travel by a factor of two and a half. A drop still has to be elongated —
+     * a round dot reads as snow — but the elongation belongs in the *shape*,
+     * with a soft edge all the way round it, rather than in a hard-edged line
+     * that runs the full width of the sprite.
+     */
+    float along = dot(p, vStreak) / 2.5;
+    float across = dot(p, vec2(-vStreak.y, vStreak.x));
+    float d = length(vec2(along, across));
+    float drop = 1.0 - smoothstep(0.18, 0.62, d);
+    if (drop <= 0.01) discard;
+    gl_FragColor = vec4(uColor * vBright, drop * vAlpha * uOpacity);
   }
 `;
 
@@ -260,7 +265,11 @@ export class EffectsRenderer {
   private ripplePool: { x: number; z: number; age: number; life: number; scale: number }[] = [];
   private rippleSpawnAccumulator = 0;
   private dimpleAccumulator = 0;
-  private static readonly RIPPLE_POOL = 96;
+  /*
+   * Raised from 96 with the rain: in a downpour the pool used to be full of
+   * dimples within a second and every animal wake was starved out of it.
+   */
+  private static readonly RIPPLE_POOL = 260;
 
   constructor(scene: THREE.Scene, settings: GraphicsSettings) {
     this.settings = settings;
@@ -464,7 +473,7 @@ export class EffectsRenderer {
       const u = this.rainMaterial.uniforms;
       u.uTime.value = time;
       u.uCenter.value.set(cameraPos.x, cameraPos.y - 4, cameraPos.z);
-      u.uOpacity.value = clamp01(rainIntensity) * 0.55;
+      u.uOpacity.value = clamp01(rainIntensity) * 0.72;
       u.uSlant.value = wind * 1.6;
       u.uSpeed.value = 0.45 + rainIntensity * 0.5;
       u.uRadius.value = Math.min(60, this.settings.viewDistance * 0.32);
@@ -573,8 +582,8 @@ export class EffectsRenderer {
     dt: number,
   ): void {
     if (this.settings.effectsQuality === 'off' || rain <= 0.05) return;
-    this.dimpleAccumulator += dt * rain * 46;
-    let budget = Math.min(6, Math.floor(this.dimpleAccumulator));
+    this.dimpleAccumulator += dt * rain * 150;
+    let budget = Math.min(18, Math.floor(this.dimpleAccumulator));
     if (budget <= 0) return;
     this.dimpleAccumulator -= budget;
     // Bounded attempts: in a jungle with no river in sight, most samples miss.

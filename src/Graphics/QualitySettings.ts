@@ -66,7 +66,7 @@ const PRESETS: Record<'low' | 'medium' | 'high', Omit<GraphicsSettings, 'preset'
     terrainSegments: 96,
     foliageDensity: 0.3,
     grassDistance: 28,
-    rainParticles: 900,
+    rainParticles: 2400,
     stars: false,
   },
   medium: {
@@ -87,7 +87,7 @@ const PRESETS: Record<'low' | 'medium' | 'high', Omit<GraphicsSettings, 'preset'
     terrainSegments: 160,
     foliageDensity: 0.65,
     grassDistance: 46,
-    rainParticles: 2200,
+    rainParticles: 6000,
     stars: true,
   },
   high: {
@@ -108,7 +108,7 @@ const PRESETS: Record<'low' | 'medium' | 'high', Omit<GraphicsSettings, 'preset'
     terrainSegments: 224,
     foliageDensity: 1,
     grassDistance: 70,
-    rainParticles: 4200,
+    rainParticles: 11000,
     stars: true,
   },
 };

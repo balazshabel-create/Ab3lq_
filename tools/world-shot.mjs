@@ -49,7 +49,16 @@ await page.addInitScript(
 );
 
 const radius = process.argv[5];
-await page.goto(radius ? `${base}?r=${radius}` : base, { waitUntil: 'load' });
+// Extra query the page reads for itself: `r` is the orbit radius, `weather` the
+// clear-weather override. Both live in the URL because the page evaluates them.
+const query = [
+  radius ? `r=${radius}` : '',
+  process.env.WEATHER ? `weather=${process.env.WEATHER}` : '',
+  process.env.FOG === 'off' ? 'fog=off' : '',
+]
+  .filter(Boolean)
+  .join('&');
+await page.goto(query ? `${base}?${query}` : base, { waitUntil: 'load' });
 await page.waitForFunction(() => !!window.__jj?.terrain, null, { timeout: 120_000 });
 await page.waitForSelector('#screen-menu.active', { timeout: 120_000 });
 console.log('world generated');
@@ -61,6 +70,67 @@ const info = await page.evaluate((what) => {
   const game = window.__jj;
   const terrain = game.terrain;
   const rig = game.renderer.cameraRig;
+
+  /*
+   * `?weather=clear` lies to the renderer for the duration of the photograph.
+   *
+   * Writing clear weather into the world state does not survive — the
+   * simulation rewrites it every tick and the renderer reads it immediately
+   * afterwards — so the lie goes in at the two places that consume it: the sky
+   * (which owns the fog) and the effects renderer (which owns the rain). Half
+   * the world's frames are a downpour, and reviewing the water through one is
+   * reviewing the fog.
+   */
+  function clearWeather() {
+    const sky = game.renderer.sky;
+    const skyUpdate = sky.update.bind(sky);
+    sky.update = (hour, _weather, _rain, _fog, pos, settings) =>
+      skyUpdate(hour, 'clear', 0, 0, pos, settings);
+    const fx = game.renderer.effects;
+    const fxUpdate = fx.update.bind(fx);
+    fx.update = (...args) => {
+      const a = args.slice();
+      a[4] = 0;
+      return fxUpdate(...a);
+    };
+  }
+  if (new URLSearchParams(location.search).get('weather') === 'clear') clearWeather();
+
+  /*
+   * `?weather=rain` is the opposite filter: hold the world in a downpour, so
+   * the rain can be photographed without waiting for the weather to come round
+   * to it.
+   */
+  if (new URLSearchParams(location.search).get('weather') === 'rain') {
+    const sky = game.renderer.sky;
+    const skyUpdate = sky.update.bind(sky);
+    sky.update = (hour, _weather, _rain, _fog, pos, settings) =>
+      skyUpdate(hour, 'rain', 1, 0.1, pos, settings);
+    const fx = game.renderer.effects;
+    const fxUpdate = fx.update.bind(fx);
+    fx.update = (...args) => {
+      const a = args.slice();
+      a[4] = 1;
+      return fxUpdate(...a);
+    };
+  }
+
+  /*
+   * `?fog=off` thins the scene fog to almost nothing, every frame.
+   *
+   * The jungle's humidity haze is deliberate and it is what the game looks
+   * like, but it is also opaque enough at forty metres to hide whatever a
+   * close-up is meant to show. This is a photographer's filter, not a setting.
+   */
+  if (new URLSearchParams(location.search).get('fog') === 'off') {
+    /*
+     * Nail the density shut rather than assigning it: the renderer recomputes
+     * fog every frame from the view distance and the weather, so any value
+     * written here lasts until the next frame and no longer.
+     */
+    const fog = game.renderer.scene.fog;
+    Object.defineProperty(fog, 'density', { get: () => 0.0012, set: () => {} });
+  }
 
   if (what === 'bridge') {
     const deck = terrain.decks[0];
@@ -106,6 +176,9 @@ const info = await page.evaluate((what) => {
   }
 
   if (what === 'sky') {
+    // The sky shot is always of the clouds, so it clears the weather by default
+    // — pass WEATHER=keep to photograph the sky the world actually has.
+    if (!new URLSearchParams(location.search).get('weather')) clearWeather();
     /*
      * Point the camera up. The free camera exists to orbit a place on the
      * ground and always looks down at it, so photographing the sky means taking
@@ -116,23 +189,6 @@ const info = await page.evaluate((what) => {
     const p = river.points[Math.floor(river.points.length / 3)];
     rig.setFreeAnchor(p.x, p.z, 20);
     rig.update = () => {};
-    /*
-     * Clear the weather for this one photograph. Overcast and rain are what the
-     * sky looks like most of the time in this world, and they hide the very
-     * thing the shot is of — the cloud layer's shape and height.
-     */
-    if (new URLSearchParams(location.search).get('weather') !== 'keep') {
-      /*
-       * Lie to the sky, rather than to the simulation. Writing clear weather
-       * into the world state does not survive: the simulation rewrites it every
-       * tick and the renderer reads it immediately afterwards. Wrapping the
-       * sky's own update is the one place the value cannot be overwritten.
-       */
-      const sky = game.renderer.sky;
-      const original = sky.update.bind(sky);
-      sky.update = (hour, _weather, _rain, _fog, pos, settings) =>
-        original(hour, 'clear', 0, 0, pos, settings);
-    }
     const cam = game.renderer.camera;
     cam.position.set(p.x, terrain.surfaceAt(p.x, p.z) + 3, p.z);
     cam.lookAt(p.x + 40, cam.position.y + 55, p.z);

@@ -41,9 +41,16 @@ const VERTEX_SHADER = /* glsl */ `
 
     // Two crossing wave trains, plus a slow swell. Cheap, and enough to make
     // the surface read as flowing rather than sloshing in place.
-    float w1 = sin(world.x * 0.19 + uTime * 1.10) * 0.055;
-    float w2 = sin(world.z * 0.25 - uTime * 0.85) * 0.045;
-    float swell = sin((world.x + world.z) * 0.045 + uTime * 0.35) * 0.075;
+    float w1 = sin(world.x * 0.19 + uTime * 1.10) * 0.075;
+    float w2 = sin(world.z * 0.25 - uTime * 0.85) * 0.062;
+    float swell = sin((world.x + world.z) * 0.045 + uTime * 0.35) * 0.115;
+    /*
+     * Three trains, not four. A fourth at 10 m wavelength was added here to
+     * break up the beat pattern and it aliased immediately: the plane carries a
+     * vertex every 5.7 m, so a 10 m wave is sampled twice per cycle and comes
+     * out as diagonal stair-steps across the river. Anything finer than the mesh
+     * belongs in the normal, which has no resolution limit — see waveNormal.
+     */
     float wave = (w1 + w2 + swell) * uWaveScale;
     vWave = wave;
 
@@ -101,11 +108,42 @@ const FRAGMENT_SHADER = /* glsl */ `
    * non-parallel angles and at frequencies that are not multiples of each other,
    * so the pattern never visibly tiles.
    */
+  /*
+   * Raindrops landing on the water.
+   *
+   * One drop per cell of a grid, each launching an expanding ring at its own
+   * phase, three grids at different scales and offsets laid over each other so
+   * the impacts do not fall in rows. This is what makes rain *land* — the
+   * curtain of drops in the air passes straight through a river otherwise, and
+   * the surface stays glassy through a downpour.
+   *
+   * Returns a 0..1 mask of ring brightness.
+   */
+  float rainRings(vec2 p, float t) {
+    float total = 0.0;
+    for (int i = 0; i < 3; i++) {
+      float fi = float(i);
+      vec2 q = p * (1.0 + fi * 0.63) + vec2(fi * 7.3, fi * 3.1);
+      vec2 cell = floor(q);
+      vec2 f = fract(q) - 0.5;
+      float h = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
+      // Each drop waits its turn: the fractional phase is its own clock.
+      float phase = fract(t * (1.3 + h * 0.7) + h);
+      float radius = phase * 0.46;
+      float ring = smoothstep(0.07, 0.0, abs(length(f) - radius));
+      // Rings fade as they widen, the way a real one loses height.
+      total += ring * (1.0 - phase) * (1.0 - phase);
+    }
+    return clamp(total, 0.0, 1.0);
+  }
+
   vec3 waveNormal(vec2 p, float detail) {
-    float dx = cos(p.x * 0.19 + uTime * 1.10) * 0.19 * 0.055
-             + cos((p.x + p.y) * 0.045 + uTime * 0.35) * 0.045 * 0.075;
-    float dz = cos(p.y * 0.25 - uTime * 0.85) * 0.25 * -0.045
-             + cos((p.x + p.y) * 0.045 + uTime * 0.35) * 0.045 * 0.075;
+    float dx = cos(p.x * 0.19 + uTime * 1.10) * 0.19 * 0.075
+             + cos((p.x + p.y) * 0.045 + uTime * 0.35) * 0.045 * 0.115
+             + cos((p.x * 0.63 - p.y * 0.41) + uTime * 0.62) * 0.63 * 0.035;
+    float dz = cos(p.y * 0.25 - uTime * 0.85) * 0.25 * -0.062
+             + cos((p.x + p.y) * 0.045 + uTime * 0.35) * 0.045 * 0.115
+             - cos((p.x * 0.63 - p.y * 0.41) + uTime * 0.62) * 0.41 * 0.035;
 
     /*
      * Fine chop, faded out with distance by 'detail'.
@@ -239,7 +277,7 @@ const FRAGMENT_SHADER = /* glsl */ `
     float fresnel = mix(0.04, 0.78 - deepness * 0.3, grazing) * uReflectivity;
 
     // Depth-graded body colour: silty green in the shallows, near-black deep.
-    vec3 body = mix(uShallowColor, uDeepColor, clamp(depthM / 3.5, 0.0, 1.0));
+    vec3 body = mix(uShallowColor, uDeepColor, clamp(depthM / 5.0, 0.0, 1.0));
 
     /*
      * Sky reflection, plus two specular lobes rather than one.
@@ -260,7 +298,7 @@ const FRAGMENT_SHADER = /* glsl */ `
      * the aliasing straight back even with the ripples faded.
      */
     float sparkle = pow(ndh, 120.0) * 2.2 * detail;
-    float sheen = pow(ndh, 18.0) * 0.55;
+    float sheen = pow(ndh, 30.0) * 0.4;
     vec3 reflection = uSkyColor + uSunColor * (sparkle + sheen);
 
     vec3 color = mix(body, reflection, fresnel);
@@ -313,7 +351,10 @@ const FRAGMENT_SHADER = /* glsl */ `
      * threshold does not pick out crests — it whitens roughly a third of the
      * river at once, and the result is a milky sheet rather than water.
      */
-    float crest = smoothstep(0.10, 0.16, vWave);
+    // Threshold retuned with the wave amplitude: the trains now sum to about
+    // forty centimetres rather than eighteen, and the old threshold whitened a
+    // third of the river at once.
+    float crest = smoothstep(0.17, 0.26, vWave);
     float shore = 1.0 - smoothstep(0.0, 0.5, depthM);
     color += vec3(0.26) * crest * 0.3;
     color = mix(color, vec3(0.58, 0.59, 0.52), shore * 0.32);
@@ -331,6 +372,16 @@ const FRAGMENT_SHADER = /* glsl */ `
     float lace = sin(dot(drift, flow) * 2.3 + uTime * 1.2)
                * sin(dot(drift, vec2(-flow.y, flow.x)) * 3.7 - uTime * 0.8);
     color += vec3(0.5, 0.52, 0.48) * edge * smoothstep(0.1, 0.75, abs(lace)) * 0.55;
+
+    /*
+     * Rain, landing. Faded with the same detail term as every other fine
+     * feature here — a ring twenty centimetres across is sub-pixel at forty
+     * metres, and drawing it there is just noise.
+     */
+    if (uRain > 0.02) {
+      float rings = rainRings(vWorldXZ * 1.7, uTime);
+      color += vec3(0.62, 0.66, 0.62) * rings * uRain * detail * 0.5;
+    }
 
     // Shallow water is nearly clear; deep water hides what is under it.
     float alpha = uOpacity * (0.3 + 0.7 * clamp(depthM / 1.2, 0.0, 1.0));
@@ -376,8 +427,8 @@ export class WaterSystem {
         ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
         uTime: { value: 0 },
         uWaveScale: { value: settings.waterQuality === 'low' ? 0 : 1 },
-        uShallowColor: { value: new THREE.Color(0x3f5738) },
-        uDeepColor: { value: new THREE.Color(0x0b1a16) },
+        uShallowColor: { value: new THREE.Color(0x53704a) },
+        uDeepColor: { value: new THREE.Color(0x1d3a2f) },
         uSkyColor: { value: new THREE.Color(0x88a7c4) },
         uSunColor: { value: new THREE.Color(0xffe8c0) },
         uSunDirection: { value: new THREE.Vector3(0.4, 0.8, 0.3) },

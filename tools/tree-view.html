@@ -35,9 +35,9 @@
       const detail = Number(params.get('detail') ?? 2);
       const count = Number(params.get('count') ?? 1);
       const angle = Number(params.get('angle') ?? 0.6);
-      // The world generator scales the built mesh up to a target height; without
-      // that here, a tree looks half the size it does in the game.
-      const WORLD_SCALE = [13.5 / 8.4, 17.5 / 18.0, 11.5 / 11.2][variant % 3];
+      // The generator's MODEL_HEIGHT is now measured off these very meshes, so
+      // scale 1 here is scale 1 in the game.
+      const WORLD_SCALE = 1;
 
       const renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);

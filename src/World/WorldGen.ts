@@ -179,10 +179,11 @@ export function generateWorld(
      * thousand trees that skew reads as one species being oddly common.
      */
     const variant = rng.int(0, 2);
-    // Metres, at scale 1, from the model: willow, conifer, broadleaf.
-    const MODEL_HEIGHT = [13.5, 17.5, 11.5];
+    // Metres, at scale 1, measured off the built meshes: fig, emergent giant,
+    // broadleaf. These are not decoration — see the note above.
+    const MODEL_HEIGHT = [11.9, 21.1, 11.9];
     // Trunk radius at the base, at scale 1, from the same models.
-    const MODEL_RADIUS = [0.78, 0.5, 0.85];
+    const MODEL_RADIUS = [0.86, 0.66, 0.85];
 
     const big = rng.chance(0.16);
     const scale = big ? rng.range(1.5, 2.3) : rng.range(0.75, 1.35);
@@ -197,11 +198,11 @@ export function generateWorld(
       variant,
       radius: MODEL_RADIUS[variant] * scale,
       /*
-       * Where the lowest branches actually are on each model: a willow forks low
-       * (62% of its height), a conifer's skirt starts higher, and a broadleaf
-       * carries its limbs just under the crown.
+       * Where the lowest branches actually are on each model: a fig forks low,
+       * a broadleaf a little lower still, and the emergent giant carries
+       * nothing at all until well over half way up its trunk.
        */
-      branchHeight: height * [0.6, 0.32, 0.7][variant],
+      branchHeight: height * [0.36, 0.56, 0.29][variant],
       height,
     });
   });
