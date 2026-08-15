@@ -992,6 +992,172 @@ function sweptTrunk(options: {
  *   2  **leaning**    — a bent trunk with a forked top, the tree that lost an
  *                       argument with a storm. Breaks up rows of verticals.
  */
+/**
+ * A branch, and recursively the branches it carries.
+ *
+ * ## Why recursion, and why it is the whole difference
+ *
+ * The trees here used to be a trunk plus one ring of straight limbs with a blob
+ * of leaves stuck on the end of each. That is a diagram of a tree. What a real
+ * one has — and what the reference photographs are entirely made of — is *self
+ * similarity*: a limb that divides into smaller limbs that divide again, three
+ * or four times over, with the foliage carried on the last and thinnest of them.
+ * The eye reads that branching depth immediately, and nothing else substitutes
+ * for it; a denser blob is still a blob.
+ *
+ * Each level tapers, shortens, and spreads away from its parent, with a
+ * deterministic per-branch wobble so no two children are mirror images. Leaves
+ * are attached only at the tips, which is also where they are on a real tree and
+ * is why the canopy ends up hollow underneath — you can stand under one of these
+ * and look up through the structure.
+ *
+ * Deterministic throughout: the hash is seeded from the branch's own index path,
+ * so a tree is identical on every client and across rebuilds.
+ */
+function growBranch(
+  parts: MergePart[],
+  options: {
+    origin: [number, number, number];
+    /** Unit-ish direction the branch grows in. */
+    dir: [number, number, number];
+    length: number;
+    radius: number;
+    /** How many more times this may divide. 0 = tip, carries leaves. */
+    depth: number;
+    /** Children per division. */
+    split: number;
+    /** How far children swing away from the parent, in radians. */
+    spread: number;
+    /** Added to every child's Y direction: negative droops, positive reaches up. */
+    tropism: number;
+    /** Multiplier applied to child length at each level. */
+    lengthFalloff: number;
+    barkColor: number;
+    leaves: { count: number; radius: number; length: number; width: number; palette: number[] } | null;
+    sides: number;
+    seed: number;
+  },
+): void {
+  const { origin, dir, length, radius, depth, split, spread, tropism, lengthFalloff } = options;
+
+  const hash = (i: number): number => {
+    const n = Math.sin((i * 127.1 + options.seed * 311.7) * 43758.5453);
+    return n - Math.floor(n);
+  };
+
+  // Normalise the direction so length means metres regardless of caller sloppiness.
+  const dl = Math.hypot(dir[0], dir[1], dir[2]) || 1;
+  const d: [number, number, number] = [dir[0] / dl, dir[1] / dl, dir[2] / dl];
+  const end: [number, number, number] = [
+    origin[0] + d[0] * length,
+    origin[1] + d[1] * length,
+    origin[2] + d[2] * length,
+  ];
+
+  // --- The segment itself -------------------------------------------------
+  // A tapered tube from origin to end. Built directly rather than with
+  // CylinderGeometry + rotations, because aiming a cylinder along an arbitrary
+  // vector needs a quaternion and this needs six lines.
+  {
+    const tipR = radius * 0.62;
+    // Any vector not parallel to d gives us a basis.
+    const up: [number, number, number] = Math.abs(d[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0];
+    const nx: [number, number, number] = [
+      up[1] * d[2] - up[2] * d[1],
+      up[2] * d[0] - up[0] * d[2],
+      up[0] * d[1] - up[1] * d[0],
+    ];
+    const nl = Math.hypot(nx[0], nx[1], nx[2]) || 1;
+    const u: [number, number, number] = [nx[0] / nl, nx[1] / nl, nx[2] / nl];
+    const w: [number, number, number] = [
+      d[1] * u[2] - d[2] * u[1],
+      d[2] * u[0] - d[0] * u[2],
+      d[0] * u[1] - d[1] * u[0],
+    ];
+
+    const positions: number[] = [];
+    const sides = options.sides;
+    for (let i = 0; i < sides; i++) {
+      const a0 = (i / sides) * Math.PI * 2;
+      const a1 = ((i + 1) / sides) * Math.PI * 2;
+      const ring = (
+        c: [number, number, number],
+        rad: number,
+        a: number,
+      ): [number, number, number] => [
+        c[0] + (u[0] * Math.cos(a) + w[0] * Math.sin(a)) * rad,
+        c[1] + (u[1] * Math.cos(a) + w[1] * Math.sin(a)) * rad,
+        c[2] + (u[2] * Math.cos(a) + w[2] * Math.sin(a)) * rad,
+      ];
+      const p00 = ring(origin, radius, a0);
+      const p01 = ring(origin, radius, a1);
+      const p10 = ring(end, tipR, a0);
+      const p11 = ring(end, tipR, a1);
+      positions.push(...p00, ...p10, ...p11, ...p00, ...p11, ...p01);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    g.computeVertexNormals();
+    parts.push({ geometry: g, color: new THREE.Color(options.barkColor) });
+  }
+
+  // --- Tip: hang the leaves here -----------------------------------------
+  if (depth <= 0) {
+    if (options.leaves) {
+      leafCluster(parts, {
+        count: options.leaves.count,
+        radius: options.leaves.radius,
+        flatten: 0.85,
+        leafLength: options.leaves.length,
+        leafWidth: options.leaves.width,
+        centre: end,
+        palette: options.leaves.palette,
+      });
+    }
+    return;
+  }
+
+  // --- Divide -------------------------------------------------------------
+  for (let i = 0; i < split; i++) {
+    const j = hash(i * 7 + depth * 13);
+    // Fan the children around the parent axis.
+    const around = (i / split) * Math.PI * 2 + j * 1.4 + depth;
+    const swing = spread * (0.65 + j * 0.7);
+
+    // Build a basis around d again to rotate away from it.
+    const up: [number, number, number] = Math.abs(d[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0];
+    const nx: [number, number, number] = [
+      up[1] * d[2] - up[2] * d[1],
+      up[2] * d[0] - up[0] * d[2],
+      up[0] * d[1] - up[1] * d[0],
+    ];
+    const nl = Math.hypot(nx[0], nx[1], nx[2]) || 1;
+    const u: [number, number, number] = [nx[0] / nl, nx[1] / nl, nx[2] / nl];
+    const w: [number, number, number] = [
+      d[1] * u[2] - d[2] * u[1],
+      d[2] * u[0] - d[0] * u[2],
+      d[0] * u[1] - d[1] * u[0],
+    ];
+    const side = Math.sin(swing);
+    const fwd = Math.cos(swing);
+    const childDir: [number, number, number] = [
+      d[0] * fwd + (u[0] * Math.cos(around) + w[0] * Math.sin(around)) * side,
+      d[1] * fwd + (u[1] * Math.cos(around) + w[1] * Math.sin(around)) * side + tropism,
+      d[2] * fwd + (u[2] * Math.cos(around) + w[2] * Math.sin(around)) * side,
+    ];
+
+    growBranch(parts, {
+      ...options,
+      origin: end,
+      dir: childDir,
+      length: length * lengthFalloff * (0.82 + j * 0.36),
+      radius: radius * 0.62,
+      depth: depth - 1,
+      seed: options.seed * 3 + i * 17 + depth,
+    });
+  }
+}
+
 /** Flared buttress fins around the foot of a trunk. */
 function addRootFlare(
   parts: MergePart[],
@@ -1109,9 +1275,47 @@ function addWillowFronds(
  *                       branches, prominent root flare.
  *   2  **broadleaf**  — short thick trunk under one enormous rounded crown.
  */
+/**
+ * One tree.
+ *
+ * ## Variants, and why they matter more than any single tree does
+ *
+ * Every prop kind is drawn from one shared geometry, because an InstancedMesh
+ * can only hold one — so for a long time all four thousand trees in the world
+ * were the *same tree*, repeated. No amount of work on the individual model
+ * fixes that: a forest of identical trees reads as wallpaper however good the
+ * wallpaper is, and the eye finds the repeat within about a second.
+ *
+ * So `variant` selects between three trees that are different *species*, not
+ * three tunings of one shape. Three silhouettes that could not be mistaken for
+ * each other do more for a forest than thirty variations on a lollipop. The
+ * batcher splits each chunk by variant (see `buildBatches`).
+ *
+ *   0  **willow**     — short heavy trunk forking low, and a curtain of long
+ *                       drooping fronds falling almost to the ground.
+ *   1  **conifer**    — tall tapering spire, layered whorls of downswept
+ *                       branches, prominent root flare.
+ *   2  **broadleaf**  — short thick trunk under one enormous rounded crown.
+ *
+ * ## Detail
+ *
+ * The crowns are grown with `growBranch` rather than assembled from limbs with
+ * leaf blobs on the end. That recursion is the single biggest difference between
+ * these and a diagram of a tree: real branching is self-similar three or four
+ * levels deep, the eye reads that depth instantly, and a denser blob is still a
+ * blob. It also means the canopy is genuinely hollow underneath — you can stand
+ * under one and look up through the structure.
+ *
+ * The cost is real: at full detail a tree is a few thousand triangles rather
+ * than a few hundred, and there are around thirteen hundred on screen. It is
+ * bought back by `detail`, which drops the recursion depth a whole level on the
+ * medium and low presets — one level of depth is most of the triangles.
+ */
 function buildTree(detail: number, variant = 0): PropAssets {
-  const sides = detail >= 2 ? 9 : detail >= 1 ? 7 : 5;
+  const sides = detail >= 2 ? 7 : detail >= 1 ? 5 : 4;
   const rings = detail >= 2 ? 7 : detail >= 1 ? 5 : 3;
+  // Branch sides can be lower than trunk sides: they are thin and never close.
+  const twigSides = detail >= 2 ? 5 : 4;
   const parts: MergePart[] = [];
   const v = variant % 3;
 
@@ -1135,53 +1339,48 @@ function buildTree(detail: number, variant = 0): PropAssets {
     }
 
     /*
-     * The crown sits on three big limbs that fork low on the trunk — a willow
-     * has no single leader, it splits early, and that fork is visible through
-     * the fronds from underneath.
+     * A willow forks low into a few heavy limbs, and those divide again into the
+     * thin whippy branches the fronds hang from. Two levels of division is
+     * enough here because the *fronds* are the silhouette — the branch structure
+     * only has to hold them up and be visible through the gaps.
      */
-    const limbs = detail >= 1 ? 4 : 3;
     const palette = [0x69a83a, 0x7cbf47, 0x568f2e, 0x8ecf55];
+    const limbs = detail >= 1 ? 5 : 3;
     for (let i = 0; i < limbs; i++) {
       const a = (i / limbs) * Math.PI * 2 + 0.5;
-      const len = 3.3;
-      const bend = 0.72;
-      const limb = new THREE.CylinderGeometry(0.1, 0.26, len, 5);
-      limb.translate(0, len * 0.5, 0);
-      limb.rotateZ(bend);
-      limb.rotateY(-a);
-      limb.translate(0, height * 0.62, 0);
-      parts.push({ geometry: limb, color: new THREE.Color(0x5e4128) });
-
-      const reach = Math.sin(bend) * len;
-      const tip: [number, number, number] = [
-        Math.cos(a) * reach,
-        height * 0.62 + Math.cos(bend) * len,
-        Math.sin(a) * reach,
-      ];
-      // A cap of leaves over the top of each limb, so the curtain has a roof.
-      leafCluster(parts, {
-        count: detail >= 2 ? 10 : 6,
-        radius: 2.1,
-        flatten: 0.5,
-        leafLength: 1.2,
-        leafWidth: 0.5,
-        centre: [tip[0] * 0.8, tip[1] + 0.3, tip[2] * 0.8],
-        palette,
+      growBranch(parts, {
+        origin: [0, height * 0.6, 0],
+        dir: [Math.cos(a) * 0.8, 0.62, Math.sin(a) * 0.8],
+        length: 2.5,
+        radius: 0.2,
+        depth: 1,
+        split: 2,
+        spread: 0.6,
+        // Willow limbs arch up and then the twigs fall away.
+        tropism: -0.24,
+        lengthFalloff: 0.72,
+        barkColor: 0x5e4128,
+        // Leaves come from the frond curtain instead, so the twigs carry only a
+        // light cap — a willow's branch tips are not leafy, the strands are.
+        leaves: { count: detail >= 2 ? 5 : 3, radius: 0.9, length: 0.8, width: 0.34, palette },
+        sides: twigSides,
+        seed: 100 + i,
       });
+
+      // The curtain, hung from around each limb's reach.
+      const reach = 2.6;
       addWillowFronds(parts, {
-        centre: [tip[0] * 0.85, tip[1], tip[2] * 0.85],
+        centre: [Math.cos(a) * reach * 0.8, height * 0.6 + 2.2, Math.sin(a) * reach * 0.8],
         radius: 1.9,
-        count: detail >= 2 ? 16 : detail >= 1 ? 11 : 6,
-        // Long enough to fall to about knee height on the animals below.
+        count: detail >= 2 ? 14 : detail >= 1 ? 9 : 5,
         length: 5.6,
         palette,
       });
     }
-    // A denser core of fronds straight off the fork, filling the middle.
     addWillowFronds(parts, {
-      centre: [0, height * 0.92, 0],
+      centre: [0, height * 0.95, 0],
       radius: 1.5,
-      count: detail >= 2 ? 14 : 9,
+      count: detail >= 2 ? 11 : 7,
       length: 5.0,
       palette,
     });
@@ -1206,53 +1405,57 @@ function buildTree(detail: number, variant = 0): PropAssets {
     }
 
     /*
-     * Whorls: rings of downswept branches at decreasing radius up the trunk.
+     * Whorls of downswept branches at decreasing radius up the trunk — the whole
+     * conifer read is a stack of tiers narrowing to a spire.
      *
-     * This is the entire conifer read — a stack of tiers narrowing to a spire.
-     * Built bottom-up so the widest tier is lowest, with the tiers thinning out
-     * towards the top, and each whorl rotated off the one below so the branches
-     * do not line up into vertical columns.
+     * Each branch divides once into a spray, which is what turns a tier from a
+     * row of spokes into a continuous skirt of foliage. Whorls are rotated off
+     * each other so the branches never line up into vertical columns.
      */
     const palette = [0x2c5c2a, 0x367033, 0x244d24, 0x3f8038];
-    const whorls = detail >= 2 ? 9 : detail >= 1 ? 7 : 4;
-    const perWhorl = detail >= 2 ? 6 : detail >= 1 ? 5 : 4;
+    const whorls = detail >= 2 ? 9 : detail >= 1 ? 6 : 4;
+    const perWhorl = detail >= 2 ? 6 : detail >= 1 ? 4 : 3;
     for (let w = 0; w < whorls; w++) {
       const t = w / (whorls - 1);
       // Start above the bare lower trunk: a conifer's skirt is well off the floor.
-      const y = height * (0.28 + t * 0.66);
-      const spread = 3.5 * Math.pow(1 - t, 0.85) + 0.35;
+      const y = height * (0.26 + t * 0.68);
+      const spread = 3.6 * Math.pow(1 - t, 0.85) + 0.3;
       for (let i = 0; i < perWhorl; i++) {
         const a = (i / perWhorl) * Math.PI * 2 + w * 1.7;
-        // Downswept: past horizontal, more so on the lower tiers.
-        const droop = 1.75 + (1 - t) * 0.25;
-        const len = spread;
-        const branch = new THREE.CylinderGeometry(0.03, 0.07, len, 4);
-        branch.translate(0, len * 0.5, 0);
-        branch.rotateZ(droop);
-        branch.rotateY(-a);
-        branch.translate(0, y, 0);
-        parts.push({ geometry: branch, color: new THREE.Color(0x5c3d22) });
-
-        const reach = Math.sin(droop) * len;
-        leafCluster(parts, {
-          count: detail >= 2 ? 6 : 4,
-          radius: spread * 0.42,
-          // Very flat: a conifer's foliage lies along the branch, not around it.
-          flatten: 0.3,
-          leafLength: 1.1,
-          leafWidth: 0.34,
-          centre: [Math.cos(a) * reach * 0.7, y + Math.cos(droop) * len * 0.7, Math.sin(a) * reach * 0.7],
-          palette,
+        growBranch(parts, {
+          origin: [0, y, 0],
+          // Downswept: out and below horizontal, more so on the lower tiers.
+          dir: [Math.cos(a), -0.34 - (1 - t) * 0.16, Math.sin(a)],
+          length: spread * 0.62,
+          radius: 0.055 + (1 - t) * 0.03,
+          // One division. A conifer whorl has 54 branches on it already; giving
+          // each of those four grandchildren costs thousands of triangles for a
+          // spray you cannot see the inside of anyway.
+          depth: 1,
+          split: 2,
+          spread: 0.5,
+          tropism: -0.1,
+          lengthFalloff: 0.66,
+          barkColor: 0x5c3d22,
+          leaves: {
+            count: detail >= 2 ? 5 : 3,
+            radius: spread * 0.36,
+            length: 1.15,
+            width: 0.34,
+            palette,
+          },
+          sides: twigSides,
+          seed: 300 + w * 11 + i,
         });
       }
     }
     // The spire.
     leafCluster(parts, {
-      count: detail >= 2 ? 8 : 5,
+      count: detail >= 2 ? 10 : 5,
       radius: 0.8,
-      flatten: 1.5,
+      flatten: 1.6,
       leafLength: 1.0,
-      leafWidth: 0.3,
+      leafWidth: 0.28,
       centre: [0, height * 0.99, 0],
       palette,
     });
@@ -1276,53 +1479,58 @@ function buildTree(detail: number, variant = 0): PropAssets {
     }
 
     /*
-     * One enormous crown rather than tiers.
+     * The crown is grown, not stacked.
      *
-     * The reference is a single dense dome sitting on a short trunk — the tree
-     * you draw as a child, and the one that makes a treeline read as *lush*
-     * rather than as forest. It is built from overlapping clusters at slightly
-     * different centres so the outline is lumpy rather than a smooth ball, which
-     * is the one thing that would give it away.
+     * The reference is a single dense dome on a short trunk, and the thing that
+     * makes it read as a *tree* rather than as a green ball on a stick is that
+     * you can see the branch structure inside it where the light gets through.
+     * Three levels of division from four primary limbs gives 4 -> 12 -> 36 tips,
+     * each carrying a cluster, which fills a dome from the inside out.
      */
     const palette = [0x2f6d24, 0x3b8330, 0x4a9938, 0x286020, 0x56a743];
     const limbs = detail >= 1 ? 4 : 3;
     for (let i = 0; i < limbs; i++) {
       const a = (i / limbs) * Math.PI * 2 + 0.9;
-      const len = 2.6;
-      const bend = 0.6;
-      const limb = new THREE.CylinderGeometry(0.11, 0.3, len, 5);
-      limb.translate(0, len * 0.5, 0);
-      limb.rotateZ(bend);
-      limb.rotateY(-a);
-      limb.translate(0, height * 0.72, 0);
-      parts.push({ geometry: limb, color: new THREE.Color(0x5e4128) });
-    }
-
-    const blobs = detail >= 2 ? 7 : detail >= 1 ? 5 : 3;
-    const crownY = height + 2.2;
-    for (let i = 0; i < blobs; i++) {
-      const a = i * 2.399963;
-      const h = Math.sin(i * 91.7) * 43758.5453;
-      const jitter = h - Math.floor(h);
-      const r = i === 0 ? 0 : 2.4 * (0.5 + jitter * 0.6);
-      leafCluster(parts, {
-        count: detail >= 2 ? 16 : detail >= 1 ? 11 : 6,
-        radius: i === 0 ? 4.4 : 3.0 + jitter * 0.9,
-        flatten: 0.82,
-        leafLength: 1.6,
-        leafWidth: 0.78,
-        centre: [
-          Math.cos(a) * r,
-          crownY + (i === 0 ? 0 : (jitter - 0.5) * 2.0),
-          Math.sin(a) * r,
-        ],
-        palette,
+      growBranch(parts, {
+        origin: [0, height * 0.72, 0],
+        dir: [Math.cos(a) * 0.62, 1, Math.sin(a) * 0.62],
+        length: 2.3,
+        radius: 0.26,
+        /*
+         * Depth 2, not 3.
+         *
+         * Measured: at depth 3 this tree was 14,180 triangles and the forest came
+         * to 29.8 million — an order of magnitude past the entire rest of the
+         * scene. Each extra level multiplies the tip count by `split`, and the
+         * tips carry the leaves, so the last level is most of the cost. Two
+         * levels still reads as branching (4 -> 12 -> 36 tips); the third was
+         * paying ten times over for detail no one can resolve through foliage.
+         */
+        depth: detail >= 2 ? 2 : 1,
+        split: 3,
+        spread: 0.62,
+        // Slightly upward: a broadleaf crown reaches for the light.
+        tropism: 0.12,
+        lengthFalloff: 0.7,
+        barkColor: 0x5e4128,
+        // Fewer, larger cards: coverage is area, and a card costs four triangles
+        // whatever size it is.
+        leaves: {
+          count: detail >= 2 ? 7 : detail >= 1 ? 5 : 3,
+          radius: 1.5,
+          length: 1.6,
+          width: 0.82,
+          palette,
+        },
+        sides: twigSides,
+        seed: 500 + i,
       });
     }
   }
 
   return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
 }
+
 
 
 
