@@ -530,8 +530,15 @@ function addFur(
      * Built long in Z and aimed outward along the surface normal, each tuft
      * sticks out of the body instead.
      */
+    /*
+     * Thin. A tuft half as wide as it is long is a plank, and ninety planks
+     * standing off a capybara's back read as a pile of broken crates rather than
+     * as a coat — which is exactly how the first shaggy animals came out. Hair
+     * is essentially one-dimensional; what makes a coat legible is the *number*
+     * of edges breaking the outline, not the area of each one.
+     */
     const tuft = mesh(
-      box(len * 0.5, len * 0.28, len),
+      box(len * 0.2, len * 0.12, len),
       colors[i % colors.length],
       parent,
       // Base slightly inside the surface, so no tuft floats free of the body.
@@ -737,8 +744,8 @@ function buildQuadruped(
       rx: L * 0.32,
       ry: barrelR * 0.92,
       rz: barrelR * (style === 1 ? 0.82 : 0.94),
-      count: shaggy ? 90 : 66,
-      length: (shaggy ? 0.34 : 0.22) * W,
+      count: shaggy ? 130 : 96,
+      length: (shaggy ? 0.24 : 0.17) * W,
       // Coat colours only. A cream tuft on a tiger's back reads as a chip of
       // bone stuck to it, because a tiger's pale fur is on its underside.
       colors: [c.body, c.accent, c.body],
@@ -756,8 +763,8 @@ function buildQuadruped(
       rx: L * 0.12,
       ry: barrelR * 0.7,
       rz: barrelR * 0.78,
-      count: 34,
-      length: (shaggy ? 0.3 : 0.22) * W,
+      count: 46,
+      length: (shaggy ? 0.22 : 0.16) * W,
       // Coat colours only. A pale tuft in the ruff reads as a chip of bone
       // stuck to the animal's neck, not as fur catching the light.
       colors: [c.body, c.accent, c.body],
@@ -1708,8 +1715,8 @@ function buildApe(model: AnimalModel, def: AnimalDef, detail: number): void {
       rx: L * 0.25,
       ry: W * 0.4,
       rz: W * 0.46,
-      count: 96,
-      length: W * 0.13,
+      count: 130,
+      length: W * 0.1,
       colors: [c.body, c.belly, c.body, 0x2f2b2d],
       centre: [-L * 0.06, H * 0.02, 0],
     });
