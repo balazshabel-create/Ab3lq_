@@ -43,6 +43,9 @@
       hud.root.classList.add('active');
       hud.setVisible(true);
 
+      // The crosshair is first-person only, which in this game means the hunter.
+      hud.setFirstPerson(q.get('role') === 'hunter');
+
       hud.update(
         {
           health: num('health', 62),

@@ -160,6 +160,16 @@ export class Renderer {
       0.1,
       farPlaneFor(settings),
     );
+    /*
+     * The camera goes *into the scene*, which it does not need to be for its own
+     * sake — three.js renders from a camera whether or not it is in the graph.
+     *
+     * It has to be there for anything parented to it. A child of a camera that
+     * is not in the scene is never traversed and never drawn, silently: the
+     * first-person shotgun was correctly built, correctly positioned and
+     * completely invisible, with no error anywhere to say so.
+     */
+    this.scene.add(this.camera);
     this.cameraRig = new CameraRig(this.camera, terrain);
 
     this.sky = new SkySystem(this.scene, settings);

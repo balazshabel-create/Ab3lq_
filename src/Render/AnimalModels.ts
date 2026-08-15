@@ -975,15 +975,24 @@ function buildQuadruped(
 
     // Eyes, with a pupil in front of the eyeball. Two spheres, and the animal
     // suddenly has somewhere it is looking.
+    /*
+     * The eye, in three parts.
+     *
+     * A dark socket behind it so it sits *in* the skull rather than on it; a
+     * pale surround outside that; and a pupil in front. The surround is the part
+     * that was missing and the part that matters most: half this roster has a
+     * near-black iris on a dark brown head, so the eye had nothing to be seen
+     * against and the face came out blind. Almost every mammal has paler fur
+     * ringing the eye, and here it is the difference between a face and a box.
+     */
     for (const side of [-1, 1]) {
-      // A dark socket behind the eye, so it sits *in* the skull rather than on
-      // it — the single cheapest thing that stops an eye reading as a bead.
       if (detail > 0.6) {
-        mesh(ellipsoid(W * 0.13, W * 0.11, W * 0.06, 6), c.accent, neck, L * 0.145, H * 0.06, side * W * 0.225);
+        mesh(ellipsoid(W * 0.15, W * 0.13, W * 0.05, 6), c.belly, neck, L * 0.14, H * 0.06, side * W * 0.23);
+        mesh(ellipsoid(W * 0.115, W * 0.095, W * 0.05, 6), c.accent, neck, L * 0.152, H * 0.06, side * W * 0.236);
       }
-      mesh(sphere(W * 0.1, 7), c.eye, neck, L * 0.165, H * 0.06, side * W * 0.24);
+      mesh(sphere(W * 0.088, 7), c.eye, neck, L * 0.168, H * 0.06, side * W * 0.242);
       if (detail > 0.6) {
-        mesh(sphere(W * 0.048, 5), 0x0d0b09, neck, L * 0.195, H * 0.065, side * W * 0.25);
+        mesh(sphere(W * 0.042, 5), 0x0d0b09, neck, L * 0.196, H * 0.065, side * W * 0.25);
       }
     }
 
@@ -1238,16 +1247,32 @@ function buildQuadruped(
       // How far down the flank this one reaches. Short bands over the shoulder,
       // long ones over the ribs — which is where a tiger's are longest.
       const reach = 1.05 + Math.sin((b / bands) * Math.PI) * 0.75 + jitter * 0.3;
-      const width = L * (0.017 + jitter * 0.012);
+      /*
+       * Narrower than they were, and forked.
+       *
+       * At nearly two per cent of the body length each the bands came out as a
+       * row of thick black bars — a zebra's pattern, or a barcode, rather than a
+       * tiger's. Real stripes are thin, uneven, and about a third of them split
+       * into two partway down the flank; the fork is the detail that stops a
+       * striped animal looking printed.
+       */
+      const width = L * (0.009 + jitter * 0.007);
+      const forks = jitter > 0.62;
       for (const side of [-1, 1]) {
-        const steps = 8;
+        const steps = 10;
         for (let i = 0; i <= steps; i++) {
-          const ring = (i / steps) * reach;
+          const t = i / steps;
+          const ring = t * reach;
           // Each patch has to reach at least to the next one, or the stripe
           // comes out as a dotted line down the flank.
-          const span = (reach / steps) * barrelR * 0.75;
+          const span = (reach / steps) * barrelR * 0.8;
           // Lean the band backwards as it descends: they are not vertical.
-          markOnBody(along - ring * L * 0.05, ring, side, width, span, c.accent);
+          const lean = along - ring * L * 0.05;
+          markOnBody(lean, ring, side, width * (1 - t * 0.35), span, c.accent);
+          // The second limb of a forked stripe, peeling away below halfway.
+          if (forks && t > 0.5) {
+            markOnBody(lean - (t - 0.5) * L * 0.06, ring, side, width * 0.7, span, c.accent);
+          }
         }
       }
     }
@@ -2349,9 +2374,26 @@ function buildShelled(model: AnimalModel, def: AnimalDef, detail: number): void 
     // A beak: the hooked upper lip that every tortoise has, and the one feature
     // that stops the head reading as a thumb.
     mesh(ellipsoid(W * 0.09, W * 0.07, W * 0.1, 6), c.accent, head, W * 0.3, -W * 0.03, 0);
+    /*
+     * The yellow scales.
+     *
+     * The species is called a *yellow-footed* tortoise and neither its head nor
+     * its feet had a scrap of yellow on them — dark olive skin against a bright
+     * shell, so the head read as a small dark blob stuck on the front. The
+     * scales are the animal's name; they are also the only thing that separates
+     * the head from the shadow it sits in.
+     */
     for (const side of [-1, 1]) {
-      mesh(sphere(W * 0.055, 6), c.eye, head, W * 0.2, W * 0.08, side * W * 0.15);
-      if (detail > 0.6) mesh(sphere(W * 0.026, 5), 0x0d0b09, head, W * 0.235, W * 0.085, side * W * 0.16);
+      mesh(ellipsoid(W * 0.06, W * 0.05, W * 0.04, 5), c.accent, head, W * 0.13, W * 0.09, side * W * 0.13);
+      mesh(ellipsoid(W * 0.05, W * 0.04, W * 0.035, 5), c.accent, head, -W * 0.02, W * 0.04, side * W * 0.17);
+      mesh(ellipsoid(W * 0.045, W * 0.035, W * 0.03, 5), c.accent, head, W * 0.16, -W * 0.05, side * W * 0.14);
+    }
+    for (const side of [-1, 1]) {
+      // A pale ring round the eye, so a near-black eye on a dark head is
+      // findable at all. Placed before the eye so the eye reads as set into it.
+      mesh(ellipsoid(W * 0.07, W * 0.06, W * 0.04, 6), c.accent, head, W * 0.2, W * 0.08, side * W * 0.145);
+      mesh(sphere(W * 0.05, 6), c.eye, head, W * 0.215, W * 0.085, side * W * 0.155);
+      if (detail > 0.6) mesh(sphere(W * 0.024, 5), 0xd8cba0, head, W * 0.245, W * 0.095, side * W * 0.163);
     }
   }
 
@@ -2376,6 +2418,23 @@ function buildShelled(model: AnimalModel, def: AnimalDef, detail: number): void 
         // Stumpy clawed feet: the elephantine forefoot is the tortoise read.
         toes: 3,
       });
+      // Yellow scales down the leg, which is the half of the name the feet were
+      // missing. On the hip, so they travel with the limb.
+      if (detail > 0.6) {
+        const hip = model.legs[model.legs.length - 1];
+        for (let i = 0; i < 3; i++) {
+          for (const around of [0.4, 2.2, 4.0]) {
+            mesh(
+              ellipsoid(W * 0.035, W * 0.028, W * 0.035, 5),
+              c.accent,
+              hip,
+              Math.cos(around) * W * 0.1,
+              -H * (0.08 + i * 0.11),
+              Math.sin(around) * W * 0.1,
+            );
+          }
+        }
+      }
     }
   }
 
