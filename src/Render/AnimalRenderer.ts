@@ -80,6 +80,14 @@ interface RenderActor {
    * tells them roughly when and which way the animal was facing.
    */
   deathTime: number;
+  /**
+   * How far a gorilla has risen onto its hind legs, 0..1.
+   *
+   * Smoothed here rather than sent over the wire: it is derived entirely from
+   * flags a player animal and an AI animal both carry, so both rear up under
+   * identical conditions and the display costs nothing on the network.
+   */
+  rearAmount: number;
 }
 
 const MODEL_DETAIL_NEAR = 1;
@@ -202,6 +210,7 @@ export class AnimalRenderer {
           stale: 0,
           fade: 0,
           distance: 0,
+          rearAmount: 0,
           inWater: false,
           slopePitch: 0,
           jawOpen: 0,
@@ -661,14 +670,27 @@ export class AnimalRenderer {
     }
 
     // --- Tail ------------------------------------------------------------
+    /*
+     * A crocodile's tail is not a decoration that follows the body — it is what
+     * the animal *swims with*, and it sculls in slow, heavy sweeps that carry
+     * far more amplitude than a cat's flick. Giving every plan the same small
+     * wave made a four-metre caiman look like it had a piece of rope attached.
+     */
+    const scull = plan === BodyPlan.Reptile;
+    const tailRate = scull ? (actor.inWater ? 2.4 : 1.5) : moving ? 5 : 1.6;
+    const tailAmp = scull
+      ? (actor.inWater ? 0.5 : 0.12) * (0.45 + actor.gait)
+      : moving
+        ? 0.16
+        : 0.07;
     for (let i = 0; i < model.tail.length; i++) {
       const seg = model.tail[i];
       const base = seg.userData.baseRotZ ?? seg.rotation.z;
       seg.userData.baseRotZ = base;
-      // A travelling wave down the tail: later segments lag behind.
-      const lag = i * 0.6;
-      const sway = Math.sin(time * (moving ? 5 : 1.6) - lag) * (moving ? 0.16 : 0.07);
-      seg.rotation.y = sway;
+      // A travelling wave down the tail: later segments lag behind. The lag is
+      // the whole illusion — in phase, a tail is a rigid stick that pivots.
+      const lag = i * (scull ? 0.5 : 0.6);
+      seg.rotation.y = Math.sin(time * tailRate - lag) * tailAmp;
       seg.rotation.z = base + (moving ? swing2 * 0.05 : 0);
     }
 
@@ -693,6 +715,41 @@ export class AnimalRenderer {
         const seg = model.segments[i];
         // The classic lateral undulation: a sine wave travelling tail-wards.
         seg.rotation.y = Math.sin(time * waveSpeed - i * 0.65) * waveAmp;
+      }
+    }
+
+    /*
+     * --- The gorilla stands up --------------------------------------------
+     *
+     * A silverback that has decided you are a problem rises onto its hind legs,
+     * and it is the most legible threat display any animal in this game makes:
+     * it doubles in height in about a third of a second, from across a clearing,
+     * with no sound needed.
+     *
+     * Driven off the states the animal is already in — alert, or mid-strike — so
+     * it costs no new network field and an AI gorilla and a player gorilla rear
+     * up under exactly the same conditions. The pose is a pitch about Z (nose
+     * up, the same axis as every other body-relative pitch here) plus a lift, so
+     * the hind feet stay on the ground while the chest comes off it.
+     */
+    if (def.species === Species.Gorilla) {
+      const wants = alerted || actor.biteTimer > 0 ? 1 : 0;
+      // Rises fast, settles slowly. A display that faded at the same rate it
+      // arrived would read as a wobble rather than as a decision.
+      const rate = wants > actor.rearAmount ? 7 : 2.2;
+      actor.rearAmount += (wants - actor.rearAmount) * Math.min(1, dt * rate);
+      if (actor.rearAmount > 0.001) {
+        const rear = actor.rearAmount;
+        pitch += rear * 0.95;
+        root.position.y += rear * def.silhouette.height * 0.42;
+        if (model.body !== root) {
+          // The arms come up and out with the chest.
+          for (let i = 0; i < 2 && i < model.legs.length; i++) {
+            model.legs[i].rotation.z -= rear * 0.7;
+            const knee = model.knees[i];
+            if (knee) knee.rotation.z += rear * 0.5;
+          }
+        }
       }
     }
 

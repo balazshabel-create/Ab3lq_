@@ -21,7 +21,6 @@ import {
   AI_FLEE_MEMORY,
   AI_HEAR_RANGE,
   AI_PREDATOR_ATTACK_COOLDOWN,
-  AI_PREDATOR_DAMAGE,
   AI_SIGHT_ARC,
   AI_SIGHT_RANGE,
   ANIMAL_SPEED,
@@ -37,9 +36,10 @@ import {
   ZONE_AI_FLEE_MARGIN,
 } from '../Systems/Config';
 import { ANIMALS, BodyPlan, Diet, Species } from '../Animals/AnimalTypes';
-import { canPrey, threatLevel } from '../Animals/FoodChain';
+import { biteDamage, canPrey, threatLevel } from '../Animals/FoodChain';
 import {
   ActorFlags,
+  ActorKind,
   AiBehavior,
   MoveMode,
   NoiseKind,
@@ -152,9 +152,29 @@ export function updateAnimal(
   });
 
   if (threat) {
-    animal.focusId = (threat as Actor).id;
+    const menace = threat as Actor;
+    animal.focusId = menace.id;
     animal.alertTimer = AI_FLEE_MEMORY;
-    if (animal.behavior !== AiBehavior.Flee) {
+
+    /*
+     * Not everything runs.
+     *
+     * The AI used to flee from anything it registered as dangerous, without ever
+     * asking whether it would win. That is wrong twice over. It is wrong about
+     * animals — a silverback does not run from a leopard, it goes at it — and it
+     * is wrong about the game, because a jungle where every animal always flees
+     * gives the survivors a trivially copyable behaviour and drains the world of
+     * any consequence. An animal stands and fights when it is angry enough and
+     * the thing in front of it is not bigger than it is.
+     */
+    const outsized = ANIMALS[menace.species].size > def.size;
+    const standsGround = temper.aggression >= 0.7 && !outsized;
+    if (standsGround) {
+      if (animal.behavior !== AiBehavior.Hunt) {
+        animal.behavior = AiBehavior.Hunt;
+        animal.behaviorTimer = 3 + animal.personality * 2;
+      }
+    } else if (animal.behavior !== AiBehavior.Flee) {
       // Reaction delay: real animals do not pivot instantly, and neither
       // should the AI — otherwise a player's instant reaction stands out less.
       animal.behavior = AiBehavior.Flee;
@@ -324,10 +344,20 @@ function chooseBehavior(
     }
   };
 
-  // Hunting: only predators, only when hungry enough to bother.
-  const carnivorous = diet === Diet.Carnivore || diet === Diet.Piscivore;
-  if (prey && carnivorous && animal.hunger < 78) {
-    push(AiBehavior.Hunt, 40 + temper.aggression * 60);
+  /*
+   * Hunting.
+   *
+   * Omnivores were left out of this, which quietly meant the gorilla — the
+   * hardest-hitting animal on the roster, at aggression 1.0 — never hunted
+   * anything at all. And the hunger gate was tight enough that a predator with a
+   * half-full stomach would walk past a meal standing in front of it. Both are
+   * loosened: a predator that never hunts is scenery, and scenery is not
+   * something a player has to imitate.
+   */
+  const carnivorous =
+    diet === Diet.Carnivore || diet === Diet.Piscivore || diet === Diet.Omnivore;
+  if (prey && carnivorous && animal.hunger < 92) {
+    push(AiBehavior.Hunt, 55 + temper.aggression * 90);
   }
 
   // Feeding.
@@ -575,7 +605,24 @@ function doHunt(animal: AiAnimal, ctx: AiContext): void {
       animal.attackCooldown = AI_PREDATOR_ATTACK_COOLDOWN;
       animal.flags |= ActorFlags.Attacking;
       ctx.emitNoise(animal.pos.x, animal.pos.z, NOISE_RUN * 1.4, NoiseKind.Attack, animal.id);
-      const killed = ctx.damageActor(target.id, AI_PREDATOR_DAMAGE, animal.id);
+      /*
+       * The same damage rule the player's attack uses, from FoodChain.
+       *
+       * This used to be a flat AI_PREDATOR_DAMAGE, and the two consequences were
+       * both bad: an AI predator needed seven connected bites on a three second
+       * cooldown to bring down a fleeing capybara, so in practice animals never
+       * killed each other and the food chain existed on paper only; and an AI
+       * fought visibly differently from a player of the same species, which is
+       * exactly the kind of tell this game cannot afford.
+       */
+      const killed = ctx.damageActor(
+        target.id,
+        biteDamage(animal.species, target.species, target.maxHealth, {
+          victimIsPlayer: target.kind === ActorKind.Player,
+          armoured: (target.flags & ActorFlags.Curled) !== 0,
+        }),
+        animal.id,
+      );
       if (killed) {
         animal.hunger = 100;
         animal.behavior = AiBehavior.Graze;

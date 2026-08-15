@@ -18,7 +18,7 @@ import {
   Species,
   isEnabled,
 } from '../src/Animals/AnimalTypes';
-import { canPrey } from '../src/Animals/FoodChain';
+import { biteDamage, canPrey } from '../src/Animals/FoodChain';
 import { canSwim } from '../src/Animals/AnimalTypes';
 import { Terrain } from '../src/World/Terrain';
 import { Rng } from '../src/Systems/Rng';
@@ -776,6 +776,74 @@ test('a clean miss costs the hunter nothing but the noise', () => {
 
   assert.ok(hunter.health > 0, 'a miss must not kill the hunter');
   assert.ok(hunter.stats.missedAttacks > missesBefore, 'the miss must be recorded');
+});
+
+test('animals kill each other', () => {
+  /*
+   * The food chain has to actually run. It used to not: an AI predator dealt a
+   * flat sixteen points a bite on a three-second cooldown, so bringing down a
+   * fleeing capybara needed seven connected hits and in practice never happened.
+   * A jungle where nothing ever eats anything is a jungle with no consequences
+   * in it, and it also leaves a player predator with nothing to imitate.
+   */
+  const sim = new Simulation(8123);
+  sim.addPlayer('a', 'A');
+  sim.startRound();
+  advance(sim, 12);
+
+  let deaths = 0;
+  const before = new Map<number, number>();
+  sim.forEachNearby(0, 0, 10_000, (a) => {
+    if (a.kind === ActorKind.AI) before.set(a.id, a.health);
+  });
+
+  // Ten minutes of jungle. Predators are hungry and prey is not infinite.
+  for (let i = 0; i < Math.round(600 / SIM_DT); i++) sim.update(SIM_DT);
+
+  for (const [id] of before) {
+    const actor = sim.getActor(id);
+    if (!actor || (actor.flags & ActorFlags.Dead) !== 0) deaths++;
+  }
+  assert.ok(deaths > 0, 'over ten minutes, something should have eaten something');
+});
+
+test('the bite rule holds for the whole roster', () => {
+  /*
+   * The player's attack and the AI's attack both call `biteDamage` now — they
+   * used to compute damage in two different places and disagree, which meant a
+   * player predator and an AI of the same species fought differently. That is a
+   * tell, in a game whose central promise is that no code path treats the two
+   * differently. Having one function is the fix; what is worth asserting is that
+   * the rule it encodes is the one the roster was designed around.
+   */
+
+  // A capybara cannot grind a tiger down, however many times it connects.
+  const nibble = biteDamage(Species.Capybara, Species.Tiger, 135, { victimIsPlayer: false });
+  assert.ok(nibble < 135 * 0.2, `a capybara bite on a tiger was ${nibble.toFixed(1)}`);
+
+  // Natural prey dies outright, or predators can never feed on anything that runs.
+  assert.equal(
+    biteDamage(Species.Tiger, Species.Capybara, 100, { victimIsPlayer: false }),
+    100,
+    'natural prey must die outright',
+  );
+
+  // A player is never one-shot by an animal — being found is not being dead.
+  for (const attacker of PLAYABLE_SPECIES) {
+    const onPlayer = biteDamage(attacker, Species.Capybara, 100, { victimIsPlayer: true });
+    assert.ok(
+      onPlayer > 0 && onPlayer < 100,
+      `${attacker} does ${onPlayer.toFixed(1)} to a player in one bite`,
+    );
+  }
+
+  // Curling up is worth something.
+  const open = biteDamage(Species.Tiger, Species.Gorilla, 100, { victimIsPlayer: true });
+  const curled = biteDamage(Species.Tiger, Species.Gorilla, 100, {
+    victimIsPlayer: true,
+    armoured: true,
+  });
+  assert.ok(curled < open, 'armour must reduce the bite');
 });
 
 test('a simulation tick stays well inside the frame budget', () => {

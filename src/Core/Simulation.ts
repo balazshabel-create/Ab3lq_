@@ -30,7 +30,6 @@ import {
   HUNTER_ATTACK_ARC,
   HUNTER_ATTACK_COOLDOWN,
   HUNTER_ATTACK_RANGE,
-  HUNTER_DAMAGE,
   HUNTER_SPEED_BONUS,
   JUMP_SPEED,
   NOISE_ATTACK,
@@ -84,7 +83,7 @@ import {
   SizeClass,
   isEnabled,
 } from '../Animals/AnimalTypes';
-import { canEat, canPrey, tierOfSource } from '../Animals/FoodChain';
+import { biteDamage, canEat, tierOfSource } from '../Animals/FoodChain';
 import {
   ActorFlags,
   ActorKind,
@@ -1428,16 +1427,6 @@ export class Simulation implements AiContext {
      * predator's, and body size scales it further, so a tiny herbivore is doing
      * little more than making a point.
      */
-    /*
-     * Attack strength is now per-species data, not inferred.
-     *
-     * It used to be `(meatEater ? 1 : 0.34) * sizeFactor`, which cannot express
-     * the roster: the leopard is a large carnivore that is meant to hit softly and
-     * the gorilla is an omnivore that is meant to hit hardest, so the inference
-     * got both exactly backwards. See AnimalDef.attackPower.
-     */
-    const attackPower = def.attackPower ?? 0.5;
-
     player.attackCooldown = HUNTER_ATTACK_COOLDOWN;
     // Open the strike window. The flag is also raised here rather than waiting
     // for the next tick's timer pass, so the lunge is visible in this tick's
@@ -1496,32 +1485,18 @@ export class Simulation implements AiContext {
      * AI hunts. Anything else it can reach still takes a heavy hit.
      */
     /*
-     * Size resistance: hitting something much bigger than you barely registers.
-     *
-     * Without this, a capybara could grind a tiger down given enough bites — its
-     * bite is feeble but nonzero, and nothing stopped the arithmetic from getting
-     * there eventually. "A capybara must not kill a tiger" is a statement about
-     * what is *possible*, not about how long it takes, so it needs a term that
-     * scales with the gap in size rather than a smaller constant.
-     *
-     * Two size classes up (capybara Medium -> tiger Large is one, and the tiger's
-     * 1.35 health multiplier does the rest) already cuts the bite to a fifth.
+     * The damage rule lives in FoodChain.biteDamage, and both this and the AI's
+     * attack go through it. They used to compute it separately and disagree,
+     * which meant a player predator and an AI of the same species fought
+     * differently — a tell, in a game whose central promise is that no code path
+     * treats the two differently.
      */
-    const sizeGap = ANIMALS[victim.species].size - def.size;
-    const resistance = sizeGap > 0 ? 1 / (1 + sizeGap * 2) : 1;
+    const damage = biteDamage(player.species, victim.species, victim.maxHealth, {
+      victimIsPlayer: victim.kind === ActorKind.Player,
+      armoured,
+    });
 
-    let damage: number;
-    if (victim.kind === ActorKind.Player) {
-      const roleScale = player.role === Role.Hunter ? 1 : 0.55;
-      damage = HUNTER_DAMAGE * roleScale * attackPower * resistance;
-    } else if (canPrey(player.species, victim.species)) {
-      // A predator taking its natural prey succeeds outright, as the AI does.
-      damage = victim.maxHealth;
-    } else {
-      damage = HUNTER_DAMAGE * 1.8 * attackPower * resistance;
-    }
-
-    this.damageActor(victim.id, armoured ? damage * 0.3 : damage, player.id);
+    this.damageActor(victim.id, damage, player.id);
   }
 
   /**

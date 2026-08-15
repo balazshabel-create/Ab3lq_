@@ -11,7 +11,7 @@
  *   ANY DEATH ─→ CARRION ─→ scavengers
  */
 
-import { FOOD_NUTRITION, type FoodTier } from '../Systems/Config';
+import { FOOD_NUTRITION, HUNTER_DAMAGE, type FoodTier } from '../Systems/Config';
 import { ANIMALS, Diet, SizeClass, Species } from './AnimalTypes';
 import type { FoodSourceKind } from '../World/WorldGen';
 
@@ -99,4 +99,55 @@ export function foragedTiers(species: Species): FoodTier[] {
 export function canForageOnly(species: Species): boolean {
   const d = ANIMALS[species].diet;
   return d === Diet.Herbivore || d === Diet.Omnivore || d === Diet.Insectivore;
+}
+
+/**
+ * How much damage one bite does.
+ *
+ * ## Why this is here and not in the two places that used to do it
+ *
+ * The player's attack and the AI's attack computed damage separately, and they
+ * did not agree: a player predator killed its natural prey outright while an AI
+ * of the same species chipped away a flat sixteen points a bite, needing seven
+ * of them on a slow cooldown. Two consequences, both bad. Animals could barely
+ * kill each other, so the food chain the whole design rests on existed mostly on
+ * paper; and a player and an AI of the same species behaved *differently in
+ * combat*, which is a tell — and this game's central promise is that there is no
+ * code path that treats the two differently.
+ *
+ * The rules, in one place:
+ *
+ *  • **Natural prey dies outright.** Not because predators are strong but
+ *    because the alternative does not work: a fleeing capybara at full health
+ *    that needs seven connected bites will simply never be caught, so nothing
+ *    ever feeds and predators never have to come into the open to hunt.
+ *  • **Anything else takes a heavy but survivable hit**, so being found is not
+ *    the same as being dead and a chase is a real contest.
+ *  • **Size resists.** Hitting something two classes above you barely registers.
+ *    Without this a capybara could grind a tiger down given enough bites — its
+ *    bite is feeble but nonzero, and nothing stopped the arithmetic getting
+ *    there eventually. "A capybara must not kill a tiger" is a claim about what
+ *    is *possible*, not about how long it takes, so it needs a term that scales
+ *    with the gap rather than a smaller constant.
+ */
+export function biteDamage(
+  attacker: Species,
+  victim: Species,
+  victimMaxHealth: number,
+  options: { victimIsPlayer: boolean; armoured?: boolean },
+): number {
+  const a = ANIMALS[attacker];
+  const attackPower = a.attackPower ?? 0.5;
+  const sizeGap = ANIMALS[victim].size - a.size;
+  const resistance = sizeGap > 0 ? 1 / (1 + sizeGap * 2) : 1;
+
+  let damage: number;
+  if (options.victimIsPlayer) {
+    damage = HUNTER_DAMAGE * 0.62 * attackPower * resistance;
+  } else if (canPrey(attacker, victim)) {
+    damage = victimMaxHealth;
+  } else {
+    damage = HUNTER_DAMAGE * 1.8 * attackPower * resistance;
+  }
+  return options.armoured ? damage * 0.3 : damage;
 }
