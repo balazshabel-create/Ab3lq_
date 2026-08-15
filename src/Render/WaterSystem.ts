@@ -14,7 +14,12 @@
  */
 
 import * as THREE from 'three';
-import { WATER_LEVEL, WORLD_SIZE } from '../Systems/Config';
+import {
+  WATER_DEPTH_ABOVE,
+  WATER_DEPTH_BAND,
+  WATER_LEVEL,
+  WORLD_SIZE,
+} from '../Systems/Config';
 import type { GraphicsSettings } from '../Graphics/QualitySettings';
 
 const VERTEX_SHADER = /* glsl */ `
@@ -66,6 +71,8 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform sampler2D uDepthMap;
   uniform float uWorldSize;
   uniform float uUnderwater;
+  uniform float uDepthZero;
+  uniform float uDepthBand;
 
   varying vec2 vWorldXZ;
   varying vec3 vWorldPos;
@@ -140,8 +147,16 @@ const FRAGMENT_SHADER = /* glsl */ `
      */
     vec2 uv = vWorldXZ / uWorldSize + 0.5;
     float ground = texture2D(uDepthMap, uv).r;
-    // Metres of water above the ground. Negative on dry land.
-    float depthM = ((1.0 - ground) - 0.142857) * 7.0;
+    /*
+     * Metres of water above the ground. Negative on dry land.
+     *
+     * The two constants come in as uniforms rather than being written here.
+     * They used to be a literal 0.142857 and a literal 7.0 that silently encoded
+     * the baker's mapping, so deepening the river meant editing the same numbers
+     * in two files and the first symptom of getting it wrong is a translucent
+     * sheet drawn over the entire map.
+     */
+    float depthM = ((1.0 - ground) - uDepthZero) * uDepthBand;
     // Anywhere the terrain rises above the water line, there is simply no water.
     if (depthM <= 0.0) discard;
 
@@ -365,6 +380,9 @@ export class WaterSystem {
         uDepthMap: { value: depthMap },
         uWorldSize: { value: WORLD_SIZE },
         uUnderwater: { value: 0 },
+        // (BAND - ABOVE) / BAND is where the water line falls in the texture.
+        uDepthZero: { value: (WATER_DEPTH_BAND - WATER_DEPTH_ABOVE) / WATER_DEPTH_BAND },
+        uDepthBand: { value: WATER_DEPTH_BAND },
       },
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
@@ -448,8 +466,8 @@ export function buildWaterDepthTexture(
       const x = -half + (i / (resolution - 1)) * WORLD_SIZE;
       const z = -half + (j / (resolution - 1)) * WORLD_SIZE;
       const h = heightAt(x, z);
-      // Map [WATER_LEVEL - 6, WATER_LEVEL + 1] onto [0, 255].
-      const normalised = (h - (WATER_LEVEL - 6)) / 7;
+      // Map [WATER_LEVEL - ABOVE, WATER_LEVEL - ABOVE + BAND] onto [0, 255].
+      const normalised = (h - (WATER_LEVEL - WATER_DEPTH_ABOVE)) / WATER_DEPTH_BAND;
       const v = Math.max(0, Math.min(255, Math.round(normalised * 255)));
       const idx = (j * resolution + i) * 4;
       data[idx] = v;

@@ -341,7 +341,46 @@ export const WORLD_SIZE = 1000;
 export const TERRAIN_HEIGHT = 26;
 
 /** Water plane height in world units. Terrain below this is river/lake. */
-export const WATER_LEVEL = 2.2;
+/**
+ * Height of the water plane, in metres.
+ *
+ * Raised a long way from the 2.2 m it sat at. The point is not the number, it is
+ * the *depth*: a deep river is somewhere a crocodile can lie on the bed with
+ * weed over its back and be genuinely, completely gone, and a shallow one is a
+ * stripe of blue you wade through. Raising the level rather than only deepening
+ * the channel also widens the river, because the banks shelve — so the crossing
+ * becomes a real decision, which is what the bridges are for.
+ *
+ * It floods almost nothing: the channel is steep, so going from 2.2 m to 5.8 m
+ * takes the map from 10.6% underwater to 12.9%.
+ */
+export const WATER_LEVEL = 5.8;
+
+/**
+ * Metres of water carved into the river channel below the water line.
+ *
+ * Deep enough that a two-metre man cannot wade it and a diving animal has real
+ * room underneath — the weed beds on the bed are around two metres tall, and
+ * they have to close over a crocodile without poking through the surface.
+ */
+export const RIVER_DEPTH = 8.5;
+
+/**
+ * How the baked depth texture maps ground height into 0..1.
+ *
+ * `WATER_DEPTH_ABOVE` is how far *below* the water line the range starts and
+ * `WATER_DEPTH_BAND` is its total span, so the texture covers
+ * [WATER_LEVEL - ABOVE, WATER_LEVEL - ABOVE + BAND]. Exported because the baker
+ * and the water shader both have to agree on it exactly: they used to share a
+ * hard-coded 0.142857 that silently encoded the old band, and the first thing
+ * that goes wrong when they disagree is a translucent sheet drawn over the
+ * entire map.
+ *
+ * The band has to be deeper than RIVER_DEPTH or the gradient saturates and the
+ * deep channel renders as one flat colour.
+ */
+export const WATER_DEPTH_ABOVE = 11;
+export const WATER_DEPTH_BAND = 12;
 
 /** Depth below which water is "deep": swimming only, no walking. */
 export const DEEP_WATER_DEPTH = 1.6;
@@ -401,7 +440,7 @@ export const WORLD_PROPS = {
    * has to be a bed dense enough to disappear into rather than a scattering of
    * plants to swim past.
    */
-  underwaterPlants: 30000,
+  underwaterPlants: 52000,
   huts: 11,
   bridges: 8,
   caves: 10,

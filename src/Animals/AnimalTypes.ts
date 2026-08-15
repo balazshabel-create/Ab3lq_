@@ -1432,15 +1432,35 @@ export const ANIMALS: Record<Species, AnimalDef> = {
     cons: ['Impossible to mistake for wildlife', 'Loud', 'Shooting the wrong animal is fatal'],
     locomotion: loco({
       landSpeed: 1.1,
-      swimSpeed: 0.6,
+      /*
+       * He does not swim. At all.
+       *
+       * A man in boots carrying a rifle is not crossing ten metres of river, and
+       * that limitation is the reason the bridges exist: every crossing he makes
+       * is at a place the survivors can see, predict and stay away from. Give him
+       * even a slow swim and the map stops having chokepoints in it — he simply
+       * goes wherever he likes and the far bank stops being anywhere safer than
+       * the near one.
+       */
+      swimSpeed: 0,
       jumpPower: 1.0,
       sprintMultiplier: 1.75,
       agility: 1.2,
     }),
     silhouette: {
-      length: 0.5,
-      height: 1.75,
-      width: 0.46,
+      length: 0.62,
+      /*
+       * Deliberately larger than life, at a shade over two metres.
+       *
+       * A real man is 1.75 m and at that height he simply *disappeared*: the
+       * tiger is 2.1 m long and the gorilla stands over a metre at the shoulder,
+       * so a correctly scaled human read as one more mid-sized animal in a
+       * clearing full of them. He has to be the thing you notice first from
+       * anywhere on the map, because the whole round is built on the survivors
+       * knowing exactly where he is and having to act natural anyway.
+       */
+      height: 2.15,
+      width: 0.58,
       // Blue shirt, green trousers, brown boots and cap.
       colors: { body: 0x2f5f9e, belly: 0x3c5a2a, accent: 0x4a3524, eye: 0x1a1a1a },
       bodyPlan: BodyPlan.Human,

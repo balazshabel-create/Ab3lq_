@@ -271,8 +271,22 @@ export function generateWorld(
     });
   }
 
-  // --- Rope bridges over the rivers --------------------------------------
-  // Anchored on a river centre point, laid across the flow direction.
+  /*
+   * --- Suspension bridges over the rivers --------------------------------
+   *
+   * These are the only way across a deep channel on foot, which is what makes
+   * them matter: the hunter is a man in boots carrying a rifle and cannot swim
+   * ten metres of river, so every crossing he makes is at a place the survivors
+   * can see, predict and avoid. A bridge is a chokepoint, and a chokepoint is
+   * information — the most valuable thing either side has.
+   *
+   * The span is *measured*, not guessed. The old version used a fixed multiple
+   * of the nominal river width and drew a fixed 26 m deck regardless, so on a
+   * wide reach it stopped short of the far bank and on a narrow one it ran out
+   * over dry land. Walking outwards from the centre until the ground comes back
+   * above the water line finds the real banks, whatever the channel is doing
+   * there.
+   */
   for (const river of terrain.rivers) {
     if (content.bridges.length >= WORLD_PROPS.bridges) break;
     if (river.width < 9 && structRng.chance(0.5)) continue;
@@ -281,16 +295,74 @@ export function generateWorld(
     const b = river.points[Math.min(river.points.length - 1, idx + 1)];
     // Perpendicular to the local flow direction.
     const cross = Math.atan2(b.z - a.z, b.x - a.x) + Math.PI / 2;
+    const dirX = Math.cos(cross);
+    const dirZ = Math.sin(cross);
+
+    /** How far from the river's centre line the bank is, on one side. */
+    const reachBank = (sign: number): number => {
+      const limit = 90;
+      for (let d = 2; d <= limit; d += 1) {
+        const px = a.x + dirX * d * sign;
+        const pz = a.z + dirZ * d * sign;
+        // Land, and high enough that the abutment is not standing in water.
+        if (terrain.heightAt(px, pz) > terrain.waterLevel + 0.6) return d;
+      }
+      return limit;
+    };
+    /*
+     * The two banks are rarely the same distance from the centre line, and using
+     * the larger of the two for both ends — which is what the first version did
+     * — leaves one end of the bridge hanging over open water on the near side
+     * while the other runs a long way inland. So each side is measured
+     * separately and the deck is *recentred* on the midpoint of the crossing.
+     *
+     * Three metres of overhang at each end, so the abutment lands on solid
+     * ground rather than at the exact waterline, where the mud is.
+     */
+    const bankPos = reachBank(1) + 3;
+    const bankNeg = reachBank(-1) + 3;
+    const half = (bankPos + bankNeg) * 0.5;
+    const shift = (bankPos - bankNeg) * 0.5;
+    const cx = a.x + dirX * shift;
+    const cz = a.z + dirZ * shift;
+
+    /*
+     * The deck rides well clear of the water — high enough that a full flood
+     * cannot reach it and, more usefully, high enough that a man standing on it
+     * is skylined against the canopy from a long way off.
+     */
+    const deckHeight = 4.2;
+    const sag = Math.min(1.6, half * 0.09);
     content.bridges.push({
       kind: PropKind.Bridge,
-      x: a.x,
-      y: terrain.waterLevel,
-      z: a.z,
-      rot: cross,
+      x: cx,
+      // The mesh puts its deck at local y = 0, so the prop sits at deck height.
+      y: terrain.waterLevel + deckHeight,
+      z: cz,
+      /*
+       * The instancer rotates about Y, which maps the mesh's local +Z to
+       * (sin rot, 0, cos rot) — and the bridge is modelled along its local +Z.
+       * The span we want it to lie along is (cos cross, sin cross), so the two
+       * agree only at rot = π/2 − cross. Passing `cross` straight through, which
+       * is what the old code did, laid every bridge along the river instead of
+       * across it.
+       */
+      rot: Math.PI / 2 - cross,
       scale: 1,
       variant: structRng.int(0, 1),
-      length: river.width * 2.9,
-      deckHeight: 2.4,
+      length: half * 2,
+      deckHeight,
+    });
+    // And the same span again as something you can actually stand on.
+    terrain.addDeck({
+      x: cx,
+      z: cz,
+      dirX,
+      dirZ,
+      halfLength: half,
+      halfWidth: 1.5,
+      y: terrain.waterLevel + deckHeight,
+      sag,
     });
   }
 
@@ -465,10 +537,24 @@ export function generateWorld(
     /*
      * --- Underwater weed: the crocodile's cover -------------------------
      *
-     * Rooted on the river bed and scaled to the local depth, so a bed of weed
-     * reaches roughly to the surface without poking through it. Placement wants
-     * genuinely deep water — weed in the shallows would be visible from the bank
-     * and would not hide anything.
+     * Rooted on the river bed, in genuinely deep water only — weed in the
+     * shallows is visible from the bank and hides nothing.
+     *
+     * ## Height is capped, and that is not a compromise
+     *
+     * This used to scale each clump to a *fraction of the local depth*, on the
+     * reasoning that weed should reach towards the surface. In three and a half
+     * metres of water that was fine. In ten it is not: a clump stretched to nine
+     * metres tall while staying eighty centimetres wide, which is not a plant,
+     * it is a smear — a lawn blade scaled up until you can see it is a lawn
+     * blade.
+     *
+     * River weed is one to three metres tall whatever the river is doing, so the
+     * clumps are that tall and no taller, and the deep channel is filled by
+     * putting *more* of them on the bed instead of longer ones. Nothing is lost:
+     * a diving animal lies on the bed, so cover only has to close over half a
+     * metre of crocodile, and in ten metres of water anything on the bottom is
+     * already most of the way to invisible from above.
      */
     const weedCount = Math.round(WORLD_PROPS.underwaterPlants * d);
     for (let i = 0; i < weedCount; i++) {
@@ -481,8 +567,8 @@ export function generateWorld(
         y: terrain.heightAt(p.x, p.z),
         z: p.z,
         rot: cosmeticRng.range(0, Math.PI * 2),
-        // Scale is the fraction of the depth this clump fills.
-        scale: depth * cosmeticRng.range(0.5, 0.95),
+        // Metres tall, never more than the water is deep.
+        scale: Math.min(depth * 0.85, cosmeticRng.range(1.1, 3.2)),
         variant: cosmeticRng.int(0, 2),
       });
     }

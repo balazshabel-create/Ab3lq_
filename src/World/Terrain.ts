@@ -17,6 +17,7 @@ import {
   DEEP_WATER_DEPTH,
   TERRAIN_GRID,
   TERRAIN_HEIGHT,
+  RIVER_DEPTH,
   WATER_LEVEL,
   WORLD_SIZE,
 } from '../Systems/Config';
@@ -53,6 +54,37 @@ export interface SpawnArea {
   radius: number;
 }
 
+/** A walkable bridge deck: a flat strip with a sag in the middle. */
+export interface BridgeDeck {
+  /** Centre of the span. */
+  x: number;
+  z: number;
+  /** Unit vector along the span. */
+  dirX: number;
+  dirZ: number;
+  halfLength: number;
+  halfWidth: number;
+  /** Deck height at the two ends, in world Y. */
+  y: number;
+  /** How far the middle of the deck hangs below the ends. */
+  sag: number;
+}
+
+/**
+ * Where the flat channel floor ends and where the bank finishes rising, as
+ * multiples of the river's nominal width.
+ *
+ * These had to come in when the water level rose. The channel is now seventeen
+ * metres below the surrounding jungle, and with the old bank reach of 2.6 widths
+ * the blend from floor to forest crossed the water line so far out that the main
+ * river came out a hundred and fifty metres across — a lake with a current, and
+ * a bridge over it would have been a hundred-metre span. Pulling the reach in to
+ * a little over one width gives a river you cannot wade, cannot easily swim
+ * under fire, and can bridge in fifty.
+ */
+const CHANNEL_CORE = 0.5;
+const BANK_REACH = 1.2;
+
 const HALF = WORLD_SIZE / 2;
 
 export class Terrain {
@@ -71,6 +103,26 @@ export class Terrain {
 
   readonly rivers: RiverPath[] = [];
   readonly clearings: Clearing[] = [];
+
+  /**
+   * Bridge decks, as walkable surfaces laid over the water.
+   *
+   * ## Why these live in the terrain
+   *
+   * A bridge you cannot walk on is scenery, and the whole point of these is that
+   * the hunter — who cannot swim a ten-metre channel in boots carrying a rifle —
+   * has a way across that the survivors can *watch him take*. That makes the
+   * deck part of the answer to "what is under my feet", and the one place that
+   * question is answered is `surfaceAt`. Putting it anywhere else would mean the
+   * movement solver, the camera, the terrain-following code and the AI each
+   * having to remember to ask a second question, and the first one to forget
+   * drops something through the bridge into the river.
+   *
+   * They are added by the world generator, which runs deterministically from the
+   * same seed on the server and on every client, so all of them agree on where
+   * the decks are without a byte on the wire.
+   */
+  readonly decks: BridgeDeck[] = [];
 
   private readonly baseNoise: Noise2D;
   private readonly detailNoise: Noise2D;
@@ -311,19 +363,19 @@ export class Terrain {
      *    U — the bed stays near its floor and then turns up sharply at the
      *    banks, instead of sloping continuously from the middle.
      *
-     * The target is roughly 3.5 m of water over the bed for a 0.5 m animal:
-     * deep enough to swim in, to submerge in, and to grow weed tall enough to
-     * hide a crocodile, while the banks still shelve up quickly enough that
-     * walking into the river is a decision rather than an accident.
+     * The target is RIVER_DEPTH of water over the bed — deep enough to swim in,
+     * to dive to the bottom of, and to grow weed tall enough to close over a
+     * crocodile, while the banks still shelve up quickly enough that walking
+     * into the river is a decision rather than an accident.
      */
-    const bank = width * 2.6;
-    const riverT = 1 - smoothstep(width * 0.85, bank, dist);
+    const bank = width * BANK_REACH;
+    const riverT = 1 - smoothstep(width * CHANNEL_CORE, bank, dist);
     if (riverT > 0) {
       // Channel floor sits below the water line; banks blend into the terrain.
       // The width term keeps the main channel a little deeper than its
       // tributaries, which is both true of rivers and useful: the big river is
       // the one worth swimming down.
-      const channelDepth = WATER_LEVEL - 3.5 - width * 0.04;
+      const channelDepth = WATER_LEVEL - RIVER_DEPTH - width * 0.06;
       const carve = Math.pow(riverT, 0.65);
       height = lerp(height, channelDepth, carve);
     }
@@ -433,10 +485,42 @@ export class Terrain {
     return this.waterDepthAt(x, z) >= DEEP_WATER_DEPTH;
   }
 
-  /** Walkable surface height: the water line when submerged, else the ground. */
+  /**
+   * Walkable surface height: a bridge deck if there is one, else the water line
+   * when submerged, else the ground.
+   */
   surfaceAt(x: number, z: number): number {
+    const deck = this.deckAt(x, z);
+    if (deck !== null) return deck;
     const h = this.heightAt(x, z);
     return h < WATER_LEVEL ? WATER_LEVEL : h;
+  }
+
+  /**
+   * Height of the bridge deck over this point, or null if there is no bridge.
+   *
+   * The sag is the same curve the renderer draws, because a deck you fall
+   * through in the middle is worse than no deck at all.
+   */
+  deckAt(x: number, z: number): number | null {
+    for (let i = 0; i < this.decks.length; i++) {
+      const d = this.decks[i];
+      const dx = x - d.x;
+      const dz = z - d.z;
+      // Project onto the span and across it.
+      const along = dx * d.dirX + dz * d.dirZ;
+      if (Math.abs(along) > d.halfLength) continue;
+      const across = dx * -d.dirZ + dz * d.dirX;
+      if (Math.abs(across) > d.halfWidth) continue;
+      const t = along / d.halfLength;
+      return d.y - Math.cos(t * Math.PI * 0.5) * d.sag;
+    }
+    return null;
+  }
+
+  /** Register a bridge deck. Called by the world generator. */
+  addDeck(deck: BridgeDeck): void {
+    this.decks.push(deck);
   }
 
   /** Terrain normal, via central differences on the baked grid. */

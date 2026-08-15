@@ -212,6 +212,18 @@ const KIND_CONFIG: Partial<Record<PropKind, KindConfig>> = {
     density: () => 1,
     wind: 0,
     castShadow: true,
+    /*
+     * Stretched along its span only.
+     *
+     * The mesh is built one metre long in Z, so this scales it to the length the
+     * world generator measured between the two banks — the same number the
+     * walkable deck in Terrain was built from, which is what keeps the planks
+     * you can see and the surface you stand on in the same place. Scaling X or Y
+     * as well would give a wide crossing absurdly fat towers.
+     */
+    scaleAxes: (prop, out) => {
+      out.set(1, 1, Math.max(6, (prop as { length?: number }).length ?? 26));
+    },
   },
   [PropKind.Cave]: {
     distance: (s) => s.viewDistance,
@@ -2233,22 +2245,131 @@ function buildHut(): PropAssets {
 
 /** A rope bridge deck across a river. */
 function buildBridge(): PropAssets {
+  /*
+   * A suspension bridge, built at a unit span and stretched to fit.
+   *
+   * The geometry is one metre long in Z and the `scaleAxes` hook below stretches
+   * it to the bridge's measured length, so one cached mesh serves a twelve-metre
+   * tributary crossing and a sixty-metre span over the main channel. Only Z is
+   * scaled: stretching the planks and the towers with it would give a wide river
+   * comically fat handrails.
+   *
+   * What makes it read as a *suspension* bridge rather than as a plank is the
+   * pair of towers and the catenary between them. That silhouette is visible
+   * from much further away than a deck is — which is the point, because a
+   * survivor needs to know where the crossings are without having to go and
+   * look, and the hunter standing on one needs to be obvious.
+   */
   const parts: MergePart[] = [];
-  const planks = 16;
+  const deckY = 0;
+  const half = 0.5;
+  const sag = 0.09; // matches Terrain.deckAt's cosine sag, in span units
+
+  // --- Deck ---------------------------------------------------------------
+  const planks = 26;
   for (let i = 0; i < planks; i++) {
-    const plank = new THREE.BoxGeometry(1.6, 0.1, 0.5);
-    // Sag towards the middle, like a real rope bridge.
-    const t = i / (planks - 1) - 0.5;
-    plank.translate(0, 2.4 - Math.cos(t * Math.PI) * 0.5, t * 26);
-    parts.push({ geometry: plank, color: new THREE.Color(0x5a4630) });
+    const t = (i / (planks - 1)) * 2 - 1; // -1..1 along the span
+    const z = t * half;
+    const y = deckY - Math.cos(t * Math.PI * 0.5) * sag;
+    // Alternating plank widths and a slight twist: a run of identical boards
+    // reads as a conveyor belt.
+    const w = i % 3 === 0 ? 2.5 : i % 3 === 1 ? 2.35 : 2.45;
+    const plank = new THREE.BoxGeometry(w, 0.1, 0.028);
+    plank.translate(0, y, z);
+    parts.push({
+      geometry: plank,
+      color: new THREE.Color(i % 2 === 0 ? 0x6a5236 : 0x5a4630),
+    });
   }
-  // Handrails.
+  // Two stringers running the length of the deck, under the planks, so the
+  // underside is not a row of floating boards when seen from the water.
   for (const side of [-1, 1]) {
-    const rail = new THREE.BoxGeometry(0.08, 0.08, 26);
-    rail.translate(side * 0.85, 3.2, 0);
-    parts.push({ geometry: rail, color: new THREE.Color(0x40331f) });
+    const stringer = new THREE.BoxGeometry(0.14, 0.14, 1);
+    stringer.translate(side * 1.0, deckY - sag * 0.55 - 0.1, 0);
+    parts.push({ geometry: stringer, color: new THREE.Color(0x4a3a24) });
   }
-  return { geometry: merge(parts), material: vertexColorMaterial() };
+
+  // --- Towers -------------------------------------------------------------
+  /*
+   * Set slightly inside the ends, where the abutment is, so they stand on the
+   * bank rather than in the water.
+   */
+  const towerZ = half * 0.86;
+  const towerH = 3.6;
+  for (const end of [-1, 1]) {
+    for (const side of [-1, 1]) {
+      const post = new THREE.BoxGeometry(0.26, towerH, 0.026);
+      post.translate(side * 1.15, deckY + towerH * 0.5 - 0.3, end * towerZ);
+      parts.push({ geometry: post, color: new THREE.Color(0x4f3d26) });
+    }
+    // Cross-brace at the top, which is what turns two posts into a gateway.
+    const beam = new THREE.BoxGeometry(2.75, 0.24, 0.03);
+    beam.translate(0, deckY + towerH - 0.3, end * towerZ);
+    parts.push({ geometry: beam, color: new THREE.Color(0x45351f) });
+    const brace = new THREE.BoxGeometry(2.4, 0.14, 0.026);
+    brace.translate(0, deckY + towerH * 0.62 - 0.3, end * towerZ);
+    parts.push({ geometry: brace, color: new THREE.Color(0x45351f) });
+  }
+
+  // --- Main cables and hangers -------------------------------------------
+  /*
+   * The catenary is drawn as a chain of short segments rather than a curve,
+   * because a merged static mesh cannot bend — and at this thickness the facets
+   * are invisible anyway. Between the towers it dips; beyond them it runs down
+   * to the anchor at the deck ends.
+   */
+  const cableSegments = 22;
+  const cableTop = deckY + towerH - 0.42;
+  const cableDip = 1.5;
+  const cableY = (t: number): number => {
+    const u = Math.min(1, Math.abs(t) / (towerZ / half));
+    // 1 at the towers, 0 in the middle: a parabola is close enough to a
+    // catenary at this scale and costs one multiply.
+    return cableTop - cableDip * (1 - u * u);
+  };
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < cableSegments; i++) {
+      const t0 = (i / cableSegments) * 2 - 1;
+      const t1 = ((i + 1) / cableSegments) * 2 - 1;
+      const z0 = t0 * half;
+      const z1 = t1 * half;
+      const y0 = cableY(t0);
+      const y1 = cableY(t1);
+      const dz = z1 - z0;
+      const dy = y1 - y0;
+      const len = Math.hypot(dz, dy);
+      const seg = new THREE.BoxGeometry(0.09, 0.09, len);
+      seg.rotateX(-Math.atan2(dy, dz));
+      seg.translate(side * 1.15, (y0 + y1) * 0.5, (z0 + z1) * 0.5);
+      parts.push({ geometry: seg, color: new THREE.Color(0x2e2a22) });
+    }
+    // Hangers: the verticals from the cable down to the deck. Half a dozen a
+    // side is enough to read; one per plank would be a wall of string.
+    for (let i = 1; i < 8; i++) {
+      const t = (i / 8) * 2 - 1;
+      const top = cableY(t);
+      const bottom = deckY - Math.cos(t * Math.PI * 0.5) * sag;
+      const h = Math.max(0.1, top - bottom);
+      const hanger = new THREE.BoxGeometry(0.05, h, 0.018);
+      hanger.translate(side * 1.15, bottom + h * 0.5, t * half);
+      parts.push({ geometry: hanger, color: new THREE.Color(0x342f26) });
+    }
+    // Handrail at hand height, following the deck's own sag.
+    for (let i = 0; i < 14; i++) {
+      const t0 = (i / 14) * 2 - 1;
+      const t1 = ((i + 1) / 14) * 2 - 1;
+      const y0 = deckY + 0.95 - Math.cos(t0 * Math.PI * 0.5) * sag;
+      const y1 = deckY + 0.95 - Math.cos(t1 * Math.PI * 0.5) * sag;
+      const dz = (t1 - t0) * half;
+      const len = Math.hypot(dz, y1 - y0);
+      const rail = new THREE.BoxGeometry(0.07, 0.07, len);
+      rail.rotateX(-Math.atan2(y1 - y0, dz));
+      rail.translate(side * 1.12, (y0 + y1) * 0.5, (t0 + t1) * 0.5 * half);
+      parts.push({ geometry: rail, color: new THREE.Color(0x40331f) });
+    }
+  }
+
+  return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
 }
 
 /** A cave mouth: a dark arch set into a slope. */

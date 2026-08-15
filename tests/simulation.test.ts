@@ -29,6 +29,7 @@ import {
 import { biteDamage, canPrey } from '../src/Animals/FoodChain';
 import { canSwim } from '../src/Animals/AnimalTypes';
 import { Terrain } from '../src/World/Terrain';
+import { generateWorld } from '../src/World/WorldGen';
 import { Rng } from '../src/Systems/Rng';
 import {
   WEAKNESSES,
@@ -201,6 +202,137 @@ test('the hunter is the only human in the world', () => {
   assert.equal(humans, 1, `expected exactly one human in the world, found ${humans}`);
 });
 
+test('the hunter is a player, never AI, and cannot be killed', () => {
+  const sim = new Simulation(90210);
+  for (let i = 0; i < 4; i++) sim.addPlayer(`p${i}`, `P${i}`);
+  sim.startRound();
+  advance(sim, 10);
+
+  const hunter = sim.getPlayers().find((p) => p.role === Role.Hunter)!;
+  assert.ok(hunter, 'a hunter must exist');
+  assert.equal(hunter.kind, ActorKind.Player, 'the hunter is always a person at a keyboard');
+
+  // Nothing the world can do touches him.
+  sim.damageActor(hunter.id, 99_999, 0, 'attack');
+  assert.ok(hunter.health > 0, 'a bite must not kill the hunter');
+  sim.damageActor(hunter.id, 99_999, 0, 'storm');
+  assert.ok(hunter.health > 0, 'the storm must not kill the hunter');
+  sim.damageActor(hunter.id, 99_999, 0, 'starvation');
+  assert.ok(hunter.health > 0, 'starvation must not kill the hunter');
+
+  // Except the one thing that is meant to: his own bullet in the wrong animal.
+  let bystander: Actor | null = null;
+  sim.forEachNearby(hunter.pos.x, hunter.pos.z, 10_000, (a) => {
+    if (bystander) return;
+    if (a.kind !== ActorKind.AI) return;
+    if ((a.flags & ActorFlags.Airborne) !== 0) return;
+    if (!ANIMALS[a.species].playable) return;
+    bystander = a;
+  });
+  assert.ok(bystander, 'the world must contain an AI animal of a playable species');
+  const victim = bystander as unknown as Actor;
+  victim.pos.x = hunter.pos.x + Math.cos(hunter.yaw) * 20;
+  victim.pos.z = hunter.pos.z + Math.sin(hunter.yaw) * 20;
+  victim.pos.y = hunter.pos.y;
+  sim.applyInput(hunter.clientId, {
+    seq: 1,
+    moveX: 0,
+    moveZ: 0,
+    yaw: hunter.yaw,
+    pitch: 0,
+    actions: InputAction.Attack,
+  });
+  sim.update(SIM_DT);
+  assert.equal(hunter.health, 0, 'shooting wildlife is still fatal to the hunter');
+});
+
+test('every bridge is a real crossing, and the hunter needs one', () => {
+  /*
+   * The hunter cannot swim — a man in boots carrying a rifle is not crossing ten
+   * metres of river — so the bridges are not scenery, they are the only way he
+   * gets to the far bank. That makes three things load-bearing, and this checks
+   * all of them:
+   *
+   *   1. the deck reaches dry land at *both* ends (the first version measured
+   *      one bank and used it for both, leaving one end over open water);
+   *   2. the surface you stand on is the deck, not the river under it;
+   *   3. the span crosses water rather than sitting on a dry bank.
+   */
+  assert.equal(ANIMALS[Species.Hunter].locomotion.swimSpeed, 0, 'the hunter must not swim');
+
+  for (const seed of [4242, 1337, 999, 20250815]) {
+    const terrain = new Terrain(seed);
+    const world = generateWorld(terrain, seed, { cosmetic: false, cosmeticDensity: 0 });
+    assert.ok(world.bridges.length > 0, `seed ${seed} generated no bridges`);
+
+    for (let i = 0; i < world.bridges.length; i++) {
+      const bridge = world.bridges[i];
+      const deck = terrain.decks[i];
+      assert.ok(deck, 'every bridge must register a walkable deck');
+
+      // Both ends on land.
+      for (const end of [-0.999, 0.999]) {
+        const x = deck.x + deck.dirX * deck.halfLength * end;
+        const z = deck.z + deck.dirZ * deck.halfLength * end;
+        assert.ok(
+          terrain.heightAt(x, z) > terrain.waterLevel,
+          `seed ${seed} bridge ${i} ends over open water`,
+        );
+      }
+
+      // The deck is what you stand on, all the way across, and it is above the
+      // water rather than in it.
+      let overWater = 0;
+      for (let t = -0.98; t <= 0.98; t += 0.04) {
+        const x = deck.x + deck.dirX * deck.halfLength * t;
+        const z = deck.z + deck.dirZ * deck.halfLength * t;
+        const surface = terrain.surfaceAt(x, z);
+        assert.equal(
+          surface,
+          terrain.deckAt(x, z),
+          `seed ${seed} bridge ${i} has a hole in it at t=${t.toFixed(2)}`,
+        );
+        assert.ok(surface > terrain.waterLevel, 'the deck must ride clear of the water');
+        if (terrain.heightAt(x, z) < terrain.waterLevel) overWater++;
+      }
+      assert.ok(overWater > 8, `seed ${seed} bridge ${i} barely crosses any water`);
+      assert.ok(bridge.length > 12 && bridge.length < 140, `implausible span ${bridge.length}`);
+    }
+  }
+});
+
+test('a bridge lets a non-swimmer walk over deep water', () => {
+  const terrain = new Terrain(4242);
+  generateWorld(terrain, 4242, { cosmetic: false, cosmeticDensity: 0 });
+  const deck = terrain.decks[0];
+
+  // The middle of the span: deep water below, deck above.
+  const x = deck.x;
+  const z = deck.z;
+  assert.ok(terrain.waterDepthAt(x, z) > 2, 'the test point must be over deep water');
+  assert.ok(terrain.deckAt(x, z) !== null, 'and under a deck');
+  assert.equal(terrain.surfaceAt(x, z), terrain.deckAt(x, z), 'the deck wins over the water line');
+
+  // Off the side of the deck it is river again.
+  const offX = x + -deck.dirZ * (deck.halfWidth + 1.5);
+  const offZ = z + deck.dirX * (deck.halfWidth + 1.5);
+  assert.equal(terrain.deckAt(offX, offZ), null, 'the deck must not be wider than it looks');
+  assert.equal(terrain.surfaceAt(offX, offZ), terrain.waterLevel, 'beside it is open water');
+});
+
+test('the hunter towers over everything he is hunting', () => {
+  // He has to be the thing you notice first from anywhere on the map: the round
+  // is built on the survivors knowing exactly where he is and acting natural
+  // anyway. At a realistic 1.75 m he read as one more mid-sized animal.
+  const hunter = ANIMALS[Species.Hunter].silhouette.height;
+  for (const species of PLAYABLE_SPECIES) {
+    assert.ok(
+      hunter > ANIMALS[species].silhouette.height * 1.4,
+      `the hunter (${hunter} m) barely clears a ${species}`,
+    );
+  }
+});
+
 test('every player species gets AI cover to hide among', () => {
   /*
    * Three players rather than six.
@@ -262,13 +394,18 @@ test('a round terminates cleanly and produces a full reveal', () => {
 });
 
 test('the round-over screen gives way to the lobby', () => {
+  /*
+   * Two players, and the one killed is the survivor. A solo player is dealt the
+   * hunter, and the hunter cannot be killed — so killing "the only player" no
+   * longer ends anything.
+   */
   const sim = new Simulation(556);
   sim.addPlayer('a', 'A');
+  sim.addPlayer('b', 'B');
   sim.startRound();
   advance(sim, 10);
 
-  // Force an immediate end by killing the only player.
-  const player = sim.getPlayers()[0];
+  const player = sim.getPlayers().find((p) => p.role === Role.Survivor)!;
   sim.damageActor(player.id, 9999, 0);
   advance(sim, 1);
   assert.equal(sim.round.phase, RoundPhase.RoundOver);
@@ -347,12 +484,15 @@ test('hunger is a real clock: an average animal empties inside one round', () =>
 });
 
 test('reaching zero hunger kills the player', () => {
+  // A survivor: the hunter does not starve, because the hunter cannot die of
+  // anything except his own bad shot.
   const sim = new Simulation(1213);
   sim.addPlayer('a', 'A');
+  sim.addPlayer('b', 'B');
   sim.startRound();
   advance(sim, 9);
 
-  const player = sim.getPlayers()[0];
+  const player = sim.getPlayers().find((p) => p.role === Role.Survivor)!;
   // Put them on the edge of starvation deterministically, rather than waiting
   // for whichever species the dealer happened to hand out.
   player.hunger = 0.5;
@@ -1015,12 +1155,15 @@ test('nothing spawns in the storm', () => {
 });
 
 test('the storm kills a player who stays out in it', () => {
+  // A survivor. The storm does not touch the hunter — he is immune to
+  // everything except his own misfire, which has its own test.
   const sim = new Simulation(1234);
   sim.addPlayer('a', 'A');
+  sim.addPlayer('b', 'B');
   sim.startRound();
   advance(sim, 10);
 
-  const player = sim.getPlayers()[0];
+  const player = sim.getPlayers().find((p) => p.role === Role.Survivor)!;
   const zone = sim.zone;
   // Teleport well outside, and keep them there: the storm should finish them.
   const push = (): void => {

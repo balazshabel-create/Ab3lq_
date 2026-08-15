@@ -344,9 +344,37 @@ export class Simulation implements AiContext {
      * because only the former is a near miss worth counting.
      */
     source: 'attack' | 'starvation' | 'storm' = 'attack',
+    /**
+     * Bypass the hunter's immunity.
+     *
+     * Set only by his own misfire. See the note below on why he is otherwise
+     * untouchable and why that one case has to get through anyway.
+     */
+    unavoidable = false,
   ): boolean {
     const target = this.actors.get(targetId);
     if (!target || target.flags & ActorFlags.Dead) return false;
+
+    /*
+     * The hunter cannot be killed.
+     *
+     * Not by a crocodile, not by a gorilla, not by the storm, not by going
+     * hungry. This is a design decision rather than a balance tweak, and the
+     * reason is that every one of those deaths ends the round *by accident*: the
+     * survivors win without having done the thing the game asks of them, and the
+     * hunter loses without having made the mistake the game punishes. A round
+     * that can end because a caiman happened to be in the reeds he walked past
+     * is a round whose central question — can he tell a player from an animal —
+     * never got asked.
+     *
+     * There is exactly one way he goes down, and `unavoidable` is it: he shoots
+     * an animal that was only ever an animal. That death is the whole point, so
+     * it is the one thing immunity must not swallow.
+     */
+    if (!unavoidable && target.kind === ActorKind.Player) {
+      const player = target as PlayerActor;
+      if (player.role === Role.Hunter) return false;
+    }
 
     target.health -= amount;
     if (target.kind === ActorKind.Player) {
@@ -1594,7 +1622,7 @@ export class Simulation implements AiContext {
        * and flagged as an attack so the round-over screen can tell this apart
        * from starving to death.
        */
-      this.damageActor(player.id, player.maxHealth, 0, 'attack');
+      this.damageActor(player.id, player.maxHealth, 0, 'attack', true);
     }
   }
 

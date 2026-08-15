@@ -213,7 +213,17 @@ export function applyMovement(
   result.waterDepth = depth;
 
   const canSwim = loco.swimSpeed > 0.15;
-  const inDeep = depth >= DEEP_WATER_DEPTH;
+  /*
+   * Standing on a bridge deck is not being in the river underneath it.
+   *
+   * Everything below keys off water depth — whether you swim, whether you are
+   * refused entry, how much you are slowed — and all of it has to stop applying
+   * the moment there is a deck between you and the water. Without this the
+   * bridge is scenery: a non-swimmer is turned back at the first plank, and a
+   * swimmer starts doing the breaststroke four metres above the surface.
+   */
+  const onDeck = terrain.deckAt(actor.pos.x, actor.pos.z) !== null;
+  const inDeep = !onDeck && depth >= DEEP_WATER_DEPTH;
   const swimming = inDeep && canSwim;
 
   // Animals that cannot swim treat deep water as a wall.
@@ -230,8 +240,8 @@ export function applyMovement(
     mode = MoveMode.Ground;
     const base = intent.sprint ? stats.sprintSpeed : stats.walkSpeed;
     speed = base * clamp01(intent.throttle);
-    // Wading is slow and loud.
-    if (depth > 0.15) speed *= 1 - clamp01(depth / DEEP_WATER_DEPTH) * 0.42;
+    // Wading is slow and loud. Walking over it on a bridge is neither.
+    if (!onDeck && depth > 0.15) speed *= 1 - clamp01(depth / DEEP_WATER_DEPTH) * 0.42;
     // Steep ground slows everything down.
     const slope = terrain.slopeAt(actor.pos.x, actor.pos.z);
     if (slope > 0.35) speed *= clamp(1 - (slope - 0.35) * 1.1, 0.35, 1);
@@ -254,12 +264,17 @@ export function applyMovement(
   let nextX = actor.pos.x + moveX;
   let nextZ = actor.pos.z + moveZ;
 
-  // Refuse to walk into deep water if we cannot swim.
-  if (blockedByWater || (!canSwim && terrain.waterDepthAt(nextX, nextZ) >= DEEP_WATER_DEPTH)) {
+  /*
+   * Refuse to walk into deep water if we cannot swim — unless there is a deck
+   * over it, which is the entire purpose of building one.
+   */
+  const swimmableAt = (px: number, pz: number): boolean =>
+    terrain.deckAt(px, pz) !== null || terrain.waterDepthAt(px, pz) < DEEP_WATER_DEPTH;
+  if (blockedByWater || (!canSwim && !swimmableAt(nextX, nextZ))) {
     // Slide along the shoreline instead of stopping dead: try each axis alone.
-    if (terrain.waterDepthAt(nextX, prevZ) < DEEP_WATER_DEPTH) {
+    if (swimmableAt(nextX, prevZ)) {
       nextZ = prevZ;
-    } else if (terrain.waterDepthAt(prevX, nextZ) < DEEP_WATER_DEPTH) {
+    } else if (swimmableAt(prevX, nextZ)) {
       nextX = prevX;
     } else {
       nextX = prevX;
@@ -267,14 +282,20 @@ export function applyMovement(
     }
   }
 
-  // Land animals also refuse to climb sheer walls.
-  const nextGround = terrain.heightAt(nextX, nextZ);
-  if (!swimming && nextGround - groundHeight > 1.6 * Math.max(0.2, speed * dt)) {
-    const slideZ = terrain.heightAt(nextX, prevZ);
-    const slideX = terrain.heightAt(prevX, nextZ);
-    if (slideZ - groundHeight <= 1.6 * Math.max(0.2, speed * dt)) {
+  /*
+   * Land animals also refuse to climb sheer walls — but the step *onto* a bridge
+   * is a sheer wall, four metres of it. Compared against the walkable surface
+   * rather than the bare ground, stepping from the bank onto the deck is a step
+   * of a few centimetres, which is what it looks like and what it should be.
+   */
+  const nextGround = terrain.surfaceAt(nextX, nextZ);
+  const groundHere = terrain.surfaceAt(actor.pos.x, actor.pos.z);
+  if (!swimming && nextGround - groundHere > 1.6 * Math.max(0.2, speed * dt)) {
+    const slideZ = terrain.surfaceAt(nextX, prevZ);
+    const slideX = terrain.surfaceAt(prevX, nextZ);
+    if (slideZ - groundHere <= 1.6 * Math.max(0.2, speed * dt)) {
       nextZ = prevZ;
-    } else if (slideX - groundHeight <= 1.6 * Math.max(0.2, speed * dt)) {
+    } else if (slideX - groundHere <= 1.6 * Math.max(0.2, speed * dt)) {
       nextX = prevX;
     } else {
       nextX = prevX;
