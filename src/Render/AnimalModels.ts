@@ -240,6 +240,42 @@ export function buildAnimalModel(species: Species, detail = 1): AnimalModel {
       break;
   }
 
+  /*
+   * ## Stand the model on the ground
+   *
+   * The renderer puts the model's origin exactly on the terrain surface, so
+   * whatever hangs below y = 0 in model space is buried. Every plan built its
+   * legs to a length that looked right on paper and none of them landed on
+   * zero: measured, the feet sat between three and eleven centimetres under the
+   * ground, and a heron stood thirty centimetres deep.
+   *
+   * That is why the feet looked like blocks. The toes are the lowest part of a
+   * foot, so they are the first thing the ground swallows — from above you saw
+   * the ankle and a flat cut where the terrain sliced the foot off, which is
+   * exactly the "just a rectangular block" complaint. Adding more toes to a
+   * buried foot changes nothing.
+   *
+   * Measuring the limbs (rather than the whole model) is deliberate: a bat's
+   * wings and a fish's fins hang below everything else and are not what the
+   * animal stands on. The correction moves the model's contents, not the root,
+   * because the animator overwrites the root's position every frame.
+   */
+  if (model.legs.length > 0) {
+    // The limbs hang off body groups that carry their own offsets, and
+    // `expandByObject` reads world matrices — without this it measures the legs
+    // as if the body were at the origin and the correction comes out short.
+    root.updateMatrixWorld(true);
+    const bounds = new THREE.Box3();
+    for (const leg of model.legs) bounds.expandByObject(leg);
+    const lift = -bounds.min.y;
+    // Bounded: a correction worth more than half the animal's height means the
+    // measurement found something that is not a foot, and lifting by it would
+    // leave the animal hovering.
+    if (lift > 0.002 && lift < def.silhouette.height * 0.5) {
+      for (const child of root.children) child.position.y += lift;
+    }
+  }
+
   return model;
 }
 
@@ -363,27 +399,64 @@ function addJointedLeg(
    * the ankle and read as a flipper — a paw is about as long as the leg is
    * thick, and anything more turns a cat into a duck.
    */
-  const footLen = radius * 1.9;
-  mesh(
-    box(footLen, radius * 0.7, radius * 2.1),
+  /*
+   * ## The foot is made of toes, not of a slab with toes stuck to it
+   *
+   * It used to be one box with a row of little boxes butted against its front
+   * edge, and from every angle except directly underneath the two merged into a
+   * single rectangle — which is exactly what a foot must not look like. The
+   * separation is the whole thing: what makes a foot read as a foot is the gaps
+   * between the digits, so the toes now project forward from a small pad with
+   * daylight between them and each one splays out at its own angle.
+   */
+  const footY = -shankLen - radius * 0.32;
+  const toeCount = options.toes ?? 0;
+  // The pad: the heel and sole the toes come off. Small, because on a real foot
+  // most of the length is toe.
+  const pad = mesh(
+    ellipsoid(radius * 0.85, radius * 0.42, radius * 1.05, detail > 0.6 ? 7 : 5),
     options.footColor,
     knee,
-    forward * radius * 0.45,
-    -shankLen - radius * 0.3,
+    forward * radius * 0.25,
+    footY,
     0,
   );
-  if (options.toes && detail > 0.6) {
-    for (let t = 0; t < options.toes; t++) {
-      const spread = (t / Math.max(1, options.toes - 1) - 0.5) * radius * 1.7;
-      mesh(
-        box(radius * 0.9, radius * 0.5, radius * 0.5),
+  pad.castShadow = false;
+
+  if (toeCount > 0 && detail > 0.6) {
+    for (let t = 0; t < toeCount; t++) {
+      const across = toeCount === 1 ? 0 : t / (toeCount - 1) - 0.5;
+      const toe = new THREE.Group();
+      toe.position.set(forward * radius * 0.7, footY + radius * 0.1, across * radius * 1.5);
+      // Splay: the outer toes point outwards, which is what opens the gaps.
+      toe.rotation.y = -across * 0.75 * forward;
+      knee.add(toe);
+      // The middle toes are the longest, as they are on every foot with toes.
+      // Shorter and rounder than the first attempt, which splayed four flat
+      // paddles across the ground: a cat's paw is compact, and toes as long as
+      // the leg is thick read as fingers.
+      const reach = radius * (0.9 - Math.abs(across) * 0.35);
+      const seg = mesh(
+        ellipsoid(reach, radius * 0.34, radius * 0.32, 5),
         options.footColor,
-        knee,
-        forward * (radius * 0.45 + footLen * 0.5),
-        -shankLen - radius * 0.32,
-        spread,
+        toe,
+        forward * reach * 0.75,
+        0,
+        0,
       );
+      seg.castShadow = false;
     }
+  } else if (toeCount === 0) {
+    // No toes asked for: a hoof-like block, which is what the animals that pass
+    // zero actually have.
+    mesh(
+      box(radius * 1.5, radius * 0.6, radius * 1.5),
+      options.footColor,
+      knee,
+      forward * radius * 0.5,
+      footY,
+      0,
+    );
   }
 
   model.legs.push(hip);
@@ -1604,6 +1677,14 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
       const side = Math.sign(z);
       const hip = new THREE.Group();
       hip.position.set(x, -H * 0.16, z);
+      /*
+       * Which flank this limb hangs off, and whether it is a fore or a hind one.
+       * The animator needs both to fold the limbs back against the body when the
+       * animal swims, and it cannot recover them from the leg index — the index
+       * order is this builder's business, not the animator's.
+       */
+      hip.userData.side = side;
+      hip.userData.front = x > 0;
       bodyGroup.add(hip);
 
       // Humerus: out to the side and slightly down.
@@ -1625,19 +1706,39 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
       hip.add(elbow);
       const lower = mesh(capsule(W * 0.082, H * 0.26, detail > 0.5 ? 7 : 5), c.body, elbow, 0, -H * 0.16, 0);
       lower.castShadow = true;
-      // Foot, splayed flat.
-      mesh(box(W * 0.26, H * 0.06, W * 0.3), c.belly, elbow, W * 0.04, -H * 0.32, 0);
-      // Claws.
-      if (detail > 0.6) {
-        for (let t = -1; t <= 1; t++) {
-          mesh(
-            cone(W * 0.028, W * 0.09),
-            c.accent,
-            elbow,
-            W * 0.17,
-            -H * 0.32,
-            t * W * 0.09,
-          ).rotation.z = -Math.PI / 2;
+      /*
+       * The foot, as four splayed webbed toes on a small pad.
+       *
+       * It was a single flat box with three claws poking out of the front, which
+       * from anywhere but directly overhead is a rectangle — and a crocodile's
+       * feet are one of the few parts of it you see clearly, because they are the
+       * bit that hangs down when it swims.
+       */
+      /*
+       * The foot hangs from the *end of the shank*, and that has to be measured
+       * rather than picked. It was placed at a fixed -0.32 H, which for a caiman
+       * is four centimetres higher than where the shank capsule actually ends —
+       * so pad, toes and claws were all inside the leg and the foot rendered as
+       * the capsule's rounded end: a block, which is exactly the complaint.
+       */
+      const shankBottom = -H * 0.16 - H * 0.13 - W * 0.082;
+      // Body-coloured, not belly-coloured: a caiman's feet are the same dark
+      // green as its legs, and a pale foot on a dark leg reads as a sock.
+      mesh(ellipsoid(W * 0.11, H * 0.045, W * 0.12, 6), c.body, elbow, W * 0.03, shankBottom, 0);
+      if (detail > 0.5) {
+        for (let t = 0; t < 4; t++) {
+          const across = t / 3 - 0.5;
+          const toe = new THREE.Group();
+          toe.position.set(W * 0.07, shankBottom, across * W * 0.26);
+          toe.rotation.y = -across * 1.0;
+          elbow.add(toe);
+          // Long, flat and webbed — a caiman's hind foot is most of its foot.
+          const reach = W * (0.2 - Math.abs(across) * 0.06);
+          mesh(ellipsoid(reach, H * 0.04, W * 0.05, 5), c.body, toe, reach * 0.8, 0, 0);
+          if (detail > 0.6) {
+            const claw = mesh(cone(W * 0.025, W * 0.075), c.accent, toe, reach * 1.75, 0, 0);
+            claw.rotation.z = -Math.PI / 2;
+          }
         }
       }
       model.legs.push(hip);

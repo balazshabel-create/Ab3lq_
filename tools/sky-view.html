@@ -1,0 +1,67 @@
+<!doctype html>
+<!--
+  sky-view.html — the sky dome on its own, pointed upwards.
+
+  Judging clouds inside the game means building a whole world, waiting for the
+  weather the world happens to have, and photographing past the trees; each
+  attempt is a minute. Here the dome is the only thing in the scene and the
+  weather is a query parameter:
+
+      /tools/sky-view.html?weather=cloudy&hour=15&pitch=0.9
+
+  It uses the game's own SkySystem, so what you see is what the game draws.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>JukeJungle sky view</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #000; }
+      canvas { display: block; }
+      #label {
+        position: fixed; left: 12px; top: 10px; font: 13px/1.4 monospace;
+        color: #fff; text-shadow: 0 1px 2px #000; white-space: pre;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="label"></div>
+    <script type="module">
+      import * as THREE from 'three';
+      import { SkySystem } from '/src/Render/SkySystem.ts';
+      import { presetSettings } from '/src/Graphics/QualitySettings.ts';
+
+      const params = new URLSearchParams(location.search);
+      const weather = params.get('weather') ?? 'clear';
+      const hour = Number(params.get('hour') ?? 15);
+      const pitch = Number(params.get('pitch') ?? 0.75);
+      const yaw = Number(params.get('yaw') ?? 0.6);
+      const seconds = Number(params.get('t') ?? 0);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(1);
+      document.body.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      const settings = presetSettings('high');
+      const sky = new SkySystem(scene, settings);
+
+      const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 8000);
+      camera.position.set(0, 6, 0);
+      camera.lookAt(Math.cos(yaw) * Math.cos(pitch), 6 + Math.sin(pitch), Math.sin(yaw) * Math.cos(pitch));
+
+      // Wind the clock forward so a still frame is not always the same one.
+      for (let i = 0; i < Math.round(seconds * 60); i++) {
+        sky.update(hour, weather, 0, 0, camera.position, settings);
+      }
+      const state = sky.update(hour, weather, 0, 0, camera.position, settings);
+      renderer.render(scene, camera);
+
+      document.getElementById('label').textContent =
+        `weather ${weather}   hour ${hour}   pitch ${pitch.toFixed(2)}   sun ${state.sunIntensity.toFixed(2)}`;
+
+      window.__skyReady = true;
+    </script>
+  </body>
+</html>

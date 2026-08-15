@@ -1468,8 +1468,8 @@ function buildTree(detail: number, variant = 0): PropAssets {
         barkColor: 0x5e4128,
         // Leaves come from the frond curtain instead, so the twigs carry only a
         // light cap — a willow's branch tips are not leafy, the strands are.
-        leaves: { count: detail >= 2 ? 12 : 5, radius: 0.7, length: 0.4, width: 0.18, palette },
-        along: detail >= 2 ? { perSegment: 2, from: 1, scale: 0.5 } : undefined,
+        leaves: { count: detail >= 2 ? 12 : 9, radius: 0.7, length: 0.4, width: 0.18, palette },
+        along: detail >= 2 ? { perSegment: 2, from: 1, scale: 0.5 } : { perSegment: 1, from: 1, scale: 0.4 },
         sides: twigSides,
         seed: 100 + i,
       });
@@ -1488,10 +1488,10 @@ function buildTree(detail: number, variant = 0): PropAssets {
       addWillowFronds(parts, {
         centre: [Math.cos(a) * reach * 0.8, height * 0.6 + 2.2, Math.sin(a) * reach * 0.8],
         radius: 2.1,
-        count: detail >= 2 ? 30 : detail >= 1 ? 15 : 6,
+        count: detail >= 2 ? 30 : detail >= 1 ? 18 : 11,
         length: 6.4,
         palette,
-        leavesPerStrand: detail >= 2 ? 7 : detail >= 1 ? 3 : 0,
+        leavesPerStrand: detail >= 2 ? 7 : detail >= 1 ? 4 : 3,
       });
       if (detail >= 2) {
         addWillowFronds(parts, {
@@ -1507,10 +1507,10 @@ function buildTree(detail: number, variant = 0): PropAssets {
     addWillowFronds(parts, {
       centre: [0, height * 0.98, 0],
       radius: 1.7,
-      count: detail >= 2 ? 24 : 9,
+      count: detail >= 2 ? 24 : detail >= 1 ? 14 : 10,
       length: 5.6,
       palette,
-      leavesPerStrand: detail >= 2 ? 6 : 2,
+      leavesPerStrand: detail >= 2 ? 6 : 3,
     });
   } else if (v === 1) {
     // ---- Conifer ---------------------------------------------------------
@@ -1541,8 +1541,8 @@ function buildTree(detail: number, variant = 0): PropAssets {
      * each other so the branches never line up into vertical columns.
      */
     const palette = [0x2c5c2a, 0x367033, 0x244d24, 0x3f8038];
-    const whorls = detail >= 2 ? 9 : detail >= 1 ? 6 : 4;
-    const perWhorl = detail >= 2 ? 6 : detail >= 1 ? 4 : 3;
+    const whorls = detail >= 2 ? 9 : detail >= 1 ? 7 : 5;
+    const perWhorl = detail >= 2 ? 6 : 4;
     for (let w = 0; w < whorls; w++) {
       const t = w / (whorls - 1);
       // Start above the bare lower trunk: a conifer's skirt is well off the floor.
@@ -1573,13 +1573,16 @@ function buildTree(detail: number, variant = 0): PropAssets {
            * tip make a spray, and a stack of sprays makes a conifer.
            */
           leaves: {
-            count: detail >= 2 ? 11 : 5,
-            radius: spread * 0.3,
+            count: detail >= 2 ? 11 : 9,
+            radius: spread * (detail >= 2 ? 0.3 : 0.38),
             length: 0.6,
             width: 0.26,
             palette,
           },
-          along: detail >= 2 ? { perSegment: 2, from: 1, scale: 0.55 } : undefined,
+          along:
+            detail >= 2
+              ? { perSegment: 2, from: 1, scale: 0.55 }
+              : { perSegment: 1, from: 1, scale: 0.5 },
           sides: twigSides,
           seed: 300 + w * 11 + i,
         });
@@ -1587,7 +1590,7 @@ function buildTree(detail: number, variant = 0): PropAssets {
     }
     // The spire.
     leafCluster(parts, {
-      count: detail >= 2 ? 16 : 6,
+      count: detail >= 2 ? 16 : 10,
       radius: 0.7,
       flatten: 1.9,
       leafLength: 0.6,
@@ -1645,7 +1648,10 @@ function buildTree(detail: number, variant = 0): PropAssets {
             { at: 0.66, limbs: 4, length: 3.4, rise: 0.78, tropism: 0.08 },
             { at: 0.86, limbs: 3, length: 2.4, rise: 1.2, tropism: 0.16 },
           ]
-        : [{ at: 0.66, limbs: 3, length: 3.2, rise: 0.85, tropism: 0.1 }];
+        : [
+            { at: 0.52, limbs: 4, length: 3.6, rise: 0.55, tropism: 0.04 },
+            { at: 0.8, limbs: 3, length: 2.6, rise: 1.05, tropism: 0.16 },
+          ];
 
     for (let t = 0; t < tiers.length; t++) {
       const tier = tiers[t];
@@ -1685,13 +1691,23 @@ function buildTree(detail: number, variant = 0): PropAssets {
          * reads as foliage instead of as bunting.
          */
         leaves: {
-          count: detail >= 2 ? 13 : detail >= 1 ? 7 : 3,
-          radius: 1.15,
-          length: 0.54,
-          width: 0.3,
+          /*
+           * The low presets drop a level of branching, and that is the right
+           * trade — tubes are what cost triangles. But dropping the leaves with
+           * it is not: a leaf card is two triangles, and a tree with three of
+           * them per tip is a dead stick. Fewer branches, each carrying a
+           * fuller and wider spray, keeps a crown at a fraction of the cost.
+           */
+          count: detail >= 2 ? 13 : detail >= 1 ? 12 : 11,
+          radius: detail >= 2 ? 1.15 : 1.5,
+          length: detail >= 2 ? 0.54 : 0.66,
+          width: detail >= 2 ? 0.3 : 0.36,
           palette,
         },
-        along: detail >= 2 ? { perSegment: 2, from: 1, scale: 0.62 } : undefined,
+        along:
+          detail >= 2
+            ? { perSegment: 2, from: 1, scale: 0.62 }
+            : { perSegment: 1, from: 1, scale: 0.55 },
         sides: twigSides,
         seed: 500 + t * 31 + i,
       });

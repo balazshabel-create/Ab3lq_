@@ -300,6 +300,18 @@ class Game {
 
     // Input and the hidden cursor belong to the in-round screen only — menus
     // need a visible, working cursor.
+    /*
+     * Music follows the screen, not the round.
+     *
+     * The lobby and the results screen get the jungle loop; the round itself
+     * gets silence, because the round's soundtrack is rain and insects and the
+     * thing you are listening for is a whistle. Starting it here rather than at
+     * each transition means there is one place that decides, and no path through
+     * the UI can leave music playing over a live round.
+     */
+    if (name === 'lobby' || name === 'menu') audioSystem.startMusic('lobby');
+    else if (name !== 'result') audioSystem.stopMusic();
+
     const playing = name === 'hud';
     this.input.setEnabled(playing);
     this.renderer.cameraRig.setFreeMode(!playing);

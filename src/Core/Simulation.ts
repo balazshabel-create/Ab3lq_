@@ -76,6 +76,7 @@ import { Terrain } from '../World/Terrain';
 import { generateWorld, type FoodSource, type WorldContent } from '../World/WorldGen';
 import {
   AMBIENT_SPECIES,
+  BodyPlan,
   ANIMALS,
   AbilityId,
   PLAYABLE_SPECIES,
@@ -564,10 +565,29 @@ export class Simulation implements AiContext {
     const ambient = AMBIENT_SPECIES.filter(isEnabled);
     if (ambient.length > 0) {
       let ambientBudget = AMBIENT_POPULATION;
-      const weights = ambient.map((s) => (ANIMALS[s].size <= SizeClass.Tiny ? 14 : 6));
+      /*
+       * Birds and fish weighted up hard.
+       *
+       * The old weighting favoured whatever was smallest, which meant the world
+       * filled with ants and butterflies — life you only ever see by looking
+       * down at your own feet. What actually makes a jungle feel inhabited is
+       * movement at a *distance*: something crossing the canopy, a shoal turning
+       * under the surface. Those are the two things worth spending the ambient
+       * budget on, so they get most of it.
+       */
+      const weights = ambient.map((s) => {
+        const plan = ANIMALS[s].silhouette.bodyPlan;
+        if (plan === BodyPlan.Bird) return 26;
+        if (plan === BodyPlan.Fish) return 22;
+        return ANIMALS[s].size <= SizeClass.Tiny ? 8 : 5;
+      });
       while (ambientBudget > 0) {
         const species = rng.pickWeighted(ambient, weights);
-        const n = Math.min(ambientBudget, rng.int(3, 12));
+        // Birds cross in pairs and small parties; fish move in shoals.
+        const plan = ANIMALS[species].silhouette.bodyPlan;
+        const group =
+          plan === BodyPlan.Fish ? rng.int(8, 20) : plan === BodyPlan.Bird ? rng.int(2, 6) : rng.int(3, 12);
+        const n = Math.min(ambientBudget, group);
         this.spawnGroup(species, n, rng);
         ambientBudget -= n;
       }

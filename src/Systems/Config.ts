@@ -558,7 +558,7 @@ export const AI_POPULATION = 6;
  * They are also cheap in a way the real animals are not: no hunger, no fleeing,
  * no combat, and they never enter the interest set as threats.
  */
-export const AMBIENT_POPULATION = 190;
+export const AMBIENT_POPULATION = 320;
 
 /**
  * Guaranteed minimum number of AI animals of the same species as each player.

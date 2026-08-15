@@ -624,6 +624,15 @@ export class AnimalRenderer {
      */
     if (model.legs.length > 0) {
       const swimming = actor.inWater;
+      /*
+       * A swimming crocodile does not paddle. It presses all four limbs back
+       * along its flanks and drives entirely from the tail — the legs are drag,
+       * and it folds them away. Running the walk cycle in the water instead gave
+       * four sprawled limbs bicycling under a motionless body, which is what
+       * looked wrong: it read as an animal treading water rather than as one
+       * that swims better than it walks.
+       */
+      const trailing = swimming && plan === BodyPlan.Reptile;
       const amplitude = (swimming ? 0.5 : 0.75) * Math.max(actor.gait, swimming ? 0.35 : 0);
       for (let i = 0; i < model.legs.length; i++) {
         const leg = model.legs[i];
@@ -643,6 +652,42 @@ export class AnimalRenderer {
          * plan orders its limbs the same way (a primate's front pair are arms).
          */
         const fold = (knee?.userData.fold as number | undefined) ?? -1;
+
+        if (trailing) {
+          /*
+           * Folded away for swimming: the humerus yaws back until it lies along
+           * the flank, tips inwards so the limb hugs the body instead of
+           * sprawling, and the elbow folds the forearm up under it. A slow drift
+           * keeps it from freezing into a mannequin — a trailing limb still
+           * moves with the water, it just does not row.
+           */
+          const side = (leg.userData.side as number | undefined) ?? (i % 2 === 0 ? 1 : -1);
+          const front = (leg.userData.front as boolean | undefined) ?? i < 2;
+          const drift = Math.sin(time * 0.9 + i * 1.9) * 0.06;
+          const ease = Math.min(1, dt * 5);
+          leg.rotation.y = lerp(leg.rotation.y, -side * ((front ? 1.15 : 1.1) + drift), ease);
+          leg.rotation.x = lerp(leg.rotation.x, side * 0.45, ease);
+          leg.rotation.z = lerp(leg.rotation.z, 0, ease);
+          leg.position.y = lerp(leg.position.y, baseY, ease);
+          /*
+           * Both pairs fold the same way here, which is the one place the walk
+           * cycle's `fold` is the wrong answer: once the humerus has yawed back
+           * along the flank, the hind leg's forward fold swings its foot *out*
+           * again and the tuck undoes itself. Measured — with this the feet come
+           * to rest halfway in from the flanks instead of staying sprawled.
+           */
+          if (knee) knee.rotation.z = lerp(knee.rotation.z, -0.95 - drift, ease);
+          continue;
+        }
+        /*
+         * Out of the water the limb has to come back out from under the body,
+         * and only this plan ever put it there — for everything else these two
+         * are already zero and the lerp is a no-op.
+         */
+        if (leg.rotation.y !== 0 || leg.rotation.x !== 0) {
+          leg.rotation.y = lerp(leg.rotation.y, 0, Math.min(1, dt * 5));
+          leg.rotation.x = lerp(leg.rotation.x, 0, Math.min(1, dt * 5));
+        }
 
         if (airborne) {
           // Tucked in mid-jump: hips forward, knees folded hard.

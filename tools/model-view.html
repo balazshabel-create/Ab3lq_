@@ -71,8 +71,28 @@
       const model = buildAnimalModel(species, detail);
       scene.add(model.root);
 
+      /*
+       * `pose=swim` reproduces the limb tuck the animator applies to a reptile
+       * in water. The angles are copied from AnimalRenderer rather than shared,
+       * because the animator is a method on a class that needs a scene and a
+       * terrain to exist — if the two ever drift apart, this page is the one
+       * that is wrong.
+       */
+      if (params.get('pose') === 'swim') {
+        for (let i = 0; i < model.legs.length; i++) {
+          const leg = model.legs[i];
+          const knee = model.knees[i];
+          const side = leg.userData.side ?? (i % 2 === 0 ? 1 : -1);
+          const front = leg.userData.front ?? i < 2;
+          leg.rotation.y = -side * (front ? 1.15 : 1.1);
+          leg.rotation.x = side * 0.45;
+          if (knee) knee.rotation.z = -0.95;
+        }
+      }
+
       const def = ANIMALS[species];
       const size = Math.max(def.silhouette.length, def.silhouette.height);
+      window.__modelSize = size;
       const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.05, 200);
 
       document.getElementById('label').textContent =
@@ -87,16 +107,43 @@
        * which is a fault in the camera, not in the model. Framing off the
        * *bounding size* puts a tortoise and a tiger at comparable angles.
        */
+      /*
+       * `zoom` and `at` exist for the parts that are small on purpose. A foot is
+       * five centimetres of a three-metre animal, so at the framing that shows a
+       * silhouette it is four pixels — and "are there toes on it" cannot be
+       * answered from four pixels. `?zoom=6&at=0.9,0.05,0` puts the camera on
+       * the front foot instead.
+       */
+      const zoom = Number(params.get('zoom') ?? 1);
+      const at = (params.get('at') ?? '').split(',').map(Number);
+      const target = at.length === 3 ? new THREE.Vector3(at[0], at[1], at[2])
+                                     : new THREE.Vector3(0, def.silhouette.height * 0.45, 0);
+
       let t = angle;
       function frame() {
         if (spin) t += 0.01;
-        const r = size * 2.6;
-        const eye = Math.max(size * 0.42, def.silhouette.height * 1.15);
-        camera.position.set(Math.cos(t) * r, eye, Math.sin(t) * r);
-        camera.lookAt(0, def.silhouette.height * 0.45, 0);
+        const r = (size * 2.6) / zoom;
+        const eye = target.y + Math.max(size * 0.42, def.silhouette.height * 1.15) / zoom;
+        camera.position.set(target.x + Math.cos(t) * r, eye, target.z + Math.sin(t) * r);
+        camera.lookAt(target);
         renderer.render(scene, camera);
         requestAnimationFrame(frame);
       }
+      /*
+       * Publish where the first limb's lowest point is, so a caller can aim the
+       * camera at a foot without knowing how this plan lays its legs out.
+       */
+      model.root.updateMatrixWorld(true);
+      const firstLimb = model.knees[0] ?? model.legs[0];
+      if (firstLimb) {
+        let lowest = null;
+        firstLimb.traverse((o) => {
+          const p = o.getWorldPosition(new THREE.Vector3());
+          if (!lowest || p.y < lowest.y) lowest = p;
+        });
+        window.__footTarget = [lowest.x, lowest.y + 0.05, lowest.z];
+      }
+
       frame();
       window.__modelReady = true;
     </script>

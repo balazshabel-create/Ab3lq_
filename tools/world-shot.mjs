@@ -105,6 +105,40 @@ const info = await page.evaluate((what) => {
     return { at: [Math.round(best.x), Math.round(best.z)], height: best.height, neighbours: bestScore };
   }
 
+  if (what === 'sky') {
+    /*
+     * Point the camera up. The free camera exists to orbit a place on the
+     * ground and always looks down at it, so photographing the sky means taking
+     * the camera off it: with the rig's update neutered, whatever transform is
+     * set here survives every frame.
+     */
+    const river = terrain.rivers[0];
+    const p = river.points[Math.floor(river.points.length / 3)];
+    rig.setFreeAnchor(p.x, p.z, 20);
+    rig.update = () => {};
+    /*
+     * Clear the weather for this one photograph. Overcast and rain are what the
+     * sky looks like most of the time in this world, and they hide the very
+     * thing the shot is of — the cloud layer's shape and height.
+     */
+    if (new URLSearchParams(location.search).get('weather') !== 'keep') {
+      /*
+       * Lie to the sky, rather than to the simulation. Writing clear weather
+       * into the world state does not survive: the simulation rewrites it every
+       * tick and the renderer reads it immediately afterwards. Wrapping the
+       * sky's own update is the one place the value cannot be overwritten.
+       */
+      const sky = game.renderer.sky;
+      const original = sky.update.bind(sky);
+      sky.update = (hour, _weather, _rain, _fog, pos, settings) =>
+        original(hour, 'clear', 0, 0, pos, settings);
+    }
+    const cam = game.renderer.camera;
+    cam.position.set(p.x, terrain.surfaceAt(p.x, p.z) + 3, p.z);
+    cam.lookAt(p.x + 40, cam.position.y + 55, p.z);
+    return { lookingUp: true, at: [Math.round(p.x), Math.round(p.z)] };
+  }
+
   const river = terrain.rivers[0];
   const p = river.points[Math.floor(river.points.length / 3)];
   rig.setFreeAnchor(p.x, p.z, 48);

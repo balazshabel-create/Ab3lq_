@@ -34,8 +34,54 @@ const SKY_FRAGMENT = /* glsl */ `
   uniform float uStarStrength;
   uniform float uSunSize;
   uniform float uHaze;
+  uniform float uCloudCover;
+  uniform float uTime;
 
   varying vec3 vWorldDirection;
+
+  // --- Clouds ---------------------------------------------------------------
+  /*
+   * Two layers of value noise, projected onto a plane far overhead.
+   *
+   * ## Why a plane and not the dome
+   *
+   * Painting noise straight onto the sky sphere gives clouds the same apparent
+   * size everywhere, so they hang at the zenith exactly as they hang at the
+   * horizon and the sky reads as a painted ceiling. Dividing the direction by
+   * its own height projects the pattern onto a flat sheet at a fixed altitude,
+   * which is what clouds actually are — and it produces the perspective for
+   * free: cells stretch and crowd together towards the horizon, so the sky
+   * suddenly has a *distance* to it.
+   *
+   * Two octaves at different scales and drift speeds. The slower, larger layer
+   * is the cloud mass; the faster, finer one breaks its edge up so it does not
+   * read as a blob.
+   */
+  float hash2(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  }
+
+  float valueNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash2(i);
+    float b = hash2(i + vec2(1.0, 0.0));
+    float c = hash2(i + vec2(0.0, 1.0));
+    float d = hash2(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+  }
+
+  float cloudFbm(vec2 p) {
+    float v = 0.0;
+    float amp = 0.5;
+    for (int i = 0; i < 4; i++) {
+      v += valueNoise(p) * amp;
+      p = p * 2.07 + vec2(3.1, 1.7);
+      amp *= 0.5;
+    }
+    return v;
+  }
 
   // Cheap hash-based star field: no texture, and stable between frames because
   // it is a pure function of the view direction.
@@ -72,6 +118,78 @@ const SKY_FRAGMENT = /* glsl */ `
     // Stars, only above the horizon and only at night.
     if (uStarStrength > 0.01 && up > 0.0) {
       color += vec3(0.85, 0.88, 1.0) * stars(dir) * uStarStrength * smoothstep(0.0, 0.25, up);
+    }
+
+    /*
+     * Clouds, high up.
+     *
+     * Faded out towards the horizon rather than drawn all the way down to it:
+     * the projection stretches to infinity there, and any pattern taken that far
+     * turns into radial streaks. Real cloud at the horizon is a band of haze
+     * anyway, which the haze term above already draws.
+     */
+    if (uCloudCover > 0.01 && up > 0.04) {
+      vec2 plane = dir.xz / max(up, 0.04);
+      float drift = uTime * 0.004;
+      /*
+       * Faded further up the sky than the projection would need on its own. The
+       * plane stretches to infinity at the horizon, so the last stretch before
+       * it is where cells smear into radial streaks — measured on the dome, the
+       * smearing is visible up to about a quarter of the way up.
+       */
+      float fade = smoothstep(0.05, 0.4, up);
+
+      /*
+       * The high deck: ice cloud, drawn first because everything else is below
+       * it. Stretched hard along one axis — cirrus is drawn out into fibres by
+       * the wind at that height, and that streaking is the only cue in a static
+       * frame that says "much higher than the rest".
+       */
+      vec2 ice = plane * vec2(0.42, 2.4) + vec2(drift * 2.4, drift * 0.5);
+      float fibre = cloudFbm(ice);
+      float wisp = smoothstep(0.5, 0.86, fibre) * fade * (0.35 + uCloudCover * 0.4);
+      color = mix(color, mix(vec3(1.0), uSunColor, 0.22), wisp * 0.45);
+
+      vec2 pc = plane * 1.6 + vec2(drift, drift * 0.6);
+      /*
+       * Domain warp. Sampling the field at coordinates displaced by a slower
+       * copy of itself is what separates cloud from fog: undisplaced fbm gives
+       * round even blobs, and the curled, piled, torn edges of real cloud come
+       * from the warp rather than from any amount of extra octaves.
+       */
+      vec2 warp = vec2(cloudFbm(pc * 0.5), cloudFbm(pc * 0.5 + vec2(5.2, 1.3))) - 0.5;
+      float mass = cloudFbm(pc + warp * 1.1);
+      float detail = cloudFbm(pc * 3.1 - vec2(drift * 1.7, drift * 0.9));
+      float density = mass * 0.72 + detail * 0.28;
+
+      // Coverage moves the *threshold*, which is what makes clouds grow and
+      // merge as the weather closes in rather than simply getting more opaque.
+      // The band is narrow: a wide one fades every edge into haze.
+      float amount = smoothstep(0.54 - uCloudCover * 0.3, 0.66 - uCloudCover * 0.13, density);
+      amount *= fade;
+
+      /*
+       * Lit from the sun side and shaded away from it. Sampling the same field
+       * a short step towards the sun and taking the difference is a one-tap
+       * stand-in for a light march: where the cloud is thickening towards the
+       * sun it is in its own shadow, where it is thinning it is edge-lit.
+       */
+      vec2 toSun = normalize(uSunDirection.xz + vec2(0.001, 0.0));
+      float ahead = cloudFbm(pc + toSun * 0.5 + warp * 1.1);
+      float lit = clamp(0.5 + (mass - ahead) * 2.6, 0.0, 1.0);
+
+      vec3 shadowed = mix(uHorizonColor * 0.52, uZenithColor * 0.72, 0.4);
+      vec3 sunlit = mix(vec3(1.0), uSunColor, 0.45);
+      vec3 cloud = mix(shadowed, sunlit, lit);
+      // Silver lining: the rim facing the sun catches far more than the top does.
+      cloud += uSunColor * pow(sunDot, 8.0) * lit * 0.35;
+
+      // Heavy cover is grey cover: an overcast sky is dark because the light has
+      // to come through kilometres of water, not because the cloud is a
+      // different colour. Scaling by the cover is a cheap stand-in for depth.
+      cloud *= 1.0 - uCloudCover * 0.26;
+
+      color = mix(color, cloud, amount * 0.96);
     }
 
     gl_FragColor = vec4(color, 1.0);
@@ -194,6 +312,8 @@ export interface SkyState {
 
 export class SkySystem {
   readonly dome: THREE.Mesh;
+  /** Seconds since the renderer started, for the cloud drift. */
+  private time = 0;
   readonly sunLight: THREE.DirectionalLight;
   readonly ambientLight: THREE.HemisphereLight;
   /** A weak fill from the opposite side, so silhouettes never go pure black. */
@@ -227,6 +347,8 @@ export class SkySystem {
         uStarStrength: { value: 0 },
         uSunSize: { value: 0.006 },
         uHaze: { value: 0.6 },
+        uCloudCover: { value: 0.35 },
+        uTime: { value: 0 },
       },
       vertexShader: SKY_VERTEX,
       fragmentShader: SKY_FRAGMENT,
@@ -364,6 +486,9 @@ export class SkySystem {
     followPosition: THREE.Vector3,
     settings: GraphicsSettings,
   ): SkyState {
+    // One frame's worth. `update` is called once per rendered frame, and the
+    // exact rate does not matter here — clouds only have to move slowly.
+    this.time += 1 / 60;
     const key = this.sampled.sample(hour);
 
     // --- Sun position ----------------------------------------------------
@@ -419,6 +544,24 @@ export class SkySystem {
     // The moon reads as a smaller, harder disc than the sun.
     u.uSunSize.value = night > 0.55 ? 0.0035 : 0.006;
     u.uHaze.value = 0.4 + fog * 0.5 + rain * 0.2;
+    /*
+     * Cloud cover follows the weather, with a floor: a tropical sky is never
+     * completely empty, and a flat blue dome is the one thing that makes a
+     * daytime scene look like a render rather than a place.
+     */
+    u.uCloudCover.value =
+      weather === Weather.Storm
+        ? 0.95
+        : weather === Weather.Rain
+          ? 0.8
+          : weather === Weather.Cloudy
+            ? 0.62
+            : weather === Weather.Fog
+              ? 0.5
+              : 0.34;
+    // Drives the drift. Wall-clock hours would make the clouds crawl, so this is
+    // the render clock instead — a bar of cloud crosses the sky in a few minutes.
+    u.uTime.value = this.time;
 
     this.sunLight.color.copy(this.state.sunColor);
     this.sunLight.intensity = this.state.sunIntensity;

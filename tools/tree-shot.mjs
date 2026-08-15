@@ -12,6 +12,9 @@ import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
 
+// Detail matters as much as the variant: the low presets build a different
+// tree, and "does it still read as a tree" is exactly the question there.
+const detail = process.env.TREE_DETAIL ?? '2';
 const variants = process.argv.slice(2);
 if (variants.length === 0) variants.push('0', '1', '2');
 
@@ -47,13 +50,14 @@ page.on('pageerror', (e) => console.error('PAGE ERROR:', e.message.slice(0, 300)
 for (const v of variants) {
   for (const [suffix, count] of [['', 1], ['-stand', 5]]) {
     await page.goto(
-      `http://localhost:5197/tools/tree-view.html?variant=${v}&detail=2&count=${count}`,
+      `http://localhost:5197/tools/tree-view.html?variant=${v}&detail=${detail}&count=${count}`,
       { waitUntil: 'load' },
     );
     await page.waitForFunction('window.__treeReady === true', { timeout: 60000 });
     await page.waitForTimeout(300);
-    await page.screenshot({ path: `${OUT}/tree-${v}${suffix}.png` });
-    console.log(`wrote ${OUT}/tree-${v}${suffix}.png`);
+    const name = `tree-${v}-d${detail}${suffix}.png`;
+    await page.screenshot({ path: `${OUT}/${name}` });
+    console.log(`wrote ${OUT}/${name}`);
   }
 }
 
