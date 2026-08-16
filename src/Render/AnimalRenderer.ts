@@ -21,7 +21,7 @@ import { ActorFlags } from '../Core/Types';
 import type { SnapshotActor } from '../Networking/Protocol';
 import type { GraphicsSettings } from '../Graphics/QualitySettings';
 import { buildAnimalModel, type AnimalModel } from './AnimalModels';
-import { clamp01, lerp } from '../Systems/Noise';
+import { clamp, clamp01, lerp } from '../Systems/Noise';
 
 /** Client-side interpolation state for one actor. */
 /** One authoritative pose, with the time it was received. */
@@ -80,6 +80,16 @@ interface RenderActor {
   slopePitch: number;
   /** Jaw opening, 0 = shut, 1 = wide. Smoothed so bites do not snap. */
   jawOpen: number;
+  /**
+   * Smoothed turn rate, in radians per second, and the lean it produces.
+   *
+   * An animal taking a corner at speed leans into it — a cat does it hard, a
+   * tapir barely — and without it a running animal changes direction like a
+   * chess piece. Smoothed because the yaw itself arrives ten times a second and
+   * the raw difference between two of those is a step function.
+   */
+  turnRate: number;
+  bank: number;
   /** Bite animation timer, counts down from BITE_DURATION. */
   biteTimer: number;
   /** Attacking flag as of the previous snapshot, to catch the rising edge. */
@@ -135,6 +145,56 @@ const MAX_SLOPE_PITCH = 0.56;
  * leaves 30 ms of slack for jitter.
  */
 const INTERP_DELAY = 0.13;
+
+/**
+ * When each foot comes down, as a fraction of a stride, for the three gaits.
+ *
+ * ## Why this table is the whole animation
+ *
+ * A quadruped's gait is not a speed, it is a *footfall order*, and each of the
+ * three has its own:
+ *
+ *  • **Walk** — a four-beat lateral sequence: left-fore, right-hind,
+ *    right-fore, left-hind. Three feet are on the ground at any moment, which
+ *    is why a walking animal never looks like it is about to fall over.
+ *  • **Trot** — two beats, diagonal pairs together. This is the gait the old
+ *    animator did at every speed, which is why every animal in the game moved
+ *    like a trotting pony whether it was creeping or sprinting.
+ *  • **Gallop** — the hind pair land close together, then the fore pair, then
+ *    a moment with nothing down at all. The offsets are deliberately uneven
+ *    (0.05 between the two hinds, 0.1 between the fores) because a symmetric
+ *    gallop reads as a mechanical hop.
+ *
+ * Indexed [front][side], where side +1 is the animal's left.
+ */
+const GAIT_OFFSETS = {
+  walk: { frontLeft: 0, hindRight: 0.25, frontRight: 0.5, hindLeft: 0.75 },
+  trot: { frontLeft: 0, hindRight: 0, frontRight: 0.5, hindLeft: 0.5 },
+  gallop: { frontLeft: 0.5, hindRight: 0.05, frontRight: 0.6, hindLeft: 0 },
+} as const;
+
+/**
+ * The phase offset for one limb, crossfaded between the three gaits.
+ *
+ * `blend` runs 0..2 — 0 walk, 1 trot, 2 gallop. Crossfading the *offsets*
+ * rather than switching tables is what lets an animal accelerate through the
+ * gaits without a visible pop, at the cost of a few frames somewhere between
+ * two gaits that are strictly neither.
+ */
+function legOffset(blend: number, front: boolean, side: number): number {
+  const key = front
+    ? side > 0
+      ? 'frontLeft'
+      : 'frontRight'
+    : side > 0
+      ? 'hindLeft'
+      : 'hindRight';
+  const walk = GAIT_OFFSETS.walk[key];
+  const trot = GAIT_OFFSETS.trot[key];
+  const gallop = GAIT_OFFSETS.gallop[key];
+  if (blend <= 1) return lerp(walk, trot, clamp01(blend));
+  return lerp(trot, gallop, clamp01(blend - 1));
+}
 
 export class AnimalRenderer {
   private group = new THREE.Group();
@@ -252,6 +312,8 @@ export class AnimalRenderer {
           inWater: false,
           slopePitch: 0,
           jawOpen: 0,
+          turnRate: 0,
+          bank: 0,
           biteTimer: 0,
           wasAttacking: false,
           wasInWater: false,
@@ -433,6 +495,7 @@ export class AnimalRenderer {
       if (own > Math.PI) own -= Math.PI * 2;
       if (own < -Math.PI) own += Math.PI * 2;
       actor.yaw += own * Math.min(1, dt * 16);
+      actor.turnRate = lerp(actor.turnRate, own / Math.max(1e-3, dt), Math.min(1, dt * 6));
       actor.fade = Math.min(1, actor.fade + dt * 3);
       return;
     }
@@ -460,6 +523,9 @@ export class AnimalRenderer {
       if (turn > Math.PI) turn -= Math.PI * 2;
       if (turn < -Math.PI) turn += Math.PI * 2;
       actor.yaw = a.yaw + turn * f;
+      // Radians per second, smoothed: this is what the body leans into.
+      const rate = span > 1e-4 ? turn / span : 0;
+      actor.turnRate = lerp(actor.turnRate, rate, Math.min(1, dt * 6));
     } else if (samples.length === 1) {
       actor.pos.set(samples[0].x, samples[0].y, samples[0].z);
       actor.yaw = samples[0].yaw;
@@ -610,20 +676,75 @@ export class AnimalRenderer {
     // Present on every animal, always. This is the single most important
     // animation in the game: it is what makes a motionless player animal look
     // alive in the same way a motionless AI does.
-    const breathe = Math.sin(time * 1.5 + actor.id * 0.7) * 0.012;
+    /*
+     * Breathing, at a rate the animal has earned.
+     *
+     * A resting animal takes a slow, shallow breath; one that has been running
+     * is heaving. Both the rate and the depth scale with the gait, which costs
+     * one multiply and makes a sprint visibly *cost* something — the chest is
+     * still working for a second or two after the legs stop, because `gait`
+     * decays rather than snapping to zero.
+     */
+    const breathRate = 1.5 + actor.gait * 4.5;
+    const breathDepth = 0.012 + actor.gait * 0.02;
+    const breathe = Math.sin(time * breathRate + actor.id * 0.7) * breathDepth;
 
     // --- Body ------------------------------------------------------------
     if (model.body !== root) {
       const baseY = model.body.userData.baseY ?? model.body.position.y;
       model.body.userData.baseY = baseY;
-      // Vertical bob on each footfall, plus breathing when still.
-      const bob = moving ? Math.abs(swing) * def.silhouette.height * 0.06 * actor.gait : 0;
+      /*
+       * The bounce, and where it comes from.
+       *
+       * At a walk the body rises once per footfall and barely at all — a
+       * walking animal's head is famously steady. At a gallop the whole body
+       * leaves the ground once per stride, so the bounce is a different thing:
+       * bigger, at the stride frequency rather than twice it, and paired with
+       * the spine flex below.
+       */
+      const runFactor = clamp01((actor.gait - 0.55) / 0.3);
+      /*
+       * Centred on zero, not resting on it.
+       *
+       * Both terms are one-sided — |sin| and max(0, sin) are never negative —
+       * so adding them raised the *average* height of the body as well as
+       * oscillating it, and a galloping animal hovered a hand's breadth above
+       * the ground for the whole stride. Subtracting each term's own mean keeps
+       * the amplitude and puts the animal back on the floor.
+       */
+      const bob = moving
+        ? ((Math.abs(swing) - 0.637) * (0.05 + runFactor * 0.02) +
+            (Math.max(0, Math.sin(actor.phase * 0.5)) - 0.318) * runFactor * 0.09) *
+          def.silhouette.height *
+          actor.gait
+        : 0;
       model.body.position.y = baseY + bob + breathe;
       // Roll into the stride — about X, the lateral axis. See the note above.
       model.body.rotation.x = moving ? swing * 0.05 * actor.gait : 0;
-      // Lean forward when sprinting: nose down is a negative pitch about Z.
-      // A running man leans into it too, but from the hips and much less far.
-      model.body.rotation.z = -actor.gait * (upright ? 0.05 : 0.12);
+      /*
+       * Pitch: the forward lean of a sprint, plus the spine.
+       *
+       * A galloping quadruped is not a rigid body being carried along. It
+       * bunches — hindquarters gathered under it, back arched — and then
+       * extends, and that one oscillation is what separates a run from a fast
+       * walk at a glance. Half the stride frequency, because it happens once
+       * per stride rather than once per footfall.
+       */
+      const spine = upright ? 0 : Math.sin(actor.phase * 0.5 + Math.PI * 0.25) * runFactor * 0.14;
+      model.body.rotation.z = -actor.gait * (upright ? 0.05 : 0.12) + spine;
+
+      /*
+       * Bank into the turn.
+       *
+       * Rotating the body about its own long axis, and only while it is moving:
+       * a standing animal that swings its head around does not roll. Bounded
+       * hard, because the yaw rate spikes when a snapshot corrects a heading
+       * and a body that snapped onto its side once a second would be far worse
+       * than no lean at all.
+       */
+      const wantBank = clamp(actor.turnRate * 0.22 * actor.gait, -0.28, 0.28);
+      actor.bank = lerp(actor.bank, moving ? wantBank : 0, Math.min(1, dt * 4));
+      model.body.rotation.x += actor.bank;
       if (curled) {
         // Armadillo ball: shrink and hide the limbs.
         model.body.scale.setScalar(lerp(model.body.scale.x, 0.72, dt * 6));
@@ -647,16 +768,68 @@ export class AnimalRenderer {
         model.head.position.y = baseY + def.silhouette.height * 0.1;
         model.head.rotation.y = Math.sin(time * 2.2) * 0.4;
       } else {
-        model.head.rotation.z = lerp(model.head.rotation.z, moving ? 0.05 : 0, dt * 4);
-        model.head.position.y = lerp(model.head.position.y, baseY, dt * 4);
-        // Idle looking-about, at a lazy pace.
-        model.head.rotation.y = Math.sin(time * 0.6 + actor.id) * 0.25;
+        /*
+         * A head that stays level while the body does not.
+         *
+         * Animals stabilise their heads: the body bounces and pitches under a
+         * gallop and the eyes stay on the horizon, because eyes that bounce
+         * cannot see. Cancelling most of the body's pitch here is a two-line
+         * change that does more for the look of a run than the legs do — with
+         * it the animal reads as *carrying* its head, without it the whole
+         * thing bobs like a toy on a spring.
+         *
+         * Most, not all: a galloping animal does pump its head, just far less
+         * than its shoulders move.
+         */
+        const bodyPitch = model.body !== root ? model.body.rotation.z : 0;
+        const level = -bodyPitch * 0.75;
+        model.head.rotation.z = lerp(model.head.rotation.z, level + (moving ? 0.05 : 0), dt * 9);
+        // The body's bounce, cancelled at the neck by the same fraction.
+        const bodyLift = model.body !== root ? model.body.position.y - (model.body.userData.baseY ?? 0) : 0;
+        model.head.position.y = lerp(model.head.position.y, baseY - bodyLift * 0.55, dt * 9);
+        /*
+         * Looking about, and looking where it is going. The idle scan slows
+         * down as the animal speeds up — nothing at a dead run looks around —
+         * and gives way to a turn of the head into the corner it is taking.
+         */
+        const scan = Math.sin(time * 0.6 + actor.id) * 0.25 * (1 - clamp01(actor.gait * 1.4));
+        const intoTurn = clamp(actor.turnRate * 0.25, -0.35, 0.35) * clamp01(actor.gait * 2);
+        model.head.rotation.y = lerp(model.head.rotation.y, scan + intoTurn, Math.min(1, dt * 6));
       }
       if (flinching) {
         // The "Easily Scared" twitch: a sharp, brief jerk. Subtle enough to
         // miss, distinctive enough to notice if you are watching for it.
         model.head.rotation.y += Math.sin(time * 40) * 0.3;
       }
+    }
+
+    /*
+     * --- Ears -------------------------------------------------------------
+     *
+     * Three behaviours, in order of how much they say:
+     *
+     *  • **Pinned back** when running hard. Every mammal folds its ears down at
+     *    speed, and from directly behind — which is where this game's camera
+     *    lives — it is the clearest single sign that an animal is sprinting.
+     *  • **Forward and still** when alerted, because the animal is listening to
+     *    something specific.
+     *  • **Flicking** otherwise, at a rhythm of its own per animal, with the
+     *    occasional sharper twitch. This is the tell that an animal is alive
+     *    rather than placed, and it costs one sine per ear.
+     */
+    for (let i = 0; i < model.ears.length; i++) {
+      const ear = model.ears[i];
+      const side = (ear.userData.side as number | undefined) ?? (i === 0 ? 1 : -1);
+      const baseX = (ear.userData.baseX as number | undefined) ?? ear.rotation.x;
+      const run = clamp01((actor.gait - 0.5) / 0.4);
+      // A flick every couple of seconds, at a phase of this animal's own.
+      const beat = (time * 0.55 + actor.id * 0.37 + i * 0.21) % 1;
+      const flick = beat > 0.9 ? Math.sin((beat - 0.9) * 31.4) * 0.5 : 0;
+      const pinned = run * 0.75 * side;
+      const listening = alerted ? -0.3 * side : 0;
+      ear.rotation.x = lerp(ear.rotation.x, baseX + pinned + listening + flick * side, Math.min(1, dt * 12));
+      // Swivelled towards whatever the head is looking at, a little behind it.
+      ear.rotation.y = lerp(ear.rotation.y, alerted ? 0 : model.head.rotation.y * 0.4, Math.min(1, dt * 6));
     }
 
     /*
@@ -746,7 +919,29 @@ export class AnimalRenderer {
        * that swims better than it walks.
        */
       const trailing = swimming && plan === BodyPlan.Reptile;
-      const amplitude = (swimming ? 0.5 : 0.75) * Math.max(actor.gait, swimming ? 0.35 : 0);
+      /*
+       * Which gait, and how far into it.
+       *
+       * `gaitBlend` runs 0..2: 0 is a walk, 1 a trot, 2 a gallop, and the
+       * fractional part crossfades the limb timings so an animal accelerating
+       * from a walk to a run does not switch between them on a frame.
+       */
+      const gaitBlend = clamp01(actor.gait / 0.42) + clamp01((actor.gait - 0.55) / 0.3);
+      const gallop = clamp01((actor.gait - 0.55) / 0.3);
+      /*
+       * How far a leg swings.
+       *
+       * Scaled by the *gait mode*, not by the speed. This used to multiply
+       * straight through by `gait`, so a creeping animal moved its legs ten
+       * degrees and looked like it was gliding along on castors — but a real
+       * animal walking slowly takes full steps slowly. Speed belongs in the
+       * stride frequency, which it already drives; the amplitude belongs to the
+       * gait, and a gallop reaches further than a walk.
+       */
+      const stride = 0.45 + 0.55 * clamp01(actor.gait * 2.2);
+      const amplitude = swimming
+        ? 0.5 * Math.max(actor.gait, 0.35)
+        : Math.min(0.85, (0.62 + gallop * 0.4) * stride);
       for (let i = 0; i < model.legs.length; i++) {
         const leg = model.legs[i];
         const knee = model.knees[i];
@@ -818,16 +1013,32 @@ export class AnimalRenderer {
           continue;
         }
 
-        // Diagonal gait: front-left moves with back-right.
-        const diagonal = i === 0 || i === 3 ? 1 : -1;
-        const legPhase = actor.phase * (swimming ? 1.5 : 1) + (diagonal > 0 ? 0 : Math.PI);
+        /*
+         * Where this limb sits in the gait's sequence.
+         *
+         * `legOffset` returns the fraction of a stride this limb lags the
+         * reference limb by, and it is the entire difference between a walk, a
+         * trot and a gallop — see the note on GAIT_OFFSETS.
+         */
+        const front = (leg.userData.front as boolean | undefined) ?? i < 2;
+        const side = (leg.userData.side as number | undefined) ?? (i % 2 === 0 ? 1 : -1);
+        const offset = swimming ? (i === 0 || i === 3 ? 0 : 0.5) : legOffset(gaitBlend, front, side);
+        const legPhase = actor.phase * (swimming ? 1.5 : 1) + offset * Math.PI * 2;
         const swing = Math.sin(legPhase);
 
         leg.rotation.z = swing * amplitude;
-        // Lift only while the leg travels forward, so the other half of the
-        // cycle plants it — that asymmetry is what makes it look like walking.
-        const lift = Math.max(0, Math.cos(legPhase));
-        leg.position.y = baseY + lift * def.silhouette.height * 0.14 * actor.gait;
+        /*
+         * Lift, and the shape of it.
+         *
+         * A leg is off the ground for less than half of a walk stride and for
+         * rather more of a gallop, and it comes up fast and comes down slowly.
+         * Raising cos to a power is what gives that asymmetry: at a walk the
+         * foot spends most of the cycle planted, which is the difference
+         * between walking and paddling in mid-air.
+         */
+        const raw = Math.max(0, Math.cos(legPhase));
+        const lift = Math.pow(raw, gallop > 0.5 ? 1.1 : 1.8);
+        leg.position.y = baseY + lift * def.silhouette.height * (0.13 + gallop * 0.12) * stride;
 
         /*
          * The knee, a quarter-cycle behind the hip.
@@ -837,10 +1048,15 @@ export class AnimalRenderer {
          * shank tucks under exactly while the foot is off the ground and swings
          * through to straighten just as it plants. Held at a small positive bend
          * throughout so it never hyperextends backwards through the joint.
+         *
+         * The hind legs fold harder at a gallop than the fore legs do, which is
+         * the single most recognisable thing about a running quadruped: the
+         * hindquarters coil under the body and drive it forward.
          */
         if (knee) {
           const tuck = (Math.sin(legPhase - Math.PI * 0.5) * 0.5 + 0.5) * amplitude * 0.9;
-          knee.rotation.z = fold * (0.12 + tuck);
+          const drive = front ? 1 : 1 + gallop * 0.7;
+          knee.rotation.z = fold * (0.12 + tuck * drive);
         }
       }
     }
@@ -853,12 +1069,22 @@ export class AnimalRenderer {
      * wave made a four-metre caiman look like it had a piece of rope attached.
      */
     const scull = plan === BodyPlan.Reptile;
-    const tailRate = scull ? (actor.inWater ? 2.4 : 1.5) : moving ? 5 : 1.6;
+    /*
+     * A tail at speed does two things a tail at rest does not: it comes *up*,
+     * and it stops flicking. A running cat holds its tail out behind it as a
+     * counterweight and only sways it to balance a turn; a walking one flicks
+     * it constantly. So the rate rises with the gait but the idle flick fades
+     * out, and the whole tail lifts.
+     */
+    const tailRate = scull ? (actor.inWater ? 2.4 : 1.5) : 1.6 + actor.gait * 5;
     const tailAmp = scull
       ? (actor.inWater ? 0.5 : 0.12) * (0.45 + actor.gait)
       : moving
-        ? 0.16
+        ? 0.16 * (1 - clamp01(actor.gait * 0.8)) + 0.05
         : 0.07;
+    // Lift, and a sway that answers the turn rather than the stride.
+    const tailLift = scull ? 0 : clamp01((actor.gait - 0.35) / 0.5) * 0.5;
+    const tailSteer = scull ? 0 : clamp(-actor.turnRate * 0.3, -0.5, 0.5) * clamp01(actor.gait);
     for (let i = 0; i < model.tail.length; i++) {
       const seg = model.tail[i];
       const base = seg.userData.baseRotZ ?? seg.rotation.z;
@@ -866,8 +1092,17 @@ export class AnimalRenderer {
       // A travelling wave down the tail: later segments lag behind. The lag is
       // the whole illusion — in phase, a tail is a rigid stick that pivots.
       const lag = i * (scull ? 0.5 : 0.6);
-      seg.rotation.y = Math.sin(time * tailRate - lag) * tailAmp;
-      seg.rotation.z = base + (moving ? swing2 * 0.05 : 0);
+      // Later segments lag further and swing wider — a tail is a whip, not a
+      // rod, and the tip is where that reads.
+      const taper = 1 + i * 0.35;
+      seg.rotation.y = Math.sin(time * tailRate - lag) * tailAmp * taper + tailSteer;
+      /*
+       * Lift is *negative* z: the builder applies droop as a positive rotation
+       * about the same axis (see addTail), so adding a positive lift pushed the
+       * tail further down — it hung between the hind legs at a full gallop,
+       * which is the one thing a running cat's tail never does.
+       */
+      seg.rotation.z = base + (moving ? swing2 * 0.05 : 0) - tailLift * (i === 0 ? 1 : 0.35);
     }
 
     // --- Wings -----------------------------------------------------------

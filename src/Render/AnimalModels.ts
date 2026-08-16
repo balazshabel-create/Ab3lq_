@@ -42,6 +42,16 @@ export interface AnimalModel {
   /** Legs, ordered front-left, front-right, back-left, back-right. */
   legs: THREE.Object3D[];
   /**
+   * Ears, for the plans that have them.
+   *
+   * Worth registering because of where the camera is: the game is played from
+   * behind the animal, so the back of the head is the part a player looks at
+   * for fifteen minutes. An ear that swivels towards a noise and flicks at a
+   * fly is the cheapest life there is to add — two rotations on an existing
+   * mesh — and it is in frame the entire time.
+   */
+  ears: THREE.Object3D[];
+  /**
    * Knee joints, index-matched to `legs` — `knees[i]` is a descendant of
    * `legs[i]`, or undefined for a plan whose legs are a single segment.
    *
@@ -185,6 +195,7 @@ export function buildAnimalModel(species: Species, detail = 1): AnimalModel {
     head: root,
     jaw: null,
     legs: [],
+    ears: [],
     knees: [],
     tail: [],
     wings: [],
@@ -347,6 +358,17 @@ function addJointedLeg(
   const { length, radius, detail, forward } = options;
   const hip = new THREE.Group();
   hip.position.set(options.x, options.y, options.z);
+  /*
+   * Which limb this is, recorded for the animator.
+   *
+   * A gait is a *sequence*: a walk puts down left-fore, right-hind, right-fore,
+   * left-hind in that order, and a gallop pairs the fores against the hinds.
+   * None of that can be derived from the index — the plans do not order their
+   * limbs the same way, and a primate's front pair are arms — so the builder
+   * that knows says so here.
+   */
+  hip.userData.front = forward > 0;
+  hip.userData.side = Math.sign(options.z) || 1;
   parent.add(hip);
 
   // Thigh: the upper half, hanging from the hip.
@@ -1040,6 +1062,9 @@ function buildQuadruped(
     for (const side of [-1, 1]) {
       const ear = mesh(cone(W * 0.13, H * 0.24), c.accent, neck, L * 0.02, W * 0.32, side * W * 0.25);
       ear.rotation.x = side * 0.25;
+      ear.userData.side = side;
+      ear.userData.baseX = ear.rotation.x;
+      model.ears.push(ear);
       if (detail > 0.6) {
         const inner = mesh(cone(W * 0.08, H * 0.17), c.eye, neck, L * 0.035, W * 0.31, side * W * 0.25);
         inner.rotation.x = side * 0.25;
