@@ -55,6 +55,9 @@ const query = [
   radius ? `r=${radius}` : '',
   process.env.WEATHER ? `weather=${process.env.WEATHER}` : '',
   process.env.FOG === 'off' ? 'fog=off' : '',
+  process.env.HIDE ? `hide=${process.env.HIDE}` : '',
+  // Same world every time, so before-and-after shots are of the same place.
+  process.env.SEED ? `seed=${process.env.SEED}` : '',
 ]
   .filter(Boolean)
   .join('&');
@@ -130,6 +133,28 @@ const info = await page.evaluate((what) => {
      */
     const fog = game.renderer.scene.fog;
     Object.defineProperty(fog, 'density', { get: () => 0.0012, set: () => {} });
+  }
+
+  /*
+   * `?hide=storm-wall,water` takes named objects out of shot.
+   *
+   * It is a translucent cylinder the size of the playable area, and from inside
+   * it — which is where every photograph is taken from — it lays a pale sheet
+   * across whatever is behind it. That is correct in play and ruins a
+   * photograph of anything else.
+   */
+  const hidden = (new URLSearchParams(location.search).get('hide') ?? '')
+    .split(',')
+    .filter(Boolean);
+  if (hidden.length > 0) {
+    const hide = () => {
+      game.renderer.scene.traverse((o) => {
+        if (hidden.some((name) => o.name === name || o.name.startsWith(name))) o.visible = false;
+      });
+    };
+    hide();
+    // Re-applied: the renderer turns some of these back on every frame.
+    setInterval(hide, 200);
   }
 
   if (what === 'bridge') {

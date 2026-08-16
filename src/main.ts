@@ -187,8 +187,19 @@ class Game {
     this.loading.setProgress(0.05, 'Seeding the basin…');
     await nextFrame();
 
-    // A fixed seed for the menu world; a real round uses the server's seed.
-    const menuSeed = Math.floor(Math.random() * 0x7fffffff);
+    /*
+     * The menu world's seed.
+     *
+     * Random per load, so the jungle behind the menu is a different jungle every
+     * time — except when `?seed=` says otherwise. That override exists for the
+     * screenshot tools: "the lake on seed 4242" is a stable address for a place,
+     * and without it a before-and-after comparison of the water is a comparison
+     * of two different rivers.
+     */
+    const seedParam = Number(new URLSearchParams(location.search).get('seed') ?? NaN);
+    const menuSeed = Number.isFinite(seedParam)
+      ? seedParam >>> 0
+      : Math.floor(Math.random() * 0x7fffffff);
     this.terrain = new Terrain(menuSeed);
     this.loading.setProgress(0.35, 'Carving rivers…');
     await nextFrame();

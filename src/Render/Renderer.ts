@@ -476,6 +476,7 @@ export class Renderer {
       cameraPos,
       skyState.sunDirection,
       skyState.horizonColor,
+      skyState.zenithColor,
       skyState.sunColor,
       world.rain,
       world.waterLevel,

@@ -68,6 +68,7 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform vec3 uShallowColor;
   uniform vec3 uDeepColor;
   uniform vec3 uSkyColor;
+  uniform vec3 uZenithColor;
   uniform vec3 uSunColor;
   uniform vec3 uSunDirection;
   uniform vec3 uCameraPos;
@@ -132,9 +133,25 @@ const FRAGMENT_SHADER = /* glsl */ `
       float radius = phase * 0.46;
       float ring = smoothstep(0.07, 0.0, abs(length(f) - radius));
       // Rings fade as they widen, the way a real one loses height.
-      total += ring * (1.0 - phase) * (1.0 - phase);
+      total += ring * (1.0 - phase) * (1.0 - phase) * 0.6;
     }
     return clamp(total, 0.0, 1.0);
+  }
+
+  /*
+   * Wave height at a point, per pixel.
+   *
+   * The vertex shader hands down its own displacement in vWave, but that is a
+   * varying: it is linear across a triangle, and the water plane's triangles
+   * are nearly six metres wide. Anything keyed on it — crest foam, the light
+   * that scatters through a crest — comes out as hard chevrons that follow the
+   * mesh instead of the water. Evaluating the same three trains here costs
+   * three sines and follows the surface exactly.
+   */
+  float waveHeight(vec2 p) {
+    return sin(p.x * 0.19 + uTime * 1.10) * 0.075
+         + sin(p.y * 0.25 - uTime * 0.85) * 0.062
+         + sin((p.x + p.y) * 0.045 + uTime * 0.35) * 0.115;
   }
 
   vec3 waveNormal(vec2 p, float detail) {
@@ -263,43 +280,102 @@ const FRAGMENT_SHADER = /* glsl */ `
     }
 
     /*
-     * Fresnel: glancing angles reflect the sky, steep angles show the bottom.
+     * --- Fresnel ----------------------------------------------------------
      *
-     * Capped, and capped harder the deeper the water is. Physically a water
-     * surface does approach a perfect mirror at grazing incidence, and letting
-     * it do that here turned the river into a sheet of pale sky — from the
-     * bridge it read as a bank of wet sand rather than as water at all. This is
-     * a silt-laden tributary: it is nearly opaque in a metre, so what comes back
-     * from deep water is mostly the water itself however flat you look at it.
+     * Schlick, with water's real F0 of 0.02, rather than the hand-shaped mix
+     * this used to be. That means a surface seen straight down is almost
+     * entirely transparent and one seen edge-on is almost entirely mirror,
+     * which is the single most recognisable thing about water and the reason a
+     * river reads as wet from a bank and as glass from a bridge.
+     *
+     * It is then pulled back down over deep water. Physically a surface does
+     * approach a perfect mirror at grazing incidence, and letting it do that
+     * here turned the river into a sheet of pale sky. This is a silt-laden
+     * tributary: what comes back from deep water is mostly the water itself,
+     * however flat you look at it.
      */
-    float grazing = pow(1.0 - clamp(dot(viewDir, normal), 0.0, 1.0), 3.0);
+    float cosTheta = clamp(dot(viewDir, normal), 0.0, 1.0);
+    float schlick = 0.02 + 0.98 * pow(1.0 - cosTheta, 5.0);
     float deepness = clamp(depthM / 4.0, 0.0, 1.0);
-    float fresnel = mix(0.04, 0.78 - deepness * 0.3, grazing) * uReflectivity;
-
-    // Depth-graded body colour: silty green in the shallows, near-black deep.
-    vec3 body = mix(uShallowColor, uDeepColor, clamp(depthM / 5.0, 0.0, 1.0));
+    float fresnel = min(schlick, 0.72 - deepness * 0.22) * uReflectivity;
 
     /*
-     * Sky reflection, plus two specular lobes rather than one.
+     * --- What comes up from below -----------------------------------------
      *
-     * A single tight highlight gives you one bright spot on the water and nothing
-     * else. Real water has a *glitter path*: a broad sheen stretching away towards
-     * the sun, speckled with individual sparks where a wavelet happens to face it
-     * exactly. The tight lobe is the sparks, the broad one is the sheen, and the
-     * fine ripple octaves in waveNormal are what make the sparks land in different
-     * places from frame to frame instead of sitting still.
+     * Beer-Lambert, not a lerp between two colours.
+     *
+     * Light that goes into water is absorbed at a rate that depends on its
+     * wavelength: red is gone within a metre or two, green survives several,
+     * blue furthest of all. That per-channel falloff is *why* water looks the
+     * way it does, and interpolating between a shallow colour and a deep one
+     * only ever approximates the midpoint of it. Exponential extinction gives
+     * the whole curve for the same cost: clear over a sandbar, green at chest
+     * depth, and near-black in the channel, with no threshold anywhere.
+     *
+     * The coefficients are for a silty tributary rather than a lagoon — this
+     * water has things suspended in it, so everything dies faster than it would
+     * in the sea and green outlives blue.
+     */
+    vec3 extinction = vec3(1.15, 0.42, 0.62);
+    vec3 transmit = exp(-extinction * depthM);
+    // The bed shows through the shallows; the scatter colour is what the water
+    // itself sends back once the bed is out of reach.
+    vec3 body = uShallowColor * transmit + uDeepColor * (1.0 - transmit);
+
+    /*
+     * Sunlight scattered *inside* a wave.
+     *
+     * A wave crest is thin enough for light to pass through it, and that is the
+     * bright green-gold edge every photograph of water has along the top of a
+     * ripple. Keyed on the crest height and on looking towards the sun, which
+     * is when the light is actually coming through the wave at you.
+     */
+    float crest = waveHeight(vWorldXZ);
+    float towardsSun = pow(max(dot(-viewDir, uSunDirection), 0.0), 3.0);
+    float crestLift = smoothstep(0.06, 0.2, crest);
+    body += uSunColor * uShallowColor * towardsSun * crestLift * max(uSunDirection.y, 0.0) * 0.5;
+
+    /*
+     * --- What comes off the top -------------------------------------------
+     *
+     * The sky, sampled in the direction the surface actually reflects, instead
+     * of one flat colour for the whole river. It costs two mixes and it is what
+     * puts a bright horizon band on the far water and a deeper blue on the near
+     * water, which is most of what makes a real surface read as a surface.
+     */
+    vec3 mirror = reflect(-viewDir, normal);
+    float up = clamp(mirror.y, 0.0, 1.0);
+    vec3 sky = mix(uSkyColor, uZenithColor, pow(up, 0.45));
+
+    /*
+     * Sun glitter, as a microfacet lobe rather than a power of N·H.
+     *
+     * GGX has a narrow core and a wide tail, which is exactly the shape of a
+     * glitter path: a hard spark where a wavelet faces the sun squarely, and a
+     * broad sheen stretching away from it. Two hand-tuned exponents were
+     * standing in for that and could never have both at once.
+     *
+     * Roughness grows with distance, and that is not a stylistic choice: a
+     * ripple finer than a pixel cannot be resolved, and a sharp lobe on top of
+     * an unresolvable normal is the definition of specular aliasing. Blurring
+     * the highlight exactly as far as the ripples are faded keeps the far water
+     * calm instead of boiling.
      */
     vec3 halfway = normalize(uSunDirection + viewDir);
     float ndh = max(dot(normal, halfway), 0.0);
+    float rough = mix(0.2, 0.06, detail);
+    float a = rough * rough;
+    float d = (ndh * ndh) * (a * a - 1.0) + 1.0;
+    float ggx = (a * a) / max(1e-4, 3.14159 * d * d);
     /*
-     * The tight lobe is faded with the same 'detail' term as the ripples that
-     * feed it. An exponent this high turns a hair of normal variation into a
-     * blown-out spark, so leaving it at full strength out at the horizon puts
-     * the aliasing straight back even with the ripples faded.
+     * Capped. An un-clamped GGX peak at this roughness is around twenty-four,
+     * and multiplied through even a small Fresnel that is a blown-out white
+     * blob the size of a boat rather than a glint. The cap costs nothing at the
+     * distances that matter and keeps the highlight inside the range the tone
+     * mapper can still resolve as a shape.
      */
-    float sparkle = pow(ndh, 120.0) * 2.2 * detail;
-    float sheen = pow(ndh, 30.0) * 0.4;
-    vec3 reflection = uSkyColor + uSunColor * (sparkle + sheen);
+    float sunUp = clamp(uSunDirection.y * 4.0, 0.0, 1.0);
+    vec3 reflection = sky + uSunColor * min(ggx, 7.0) * 0.5 * sunUp;
 
     vec3 color = mix(body, reflection, fresnel);
 
@@ -354,9 +430,19 @@ const FRAGMENT_SHADER = /* glsl */ `
     // Threshold retuned with the wave amplitude: the trains now sum to about
     // forty centimetres rather than eighteen, and the old threshold whitened a
     // third of the river at once.
-    float crest = smoothstep(0.17, 0.26, vWave);
+    /*
+     * From the per-pixel field, not from the interpolated vertex height — and
+     * from the very top of it only.
+     *
+     * The three trains sum to a peak of 0.25, so a threshold at 0.17 whitened
+     * the top third of every swell: ten-metre pale discs scattered across the
+     * lake that read as mist on the surface rather than as foam. Real crest
+     * foam happens where a wave is actually breaking, which on water this calm
+     * is almost nowhere.
+     */
+    float foamCrest = smoothstep(0.225, 0.25, crest);
     float shore = 1.0 - smoothstep(0.0, 0.5, depthM);
-    color += vec3(0.26) * crest * 0.3;
+    color += vec3(0.26) * foamCrest * 0.22;
     color = mix(color, vec3(0.58, 0.59, 0.52), shore * 0.32);
 
     /*
@@ -379,8 +465,15 @@ const FRAGMENT_SHADER = /* glsl */ `
      * metres, and drawing it there is just noise.
      */
     if (uRain > 0.02) {
+      /*
+       * Quiet. At half strength three overlapping ring grids brightened most of
+       * the surface most of the time, and a river in a downpour came out milky
+       * — which is the opposite of what rain does to water. The rings are meant
+       * to be read as individual impacts, so they have to sit *under* the
+       * surface colour rather than over it.
+       */
       float rings = rainRings(vWorldXZ * 1.7, uTime);
-      color += vec3(0.62, 0.66, 0.62) * rings * uRain * detail * 0.5;
+      color += vec3(0.62, 0.66, 0.62) * rings * uRain * detail * 0.2;
     }
 
     // Shallow water is nearly clear; deep water hides what is under it.
@@ -430,6 +523,7 @@ export class WaterSystem {
         uShallowColor: { value: new THREE.Color(0x53704a) },
         uDeepColor: { value: new THREE.Color(0x1d3a2f) },
         uSkyColor: { value: new THREE.Color(0x88a7c4) },
+        uZenithColor: { value: new THREE.Color(0x4a7fb5) },
         uSunColor: { value: new THREE.Color(0xffe8c0) },
         uSunDirection: { value: new THREE.Vector3(0.4, 0.8, 0.3) },
         uCameraPos: { value: new THREE.Vector3() },
@@ -476,6 +570,7 @@ export class WaterSystem {
     cameraPos: THREE.Vector3,
     sunDirection: THREE.Vector3,
     skyColor: THREE.Color,
+    zenithColor: THREE.Color,
     sunColor: THREE.Color,
     rain: number,
     waterLevel: number,
@@ -488,6 +583,7 @@ export class WaterSystem {
     u.uCameraPos.value.copy(cameraPos);
     u.uSunDirection.value.copy(sunDirection);
     u.uSkyColor.value.copy(skyColor);
+    u.uZenithColor.value.copy(zenithColor);
     u.uSunColor.value.copy(sunColor);
     u.uRain.value = rain;
     u.uUnderwater.value = underwater ? 1 : 0;
