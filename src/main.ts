@@ -41,6 +41,7 @@ import {
   ServerMsg,
   type PlayerInput,
   type ServerPacket,
+  type ScoreboardEntry,
   type Snapshot,
   type ZoneWire,
 } from './Networking/Protocol';
@@ -162,6 +163,10 @@ class Game {
   private steerYaw = 0;
   /** False until the first snapshot has given us a real yaw to seed from. */
   private steerReady = false;
+  /** True while Tab is held. */
+  private scoreboardOpen = false;
+  /** The live scoreboard, as last broadcast. */
+  private scoreboardEntries: ScoreboardEntry[] = [];
 
   constructor() {
     this.canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -210,6 +215,25 @@ class Game {
       void audioSystem.setSuspended(document.hidden);
     });
     window.addEventListener('keydown', (e) => this.onGlobalKey(e));
+    /*
+     * Tab holds the scoreboard open, and the default has to go: in a browser
+     * Tab moves focus, so without preventDefault the first press walks the
+     * keyboard focus onto some button behind the canvas and the next Space
+     * presses it.
+     */
+    window.addEventListener('keydown', (e) => {
+      if (e.code !== 'Tab') return;
+      e.preventDefault();
+      this.scoreboardOpen = true;
+    });
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Tab') this.scoreboardOpen = false;
+    });
+    // Alt-Tabbing away releases the key somewhere else, so the board would
+    // still be up on return.
+    window.addEventListener('blur', () => {
+      this.scoreboardOpen = false;
+    });
 
     graphicsConfig.onChange((s) => this.applyGraphics(s));
 
@@ -630,6 +654,13 @@ class Game {
         break;
       }
 
+      case ServerMsg.Scoreboard:
+        // Kept whole rather than trimmed: `clientId` is how the board knows
+        // which line is yours, and two players may well share a name.
+        this.scoreboardEntries = packet.entries;
+        this.hud.setScoreboard(this.scoreboardEntries, this.state.clientId);
+        break;
+
       case ServerMsg.KillFeed:
         this.hud.addKill(packet.entry);
         /*
@@ -1013,6 +1044,8 @@ class Game {
       maxStamina: self?.maxStamina ?? 100,
       sinceWhistle: self?.sinceWhistle ?? 0,
       flies: self?.flies ?? 0,
+      score: self?.score ?? 0,
+      scoreboardOpen: this.scoreboardOpen,
       role: this.state.role,
       species: this.state.species,
       weakness: this.state.weakness,

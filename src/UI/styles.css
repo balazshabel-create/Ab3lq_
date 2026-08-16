@@ -1414,6 +1414,148 @@ input[type='text']:focus {
  * once it matters — a player who is being killed by the storm should not have to
  * notice a subtle colour change to find out.
  */
+/* --- Score --------------------------------------------------------------- */
+/*
+ * White, plain, and next to the clock. It is the one number in this HUD that is
+ * not a warning about something, so it gets no colour of its own — colour here
+ * is reserved for things that are going wrong.
+ */
+.score-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 6px;
+  position: relative;
+}
+
+.score-label {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: rgba(243, 237, 225, 0.5);
+}
+
+.score-value {
+  font-family: var(--display-font);
+  font-size: 26px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #ffffff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.95);
+}
+
+/* Awards float up out of the number that they changed. */
+.score-pops {
+  position: relative;
+  width: 0;
+  height: 0;
+}
+
+.score-pop {
+  position: absolute;
+  left: 6px;
+  bottom: -4px;
+  white-space: nowrap;
+  font-family: var(--display-font);
+  font-size: 19px;
+  color: #ffffff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.95);
+  animation: score-pop 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: none;
+}
+
+@keyframes score-pop {
+  0% {
+    opacity: 0;
+    transform: translate(0, 6px) scale(0.85);
+  }
+  14% {
+    opacity: 1;
+    transform: translate(2px, 0) scale(1);
+  }
+  70% {
+    opacity: 1;
+  }
+  /* Drifts up and to the right, away from the weather and storm lines it would
+     otherwise cross on its way up. */
+  100% {
+    opacity: 0;
+    transform: translate(16px, -30px);
+  }
+}
+
+/* --- Scoreboard ---------------------------------------------------------- */
+.scoreboard {
+  position: absolute;
+  top: 16%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  width: min(340px, 78vw);
+  background: rgba(6, 13, 10, 0.9);
+  border: 1px solid rgba(126, 217, 87, 0.28);
+  border-radius: 5px;
+  padding: 12px 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s, transform 0.12s;
+}
+
+.scoreboard.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.scoreboard-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 7px;
+  margin-bottom: 7px;
+  font-family: var(--display-font);
+  letter-spacing: 0.12em;
+  font-size: 15px;
+  color: #ffffff;
+}
+
+.scoreboard-hint {
+  font-family: var(--ui-font);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: rgba(243, 237, 225, 0.45);
+}
+
+.scoreboard-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 4px;
+  font-size: 13px;
+  color: #ffffff;
+  border-radius: 2px;
+}
+
+.scoreboard-row.is-you {
+  background: rgba(255, 179, 64, 0.14);
+}
+
+/* Out, not gone: seeing who is left is half of what the board is for. */
+.scoreboard-row.out {
+  opacity: 0.42;
+  text-decoration: line-through;
+}
+
+.scoreboard-score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.scoreboard-empty {
+  padding: 10px 4px;
+  font-size: 12px;
+  font-style: italic;
+  color: rgba(243, 237, 225, 0.45);
+}
+
 .zone-strip {
   margin-top: 6px;
   font-size: 12px;
@@ -1780,6 +1922,13 @@ input[type='text']:focus {
 .reveal-table td {
   padding: 9px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.reveal-table .reveal-score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #ffffff;
+  text-align: right;
 }
 
 .reveal-table tr.was-hunter {

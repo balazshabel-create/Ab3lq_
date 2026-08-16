@@ -62,6 +62,10 @@ import {
   HUNTER_ATTACK_COOLDOWN,
   RIFLE_RANGE,
   ROUND_DURATION,
+  ROUND_INTRO_DURATION,
+  SCORE_HUNTER_KILL,
+  SCORE_MINUTE_SURVIVED,
+  SCORE_WHISTLE,
   SIM_DT,
   WHISTLE_INTERVAL,
   WORLD_SIZE,
@@ -200,6 +204,68 @@ test('the hunter is the only human in the world', () => {
     if (a.species === Species.Hunter) humans++;
   });
   assert.equal(humans, 1, `expected exactly one human in the world, found ${humans}`);
+});
+
+test('score: a hunter is paid for people, a survivor for minutes and whistles', () => {
+  const sim = new Simulation(4242);
+  for (let i = 0; i < 4; i++) sim.addPlayer(`p${i}`, `P${i}`);
+  sim.startRound();
+
+  const hunter = sim.getPlayers().find((p) => p.role === Role.Hunter)!;
+  const survivor = sim.getPlayers().find((p) => p.role === Role.Survivor)!;
+  assert.equal(hunter.stats.score, 0, 'a round starts everyone at zero');
+
+  /*
+   * The hunter's hundred, and only for a person. Shooting an animal is the
+   * mistake that kills him, so paying for it would be paying him to lose.
+   */
+  const victim = sim.getPlayers().find((p) => p.role === Role.Survivor && p !== survivor)!;
+  sim.damageActor(victim.id, victim.maxHealth * 2, hunter.id, 'attack');
+  assert.equal(hunter.stats.score, SCORE_HUNTER_KILL, 'a player kill pays the hunter');
+
+  let animal: Actor | null = null;
+  sim.forEachNearby(hunter.pos.x, hunter.pos.z, 400, (a) => {
+    if (!animal && a.kind === ActorKind.AI) animal = a;
+  });
+  assert.ok(animal, 'the world must contain some wildlife to test against');
+  const beforeAnimal = hunter.stats.score;
+  sim.damageActor((animal as Actor).id, 9999, hunter.id, 'attack');
+  assert.equal(hunter.stats.score, beforeAnimal, 'shooting wildlife pays the hunter nothing');
+
+  /*
+   * Survival is paid by the completed minute, once each. The award used to be
+   * derived from the elapsed time on every tick, which pays the same minute
+   * sixty times a second.
+   */
+  assert.equal(survivor.stats.score, 0, 'nothing is owed before the first minute is up');
+  // The clock the award reads is the round's own elapsed time, which does not
+  // start until the intro is over.
+  advance(sim, ROUND_INTRO_DURATION + 61);
+  const afterOne = survivor.stats.score;
+  assert.ok(
+    afterOne >= SCORE_MINUTE_SURVIVED,
+    `expected at least one minute paid, got ${afterOne}`,
+  );
+  advance(sim, 5);
+  assert.equal(survivor.stats.score, afterOne, 'a minute is paid once, not on every tick');
+
+  // And the whistle, which is the one act a survivor chooses to make noise for.
+  const before = survivor.stats.score;
+  survivor.whistleCooldown = 0;
+  sim.applyInput(survivor.clientId, {
+    seq: 1,
+    moveX: 0,
+    moveZ: 0,
+    yaw: 0,
+    pitch: 0,
+    actions: InputAction.Whistle,
+  });
+  advance(sim, 0.2);
+  assert.equal(
+    survivor.stats.score,
+    before + SCORE_WHISTLE,
+    'a whistle that goes out is worth its twenty',
+  );
 });
 
 test('the hunter is a player, never AI, and cannot be killed', () => {
@@ -604,6 +670,7 @@ test('snapshot encoding round-trips without losing meaningful precision', () => 
       focusReady: 1,
       attackReady: 0,
       digesting: 10.5,
+      score: 285,
     },
     noises: [{ x: 10.5, z: -20.25, volume: 40, kind: 'whistle' as never, age: 0.5 }],
     tracks: [{ x: 5.5, z: 6.25, yaw: 3, species: Species.Monkey, age: 12 }],
@@ -622,6 +689,7 @@ test('snapshot encoding round-trips without losing meaningful precision', () => 
   assert.equal(decoded!.self!.actorId, 7);
   assert.ok(Math.abs(decoded!.self!.health - 82.5) < 0.05);
   assert.ok(Math.abs(decoded!.self!.hunger - 61.25) < 0.02);
+  assert.equal(decoded!.self!.score, 285, 'score survives the round trip exactly');
   assert.equal(decoded!.noises.length, 1);
   assert.equal(decoded!.noises[0].kind, 'whistle');
   assert.equal(decoded!.tracks.length, 1);

@@ -209,6 +209,22 @@ export interface PlayerStats {
   animalsEaten: number;
   survivedSeconds: number;
   timesNearlyCaught: number;
+  /**
+   * The player's score.
+   *
+   * Kept on the authority and never computed on a client: it decides the
+   * result board, so a client that could add to its own would be deciding who
+   * won. See SCORE_* in Config for what earns it.
+   */
+  score: number;
+  /**
+   * Whole minutes of survival already paid out.
+   *
+   * The award is per completed minute, and `survivedSeconds` is a running
+   * total, so without a record of what has been paid the same minute is
+   * awarded on every tick that follows it.
+   */
+  scoredMinutes: number;
 }
 
 export function emptyStats(): PlayerStats {
@@ -229,6 +245,8 @@ export function emptyStats(): PlayerStats {
     animalsEaten: 0,
     survivedSeconds: 0,
     timesNearlyCaught: 0,
+    score: 0,
+    scoredMinutes: 0,
   };
 }
 

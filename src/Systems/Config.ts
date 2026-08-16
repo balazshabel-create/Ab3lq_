@@ -20,6 +20,29 @@
  */
 export const ROUND_DURATION = 900;
 
+/*
+ * --- Score ----------------------------------------------------------------
+ *
+ * Three ways to earn, one for each thing the round is asking you to do.
+ *
+ * A hunter's hundred is deliberately enormous next to a survivor's twenty-five
+ * a minute: he has one job, it happens perhaps five times in a round, and the
+ * rest of his fifteen minutes earns him nothing at all. A survivor's income is
+ * small and steady, which is the shape of what he is doing — staying alive is
+ * not an event, it is an accumulation.
+ *
+ * The whistle is worth most of a minute of survival because it is the one act
+ * that costs a survivor something: it is a noise, it carries, and it tells the
+ * hunter where you were. Paying for it is what stops it from being a tax that
+ * everyone resents.
+ */
+/** For the hunter, per player shot. */
+export const SCORE_HUNTER_KILL = 100;
+/** For everyone but the hunter, per whole minute alive. */
+export const SCORE_MINUTE_SURVIVED = 25;
+/** For any player, per whistle that actually goes out. */
+export const SCORE_WHISTLE = 20;
+
 /** Countdown after all players are ready, before the round actually starts. */
 export const ROUND_INTRO_DURATION = 8;
 

@@ -100,6 +100,10 @@ export interface HudState {
   pointerLocked: boolean;
   /** True when the browser refused pointer lock outright, so the hint is honest. */
   pointerLockUnavailable: boolean;
+  /** This player's score, straight from the authority. */
+  score: number;
+  /** True while the player is holding the scoreboard key. */
+  scoreboardOpen: boolean;
 }
 
 export class Hud {
@@ -151,6 +155,13 @@ export class Hud {
   private crosshairKick = 0;
   private hitTimer = 0;
   private hitMarker!: HTMLElement;
+  private scoreValue!: HTMLElement;
+  private scorePops!: HTMLElement;
+  private scoreboard!: HTMLElement;
+  private scoreboardRows!: HTMLElement;
+  /** Last score seen, so an award can be spotted and floated. */
+  private lastScore = -1;
+  private popTimers: { node: HTMLElement; life: number }[] = [];
   private killEntries: { node: HTMLElement; ttl: number }[] = [];
   private toasts: { node: HTMLElement; ttl: number }[] = [];
 
@@ -199,6 +210,21 @@ export class Hud {
     this.zoneStrip = el('div', { class: 'zone-strip' });
     this.zoneStrip.style.display = 'none';
     topLeft.appendChild(this.zoneStrip);
+
+    /*
+     * --- Score -------------------------------------------------------------
+     *
+     * White, and under the clock rather than in a corner of its own: a score
+     * that costs a glance away from the jungle is a score nobody reads. Awards
+     * float up out of it as they land, which is the only way a player learns
+     * *what* pays without a tutorial — you whistle, +20 rises out of the
+     * number, and the rule has taught itself.
+     */
+    const scoreRow = el('div', { class: 'score-row' });
+    this.scoreValue = el('div', { class: 'score-value' }, '0');
+    this.scorePops = el('div', { class: 'score-pops' });
+    scoreRow.append(el('span', { class: 'score-label' }, 'PTS'), this.scoreValue, this.scorePops);
+    topLeft.appendChild(scoreRow);
     this.root.appendChild(topLeft);
 
 
@@ -263,6 +289,20 @@ export class Hud {
     this.hitMarker = el('div', { class: 'hit-marker' });
     this.hitMarker.append(el('span', { class: 'hit-arm a' }), el('span', { class: 'hit-arm b' }));
     this.crosshair.appendChild(this.hitMarker);
+
+    /*
+     * --- The scoreboard ----------------------------------------------------
+     *
+     * Held open with Tab, never toggled: it covers the middle of the screen,
+     * and a board you can leave up by accident is a board you get eaten
+     * behind. Names and scores only — no species, no role, no cause of death.
+     */
+    this.scoreboard = el('div', { class: 'scoreboard' });
+    const boardHead = el('div', { class: 'scoreboard-head' });
+    boardHead.append(el('span', {}, 'SCORE'), el('span', { class: 'scoreboard-hint' }, 'hold TAB'));
+    this.scoreboardRows = el('div', { class: 'scoreboard-rows' });
+    this.scoreboard.append(boardHead, this.scoreboardRows);
+    this.root.appendChild(this.scoreboard);
 
     this.interactPrompt = el('div', { class: 'interact-prompt' });
     // A permanent, subtle colour grade. Sits under every other overlay.
@@ -502,6 +542,73 @@ export class Hud {
 
     this.tickKillFeed(dt);
     this.tickToasts(dt);
+    this.updateScore(state, dt);
+  }
+
+  /**
+   * The score readout, its floating awards, and the board.
+   *
+   * The award is derived from the score going up rather than sent as its own
+   * event. The authority already sends the number sixty times a second, the
+   * difference between two of them is exactly what was earned, and a client
+   * that had to be told separately could show a +20 the server never granted.
+   */
+  private updateScore(state: HudState, dt: number): void {
+    const score = Math.round(state.score);
+    if (score !== this.lastScore) {
+      // The first snapshot of a round is not an award: it is the starting
+      // position, and floating "+0" — or "+300" on a reconnect — is noise.
+      if (this.lastScore >= 0 && score > this.lastScore) {
+        this.floatAward(score - this.lastScore);
+      }
+      this.lastScore = score;
+      this.scoreValue.textContent = String(score);
+    }
+
+    for (let i = this.popTimers.length - 1; i >= 0; i--) {
+      const pop = this.popTimers[i];
+      pop.life -= dt;
+      if (pop.life <= 0) {
+        pop.node.remove();
+        this.popTimers.splice(i, 1);
+      }
+    }
+
+    this.scoreboard.classList.toggle('visible', state.scoreboardOpen && !state.dead);
+  }
+
+  private floatAward(amount: number): void {
+    const node = el('div', { class: 'score-pop' }, `+${amount}`);
+    this.scorePops.appendChild(node);
+    // Two seconds: long enough to read while running, short enough that three
+    // awards in quick succession do not stack into a column.
+    this.popTimers.push({ node, life: 2 });
+    if (this.popTimers.length > 6) {
+      const oldest = this.popTimers.shift();
+      oldest?.node.remove();
+    }
+  }
+
+  /** Replace the board's rows. `you` is the local player's client id. */
+  setScoreboard(
+    entries: { clientId: string; name: string; score: number; alive: boolean }[],
+    you: string,
+  ): void {
+    this.scoreboardRows.innerHTML = '';
+    if (entries.length === 0) {
+      this.scoreboardRows.appendChild(el('div', { class: 'scoreboard-empty' }, 'No players'));
+      return;
+    }
+    for (const entry of entries) {
+      const row = el('div', { class: 'scoreboard-row' });
+      if (!entry.alive) row.classList.add('out');
+      if (entry.clientId === you) row.classList.add('is-you');
+      row.append(
+        el('span', { class: 'scoreboard-name' }, entry.name),
+        el('span', { class: 'scoreboard-score' }, String(entry.score)),
+      );
+      this.scoreboardRows.appendChild(row);
+    }
   }
 
   /**
@@ -736,5 +843,10 @@ export class Hud {
     this.crosshairKick = 0;
     this.hitTimer = 0;
     this.hitMarker.classList.remove('visible');
+    this.lastScore = -1;
+    this.scoreValue.textContent = '0';
+    for (const pop of this.popTimers) pop.node.remove();
+    this.popTimers.length = 0;
+    this.scoreboard.classList.remove('visible');
   }
 }

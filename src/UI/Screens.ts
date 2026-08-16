@@ -950,7 +950,7 @@ export class ResultScreen {
     const table = el('table', { class: 'reveal-table' });
     const thead = el('thead');
     const headRow = el('tr');
-    for (const label of ['Player', 'Animal', 'Role', 'Secret weakness', 'Fate']) {
+    for (const label of ['Player', 'Animal', 'Role', 'Secret weakness', 'Fate', 'Score']) {
       headRow.appendChild(el('th', {}, label));
     }
     thead.appendChild(headRow);
@@ -980,7 +980,10 @@ export class ResultScreen {
             ? `Killed by ${r.killedBy}`
             : 'Died',
       );
-      row.append(nameCell, animalCell, roleCell, weaknessCell, fateCell);
+      // Sorted rows would be a leaderboard; these are in seating order and the
+      // score is the last column, so the table still reads as a reveal.
+      const scoreCell = el('td', { class: 'reveal-score' }, String(r.score));
+      row.append(nameCell, animalCell, roleCell, weaknessCell, fateCell, scoreCell);
       tbody.appendChild(row);
     }
     table.appendChild(tbody);

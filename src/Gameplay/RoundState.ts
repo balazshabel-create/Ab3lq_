@@ -100,6 +100,8 @@ export interface PlayerReveal {
   mealsEaten: number;
   whistles: number;
   killedBy: string | null;
+  /** Final score. The reveal is where the round's table is settled. */
+  score: number;
 }
 
 export interface Award {
@@ -319,6 +321,7 @@ export function buildResult(
     mealsEaten: p.stats.mealsEaten,
     whistles: p.stats.whistles,
     killedBy: p.killerId ? nameOf(p.killerId) : null,
+    score: Math.round(p.stats.score),
   }));
 
   return {

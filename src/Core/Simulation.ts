@@ -46,6 +46,9 @@ import {
   SENSE_LISTEN_COOLDOWN,
   SENSE_LISTEN_DURATION,
   SENSE_LISTEN_RANGE,
+  SCORE_HUNTER_KILL,
+  SCORE_MINUTE_SURVIVED,
+  SCORE_WHISTLE,
   SPRINT_MULTIPLIER,
   STAMINA_DRAIN_RATE,
   STAMINA_EXHAUSTED_THRESHOLD,
@@ -406,6 +409,16 @@ export class Simulation implements AiContext {
       const killer = attacker as PlayerActor;
       cause = killer.role === Role.Hunter ? 'hunter' : 'predator';
       killer.stats.kills++;
+      /*
+       * The hunter's hundred, and only for a person.
+       *
+       * Shooting an AI animal is the mistake that kills him — paying for it
+       * would be paying him to lose — and a survivor eating an animal is
+       * feeding himself, which the hunger bar already rewards.
+       */
+      if (killer.role === Role.Hunter && target.kind === ActorKind.Player) {
+        killer.stats.score += SCORE_HUNTER_KILL;
+      }
       const size = ANIMALS[target.species].size;
       const bestSize = killer.stats.bestKill ? ANIMALS[killer.stats.bestKill].size : -1;
       if (size > bestSize) killer.stats.bestKill = target.species;
@@ -1272,6 +1285,23 @@ export class Simulation implements AiContext {
     }
 
     player.stats.survivedSeconds = this.round.elapsed;
+
+    /*
+     * Twenty-five points a minute for staying alive, paid on the minute.
+     *
+     * The hunter is excluded: he is not surviving, he is working, and paying
+     * him for the clock would make waiting out the round his best move. Paid
+     * from a counter of minutes already banked rather than by testing the
+     * elapsed time, because this runs sixty times a second and any test on a
+     * running total pays the same minute over and over.
+     */
+    if (player.role !== Role.Hunter && player.health > 0) {
+      const earned = Math.floor(player.stats.survivedSeconds / 60);
+      if (earned > player.stats.scoredMinutes) {
+        player.stats.score += (earned - player.stats.scoredMinutes) * SCORE_MINUTE_SURVIVED;
+        player.stats.scoredMinutes = earned;
+      }
+    }
   }
 
   /** Translate a network input packet into a movement intent. */
@@ -1314,6 +1344,9 @@ export class Simulation implements AiContext {
     if (hasAction(input.actions, InputAction.Whistle)) {
       const result = tryWhistle(player, stats);
       if (result.whistled) {
+        // Paid for the act, not for its timing: a late whistle still costs you
+        // the same noise, and the punishment for lateness is already the flies.
+        player.stats.score += SCORE_WHISTLE;
         this.emitNoise(
           player.pos.x,
           player.pos.z,

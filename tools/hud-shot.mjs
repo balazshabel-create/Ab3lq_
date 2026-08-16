@@ -55,6 +55,8 @@ await page.screenshot({ path: `${OUT}/hud-panel.png` });
  * scaled up, because what matters is whether the ticks survive their outline.
  */
 const centre = { x: 720 - 60, y: 405 - 60, width: 120, height: 120 };
+// The score readout and whatever is floating out of it, top left.
+await page.screenshot({ path: `${OUT}/hud-score.png`, clip: { x: 0, y: 0, width: 260, height: 200 } });
 await page.screenshot({ path: `${OUT}/hud-crosshair.png`, clip: centre });
 console.log(`wrote ${OUT}/hud-panel.png, hud-dial.png and hud-crosshair.png`);
 

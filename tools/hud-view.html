@@ -49,9 +49,17 @@
       // the hit marker up, both of which are otherwise a third of a second long.
       if (q.get('kick')) hud.punchCrosshair();
       if (q.get('hit')) hud.showHitMarker(q.get('hit') === 'player');
+      hud.setScoreboard(
+        [
+          { clientId: 'a', name: 'Kata', score: 320, alive: true },
+          { clientId: 'me', name: 'You', score: 245, alive: true },
+          { clientId: 'c', name: 'Bence', score: 180, alive: true },
+          { clientId: 'd', name: 'Orsi', score: 95, alive: false },
+        ],
+        'me',
+      );
 
-      hud.update(
-        {
+      const state = {
           health: num('health', 62),
           maxHealth: 100,
           hunger: num('hunger', 34),
@@ -81,11 +89,24 @@
             distanceOutside: -120,
           },
           interactPrompt: null,
+          score: num('score', 245),
+          scoreboardOpen: q.get('board') === '1',
           pointerLocked: true,
-          pointerLockUnavailable: false,
-        },
-        0.016,
-      );
+        pointerLockUnavailable: false,
+      };
+      hud.update(state, 0.016);
+
+      /*
+       * `?pop=20` runs a second update with a higher score, which is the only
+       * way to photograph an award: the float is driven by the score changing
+       * between two frames, not by a call.
+       */
+      const pop = Number(q.get('pop') ?? 0);
+      if (pop > 0) {
+        const again = { ...state, score: num('score', 245) + pop };
+        hud.update(again, 0.016);
+        hud.update(again, 0.2);
+      }
 
       window.__hudReady = true;
     </script>

@@ -291,6 +291,7 @@ export class GameHost {
               focusReady: view.self.focusCooldown <= 0 ? 1 : 0,
               attackReady: view.self.attackCooldown <= 0 ? 1 : 0,
               digesting: view.self.digesting,
+              score: view.self.stats.score,
             }
           : null,
         noises: view.noises.map((n) => ({
@@ -362,6 +363,26 @@ export class GameHost {
         }
       : null;
     this.broadcast({ t: ServerMsg.RoundStatus, status, weather, events, zone });
+
+    /*
+     * The scoreboard rides along with the status broadcast rather than having a
+     * clock of its own: it is the same cadence, the same audience, and a board
+     * that updated on its own timer would show a score for a player the status
+     * message had already reported dead.
+     */
+    this.broadcast({
+      t: ServerMsg.Scoreboard,
+      entries: this.sim
+        .getPlayers()
+        .filter((p) => p.connected)
+        .map((p) => ({
+          clientId: p.clientId,
+          name: p.name,
+          score: Math.round(p.stats.score),
+          alive: p.health > 0,
+        }))
+        .sort((a, b) => b.score - a.score),
+    });
   }
 
   // -------------------------------------------------------------------------

@@ -44,6 +44,7 @@ export enum ServerMsg {
   RoundStatus = 'round_status',
   Event = 'event',
   KillFeed = 'kill_feed',
+  Scoreboard = 'scoreboard',
   Result = 'result',
   Error = 'error',
   Pong = 'pong',
@@ -126,6 +127,20 @@ export interface LobbyState {
 }
 
 /** A kill notification. Deliberately vague: species, never player names. */
+/**
+ * One line of the live scoreboard.
+ *
+ * Names and scores only — no species and no role. What a player is playing as
+ * is the round's whole secret, and a scoreboard that leaked it would end the
+ * game the moment somebody pressed Tab.
+ */
+export interface ScoreboardEntry {
+  clientId: string;
+  name: string;
+  score: number;
+  alive: boolean;
+}
+
 export interface KillFeedEntry {
   /** What was killed. */
   victimSpecies: Species;
@@ -186,6 +201,7 @@ export type ServerPacket =
     }
   | { t: ServerMsg.Event; id: EventId; announcement: string; detail: string; emoji: string }
   | { t: ServerMsg.KillFeed; entry: KillFeedEntry }
+  | { t: ServerMsg.Scoreboard; entries: ScoreboardEntry[] }
   | { t: ServerMsg.Result; result: RoundResult }
   | { t: ServerMsg.Error; message: string }
   | { t: ServerMsg.Pong; time: number };
@@ -225,6 +241,8 @@ export interface SnapshotSelf {
   focusReady: number;
   attackReady: number;
   digesting: number;
+  /** This player's own score. Everyone else's arrives in the scoreboard. */
+  score: number;
 }
 
 /** A noise the hunter's "listen" sense picked up. */
@@ -344,8 +362,11 @@ export function encodeSnapshot(snap: Snapshot): ArrayBuffer {
     view.setUint8(o, Math.round(Math.min(1, s.focusReady) * 255)); o += 1;
     view.setUint8(o, Math.round(Math.min(1, s.attackReady) * 255)); o += 1;
     view.setUint16(o, Math.round(Math.min(650, s.digesting) * 100), true); o += 2;
+    // Score takes four of the six reserved bytes' worth of room — as a u32,
+    // because a long round with a busy hunter can pass 65,535 and a score that
+    // silently wraps to zero is worse than no score at all.
+    view.setUint32(o, Math.max(0, Math.min(0xffffffff, Math.round(s.score))), true); o += 4;
     // Reserved padding to keep SELF_BYTES stable as fields are added.
-    view.setUint32(o, 0, true); o += 4;
     view.setUint16(o, 0, true); o += 2;
   }
 
@@ -424,7 +445,8 @@ export function decodeSnapshot(buf: ArrayBuffer): Snapshot | null {
     const focusReady = view.getUint8(o) / 255; o += 1;
     const attackReady = view.getUint8(o) / 255; o += 1;
     const digesting = view.getUint16(o, true) / 100; o += 2;
-    o += 6; // reserved
+    const score = view.getUint32(o, true); o += 4;
+    o += 2; // reserved
     self = {
       actorId,
       health,
@@ -441,6 +463,7 @@ export function decodeSnapshot(buf: ArrayBuffer): Snapshot | null {
       focusReady,
       attackReady,
       digesting,
+      score,
     };
   }
 
