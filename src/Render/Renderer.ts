@@ -453,7 +453,7 @@ export class Renderer {
     // --- The storm wall ---------------------------------------------------
     // Hidden underwater: from the river bed you can see twelve metres, so a
     // hundred-metre-tall squall would only render as a smear of fog colour.
-    this.storm.update(underwater ? null : world.zone, dt, this.time);
+    this.storm.update(underwater ? null : world.zone, dt, this.time, cameraPos);
     this.stormIntensity = this.storm.intensityAt(world.zone, cameraPos.x, cameraPos.z);
 
     // --- Lightning --------------------------------------------------------

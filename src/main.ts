@@ -18,6 +18,7 @@ import { graphicsConfig, type GraphicsSettings } from './Graphics/QualitySetting
 import { InputManager } from './Player/InputManager';
 import { audioSystem } from './Audio/AudioSystem';
 import { Hud, type HudState } from './UI/Hud';
+import { Minimap } from './UI/Minimap';
 import {
   LoadingScreen,
   LobbyScreen,
@@ -106,6 +107,7 @@ class Game {
   renderer!: Renderer;
   private input!: InputManager;
   private hud!: Hud;
+  private minimap!: Minimap;
 
   private loading: LoadingScreen;
   private menu!: MainMenu;
@@ -217,6 +219,15 @@ class Game {
 
     this.input = new InputManager(this.canvas);
     this.hud = new Hud();
+    /*
+     * The map is built here rather than inside the HUD because it needs the
+     * terrain, and the HUD is deliberately kept ignorant of the world — it
+     * draws state it is handed and nothing else. It is parented to the HUD's
+     * root so it comes and goes with the rest of the in-round overlay.
+     */
+    this.minimap = new Minimap();
+    this.minimap.setWorld((x, z) => this.terrain.heightAt(x, z));
+    this.hud.root.appendChild(this.minimap.root);
     this.buildScreens();
     this.loading.setProgress(1, 'Ready');
     await nextFrame();
@@ -531,6 +542,8 @@ class Game {
   private async rebuildWorld(seed: number): Promise<void> {
     const settings = graphicsConfig.get();
     this.terrain = new Terrain(seed);
+    // The map is baked from the heightfield, so a new world needs a new bake.
+    this.minimap.setWorld((x, z) => this.terrain.heightAt(x, z));
     await nextFrame();
     this.content = generateWorld(this.terrain, seed, {
       cosmetic: true,
@@ -1055,8 +1068,33 @@ class Game {
 
   private updateHud(dt: number): void {
     if (this.screen !== 'hud') {
+      this.minimap.setVisible(false);
       if (this.debugVisible) this.hud.setDebug(true, this.debugText());
       return;
+    }
+
+    /*
+     * The map follows the *rendered* animal rather than the last snapshot, so
+     * it moves as smoothly as the world does — a map that steps ten times a
+     * second next to a smooth camera reads as broken even though it is right.
+     */
+    this.minimap.setVisible(!this.state.dead);
+    if (this.renderer.animals.getPosition(this.state.actorId, this.tmpVec)) {
+      const zone = this.state.zone;
+      this.minimap.update({
+        x: this.tmpVec.x,
+        z: this.tmpVec.z,
+        yaw: this.renderer.cameraRig.lookYaw,
+        zone: zone
+          ? {
+              x: zone.x,
+              z: zone.z,
+              radius: zone.radius,
+              shrinking: zone.shrinking,
+              next: zone.next,
+            }
+          : null,
+      });
     }
 
     const snapshot = this.state.latestSnapshot;

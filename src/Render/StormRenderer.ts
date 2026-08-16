@@ -46,10 +46,15 @@ const TORNADO_COUNT = { low: 2, medium: 4, high: 6 } as const;
 const wallVertexShader = /* glsl */ `
   varying vec2 vUv;
   varying vec3 vWorldPos;
+  varying vec3 vNormalW;
   void main() {
     vUv = uv;
     vec4 world = modelMatrix * vec4(position, 1.0);
     vWorldPos = world.xyz;
+    // The cylinder's outward normal, in world space. Used to sharpen the wall:
+    // seen face-on you look through a metre of rain, seen edge-on through
+    // fifty, and that difference is most of what makes it read as a *volume*.
+    vNormalW = normalize(mat3(modelMatrix) * normal);
     gl_Position = projectionMatrix * viewMatrix * world;
   }
 `;
@@ -58,16 +63,29 @@ const wallFragmentShader = /* glsl */ `
   precision highp float;
   varying vec2 vUv;
   varying vec3 vWorldPos;
+  varying vec3 vNormalW;
   uniform float uTime;
   uniform vec3 uColorLow;
   uniform vec3 uColorHigh;
   uniform vec3 uFlashColor;
+  uniform vec3 uEdgeColor;
   uniform float uFlash;
   uniform float uShrink;
   uniform float uOpacity;
+  uniform vec3 uCameraPos;
+  /*
+   * Lane density, scaled by the circle's size.
+   *
+   * The filaments are laid out in the cylinder's uv, so a fixed count spreads
+   * them further apart as the circle grows — at the opening radius they were
+   * ten metres apart and read as a stage curtain, while in the last circle they
+   * would have been on top of each other. Scaling by the radius keeps a
+   * filament every couple of metres whatever the circle is doing.
+   */
+  uniform float uLanes;
 
   /*
-   * Turbulence from three octaves of crossing sines.
+   * Turbulence from four octaves of crossing sines.
    *
    * Not as good as real noise, but a wall of rain seen from a hundred metres is
    * mostly vertical streaks travelling sideways and upwards, which is exactly
@@ -84,19 +102,96 @@ const wallFragmentShader = /* glsl */ `
     return v * 0.5 + 0.5;
   }
 
+  /*
+   * Filaments: thin, bright, and travelling upwards.
+   *
+   * The old wall was one soft mass of turbulence, which from inside the circle
+   * looked like fog on the lens rather than like a barrier. What gives a wall
+   * an *edge* is high-frequency structure with gaps in it — you can see through
+   * the gaps, and that is what tells the eye there is a surface there rather
+   * than a haze in front of the camera.
+   */
+  float filamentLayer(vec2 p, float lanes, float speed, float phase) {
+    float lane = p.x * lanes + phase;
+    float rise = p.y * 2.2 - uTime * speed;
+    float wobble = sin(lane * 0.35 + uTime * 0.9) * 0.15;
+    float band = sin((lane + wobble * 40.0) * 3.14159 + sin(rise * 6.2831) * 1.4);
+    // Sharpened into ribbons: most of the width is dark, the peaks are hot.
+    return pow(clamp(band * 0.5 + 0.5, 0.0, 1.0), 3.0);
+  }
+
+  float filaments(vec2 p) {
+    /*
+     * Three layers at unrelated spacings.
+     *
+     * One layer sharpened into ribbons is a picket fence: evenly spaced bright
+     * lines with clean gaps between them, which from inside the circle reads as
+     * light shafts rather than as weather. Layering three at frequencies that
+     * are not multiples of each other fills the gaps unevenly, which is what a
+     * curtain of rain actually looks like.
+     */
+    float a = filamentLayer(p, 260.0 * uLanes, 0.55, 0.0);
+    float b = filamentLayer(p, 431.0 * uLanes, 0.82, 1.7);
+    float c = filamentLayer(p, 97.0 * uLanes, 0.34, 3.9);
+    return clamp(a * 0.5 + b * 0.35 + c * 0.45, 0.0, 1.0);
+  }
+
   void main() {
     float streaks = turbulence(vUv);
-    // Denser at the bottom: the base of a squall is where the rain is.
-    float vertical = 1.0 - pow(clamp(vUv.y, 0.0, 1.0), 0.75);
+    float thread = filaments(vUv);
+
+    /*
+     * How much rain is in the line of sight.
+     *
+     * Face-on this is a thin sheet; at a glancing angle the ray travels along
+     * the wall and passes through far more of it. Multiplying the opacity by
+     * the reciprocal of the facing term reproduces that, and it is what stops
+     * the wall from being a uniform grey film over everything behind it.
+     */
+    vec3 viewDir = normalize(uCameraPos - vWorldPos);
+    float facing = abs(dot(viewDir, vNormalW));
+    /*
+     * One wall-thickness face-on, up to two at a glancing angle. The first
+     * version used 0.55 as the numerator, which made the wall *thinner* than
+     * intended everywhere and thinnest exactly where a player looks at it —
+     * straight on — so it read as a light haze with some streaks in it.
+     */
+    float depthThrough = clamp(1.0 / max(0.25, facing), 1.0, 2.0);
+
+    /*
+     * Denser at the bottom: the base of a squall is where the rain is.
+     *
+     * The exponent matters more than it looks. At 0.7 the term is already down
+     * to a half a quarter of the way up — which is exactly the band a standing
+     * player looks at — so the wall was half transparent precisely where it had
+     * to be solid. At 2.2 it holds near one for the lower third and then falls
+     * away, which is the shape of an actual squall line.
+     */
+    float vertical = 1.0 - pow(clamp(vUv.y, 0.0, 1.0), 2.2);
     // Ragged top edge, so the wall does not end in a straight line.
-    float top = 1.0 - smoothstep(0.55, 1.0, vUv.y - streaks * 0.22);
+    float top = 1.0 - smoothstep(0.5, 1.0, vUv.y - streaks * 0.26);
+    /*
+     * The base line: a hard, bright rim where the wall meets the ground.
+     *
+     * This is the single most useful pixel in the effect. The damage starts at
+     * a *line on the floor*, and a player needs to know which side of it they
+     * are standing on — a soft gradient cannot answer that, so the bottom two
+     * per cent of the wall is a lit edge.
+     */
+    float rim = smoothstep(0.07, 0.0, vUv.y);
 
     vec3 color = mix(uColorLow, uColorHigh, clamp(vUv.y * 1.3, 0.0, 1.0));
+    color += uEdgeColor * thread * 1.05;
     color = mix(color, uFlashColor, uFlash * (0.35 + streaks * 0.65));
     // While the wall is moving it glows, which is the "it is closing" tell.
-    color += uFlashColor * uShrink * 0.18 * streaks;
+    color += uFlashColor * uShrink * 0.22 * (streaks + thread);
+    color = mix(color, uEdgeColor, rim * 0.8);
 
-    float alpha = uOpacity * vertical * top * (0.45 + streaks * 0.75);
+    // A body between the filaments, so the wall is a mass with structure in it
+    // rather than a set of bright lines with the jungle visible between them.
+    float mass = 0.8 + streaks * 0.4 + thread * 0.8;
+    float alpha = uOpacity * vertical * top * mass * depthThrough;
+    alpha = max(alpha, rim * 0.95 * top);
     alpha *= 1.0 + uShrink * 0.35;
     gl_FragColor = vec4(color, clamp(alpha, 0.0, 1.0));
   }
@@ -155,12 +250,24 @@ export class StormRenderer {
       fragmentShader: wallFragmentShader,
       uniforms: {
         uTime: { value: 0 },
-        uColorLow: { value: new THREE.Color(0x2a2f42) },
-        uColorHigh: { value: new THREE.Color(0x5b6486) },
+        /*
+         * Darker and bluer than the sky it stands against. The wall used to be
+         * the same value as an overcast horizon, so at range it read as haze;
+         * what makes it unmistakable is that it is *darker* than the sky behind
+         * it with bright filaments running up it.
+         */
+        uColorLow: { value: new THREE.Color(0x171b30) },
+        uColorHigh: { value: new THREE.Color(0x3b4270) },
         uFlashColor: { value: new THREE.Color(0xdce6ff) },
+        // The filaments and the ground line. Violet rather than white: it has
+        // to be a colour nothing else in a jungle has, so the wall is never
+        // mistaken for mist or for the sky.
+        uEdgeColor: { value: new THREE.Color(0x9d7dff) },
         uFlash: { value: 0 },
         uShrink: { value: 0 },
-        uOpacity: { value: 0.9 },
+        uOpacity: { value: 1 },
+        uCameraPos: { value: new THREE.Vector3() },
+        uLanes: { value: 1 },
       },
       transparent: true,
       // Seen from both sides: from inside the circle it is a wall ahead of you,
@@ -236,7 +343,7 @@ export class StormRenderer {
    * `circle` is the authoritative one from the server, so the visible boundary
    * and the damaging boundary are the same circle by construction.
    */
-  update(circle: StormCircle | null, dt: number, time: number): void {
+  update(circle: StormCircle | null, dt: number, time: number, cameraPos: THREE.Vector3): void {
     if (!circle || circle.radius <= 0) {
       this.group.visible = false;
       return;
@@ -261,6 +368,17 @@ export class StormRenderer {
     const wu = this.wallMaterial.uniforms;
     wu.uTime.value = time;
     wu.uFlash.value = this.flash;
+    wu.uCameraPos.value.copy(cameraPos);
+    /*
+     * Left at the count that was tuned by eye.
+     *
+     * Scaling it to hold the spacing constant in metres was tried and reverted:
+     * at the opening radius it put eleven hundred filaments around the
+     * cylinder, far finer than the wall's own turbulence, and they averaged
+     * into flat grey — the structure disappeared exactly when the wall is
+     * biggest and most visible.
+     */
+    wu.uLanes.value = 1;
     // Eased rather than switched, so the glow ramps in when a shrink begins.
     wu.uShrink.value = lerp(wu.uShrink.value as number, shrink, Math.min(1, dt * 3));
 

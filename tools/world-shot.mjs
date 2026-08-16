@@ -224,6 +224,28 @@ const info = await page.evaluate((what) => {
     };
   }
 
+  if (what === 'storm') {
+    const zone = game.state.world.zone;
+    if (!zone) return { error: 'no circle in this world' };
+    /*
+     * Stand inside the circle looking out at the wall, from about the distance
+     * a player first sees it. Any further and it is a line on the horizon; any
+     * closer and it fills the frame.
+     */
+    const a = Math.atan2(zone.z, zone.x);
+    // Close in. At seventy metres the wall sits behind the backdrop's aerial
+    // haze — this is a photograph of the wall, not of the distance.
+    const px = zone.x + Math.cos(a) * (zone.radius - 26);
+    const pz = zone.z + Math.sin(a) * (zone.radius - 26);
+    rig.setFreeAnchor(px, pz, 12);
+    rig.update = () => {};
+    const cam = game.renderer.camera;
+    // Above the canopy: at head height in this jungle the shot is of a leaf.
+    cam.position.set(px, terrain.surfaceAt(px, pz) + 30, pz);
+    cam.lookAt(zone.x + Math.cos(a) * (zone.radius + 6), 40, zone.z + Math.sin(a) * (zone.radius + 6));
+    return { radius: Math.round(zone.radius), shrinking: zone.shrinking };
+  }
+
   if (what === 'sky') {
     // The sky shot is always of the clouds, so it clears the weather by default
     // — pass WEATHER=keep to photograph the sky the world actually has.

@@ -28,6 +28,7 @@
   <body>
     <script type="module">
       import { Hud } from '/src/UI/Hud.ts';
+      import { Minimap } from '/src/UI/Minimap.ts';
       import { Species } from '/src/Animals/AnimalTypes.ts';
       import { Role } from '/src/Core/Types.ts';
       import { WeaknessId } from '/src/Gameplay/Weaknesses.ts';
@@ -107,6 +108,34 @@
         hud.update(again, 0.016);
         hud.update(again, 0.2);
       }
+
+      /*
+       * The map, on a stand-in world: a couple of sine hills and a diagonal
+       * river. The real one needs a Terrain, which needs world generation, and
+       * this page exists precisely so the HUD can be looked at without any of
+       * that.
+       */
+      const minimap = new Minimap();
+      hud.root.appendChild(minimap.root);
+      minimap.setWorld((x, z) => {
+        const river = Math.abs(x * 0.6 + z * 0.8);
+        const bed = river < 26 ? -6 + river * 0.22 : 8;
+        const hills = Math.sin(x * 0.012) * 6 + Math.cos(z * 0.009) * 5;
+        return Math.min(bed, 12 + hills);
+      });
+      minimap.setVisible(true);
+      minimap.update({
+        x: num('mx', 40),
+        z: num('mz', -30),
+        yaw: num('myaw', 0.7),
+        zone: {
+          x: 0,
+          z: 0,
+          radius: num('zoner', 150),
+          shrinking: q.get('shrinking') === '1',
+          next: { x: 40, z: 30, radius: num('zoner', 150) * 0.6 },
+        },
+      });
 
       window.__hudReady = true;
     </script>

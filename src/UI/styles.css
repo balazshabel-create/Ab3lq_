@@ -862,6 +862,29 @@ input[type='text']:focus {
   display: block;
 }
 
+/* --- Minimap -------------------------------------------------------------- */
+.minimap {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 190px;
+  height: 190px;
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.6));
+}
+
+.minimap.visible {
+  opacity: 0.95;
+}
+
+.minimap-canvas {
+  display: block;
+  border-radius: 50%;
+}
+
+
 .hud-corner {
   position: absolute;
   padding: 16px;
@@ -882,6 +905,13 @@ input[type='text']:focus {
   top: 0;
   right: 0;
   text-align: right;
+  /*
+   * The role badge and the weakness chip share this corner with the map, so
+   * they start below it. The space is reserved unconditionally: the map is
+   * present for the whole of every round, and a HUD that reflowed when it
+   * appeared would move the badge under the player's eye at the worst moment.
+   */
+  padding-top: 214px;
 }
 
 .hud-bottom-right {
@@ -1284,7 +1314,8 @@ input[type='text']:focus {
 /* Kill feed */
 .kill-feed {
   position: absolute;
-  top: 92px;
+  /* Below the minimap, which owns the top of this corner. */
+  top: 220px;
   right: 16px;
   display: flex;
   flex-direction: column;
