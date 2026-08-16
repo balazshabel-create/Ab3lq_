@@ -323,6 +323,23 @@ class Game {
     if (!playing) {
       this.renderer.setViewWeapon(false);
       this.hud.setFirstPerson(false);
+    } else {
+      /*
+       * ...and anything that *enters* the round has to put it back.
+       *
+       * The role card is a screen, and it is the screen the hunter is on at the
+       * exact moment his role arrives — so the packet handler switched the
+       * first-person view on and this branch switched it straight back off a
+       * line later. The hunter then played with the camera at eye height inside
+       * a body that was still being drawn: his own shoulder filled the screen,
+       * he had no gun in shot, and the game was behind him.
+       *
+       * Deriving it here rather than remembering a flag means every route into
+       * the round — role card, respawn, a reconnect mid-round — agrees.
+       */
+      const firstPerson = this.renderer.cameraRig.firstPerson && !this.state.dead;
+      this.renderer.setViewWeapon(firstPerson);
+      this.hud.setFirstPerson(firstPerson);
     }
     document.body.classList.toggle('playing', playing);
 
