@@ -1285,6 +1285,37 @@ export class AudioSystem {
     osc.stop(t + 0.14);
   }
 
+  /**
+   * The hit confirmation: two short ticks, the second a fifth above the first.
+   *
+   * Deliberately dry and quiet, and nothing like the shot itself. The hunter
+   * fires into undergrowth and cannot see what happened; this is the only thing
+   * that tells him the shot landed, so it has to be audible through the report
+   * of the gun without being another bang.
+   */
+  playHitConfirm(onPlayer: boolean): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.sfxBus) return;
+    const t = ctx.currentTime;
+    // A player kill rings higher and twice, because it is the one that matters.
+    const base = onPlayer ? 1180 : 880;
+    const ticks = onPlayer ? [0, 0.085] : [0];
+    for (const offset of ticks) {
+      const at = t + offset;
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(base, at);
+      osc.frequency.exponentialRampToValueAtTime(base * 1.5, at + 0.05);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.16, at + 0.006);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.1);
+      osc.connect(gain).connect(this.sfxBus);
+      osc.start(at);
+      osc.stop(at + 0.12);
+    }
+  }
+
   /** A stinger for the round-over reveal. */
   /**
    * Jungle music, for the lobby and for the round-over screen.

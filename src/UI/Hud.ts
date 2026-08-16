@@ -148,6 +148,9 @@ export class Hud {
 
   private damageTimer = 0;
   private eventTimer = 0;
+  private crosshairKick = 0;
+  private hitTimer = 0;
+  private hitMarker!: HTMLElement;
   private killEntries: { node: HTMLElement; ttl: number }[] = [];
   private toasts: { node: HTMLElement; ttl: number }[] = [];
 
@@ -247,6 +250,19 @@ export class Hud {
     for (const arm of ['n', 'e', 's', 'w']) {
       this.crosshair.appendChild(el('span', { class: `crosshair-arm ${arm}` }));
     }
+    /*
+     * The hit marker: two diagonals that flash when a shot of yours kills
+     * something.
+     *
+     * A shotgun in a jungle is fired at a shape between two trunks, and without
+     * this the hunter has no idea whether he hit it — the animal drops out of
+     * sight in undergrowth either way, and the kill feed is a line of text off
+     * to the side that he is not looking at while aiming. It is red for an
+     * animal, because for the hunter that is the shot that kills him.
+     */
+    this.hitMarker = el('div', { class: 'hit-marker' });
+    this.hitMarker.append(el('span', { class: 'hit-arm a' }), el('span', { class: 'hit-arm b' }));
+    this.crosshair.appendChild(this.hitMarker);
 
     this.interactPrompt = el('div', { class: 'interact-prompt' });
     // A permanent, subtle colour grade. Sits under every other overlay.
@@ -469,6 +485,21 @@ export class Hud {
       if (this.eventTimer <= 0) this.eventBanner.classList.remove('visible');
     }
 
+    /*
+     * The reticle blooms on the shot and recovers over a third of a second.
+     * It is feedback, not a spread model — the shot has already been resolved
+     * by the server by the time this runs — but it is the same feedback a
+     * spread model would give, and it makes firing feel like an event.
+     */
+    if (this.crosshairKick > 0) {
+      this.crosshairKick = Math.max(0, this.crosshairKick - dt * 3);
+      this.crosshair.style.setProperty('--kick', String(this.crosshairKick));
+    }
+    if (this.hitTimer > 0) {
+      this.hitTimer -= dt;
+      if (this.hitTimer <= 0) this.hitMarker.classList.remove('visible');
+    }
+
     this.tickKillFeed(dt);
     this.tickToasts(dt);
   }
@@ -568,6 +599,23 @@ export class Hud {
   /** Show or hide the crosshair. Only the hunter plays in first person. */
   setFirstPerson(on: boolean): void {
     this.crosshair.classList.toggle('visible', on);
+    if (!on) {
+      this.hitMarker.classList.remove('visible');
+      this.hitTimer = 0;
+    }
+  }
+
+  /** Bloom the reticle: a shot has just gone out. */
+  punchCrosshair(): void {
+    this.crosshairKick = 1;
+    this.crosshair.style.setProperty('--kick', '1');
+  }
+
+  /** Flash the hit marker. `onPlayer` marks the kills that win the round. */
+  showHitMarker(onPlayer: boolean): void {
+    this.hitMarker.classList.toggle('on-player', onPlayer);
+    this.hitMarker.classList.add('visible');
+    this.hitTimer = 0.55;
   }
 
   showDamage(): void {
@@ -685,5 +733,8 @@ export class Hud {
     this.deathOverlay.classList.remove('visible');
     this.damageTimer = 0;
     this.eventTimer = 0;
+    this.crosshairKick = 0;
+    this.hitTimer = 0;
+    this.hitMarker.classList.remove('visible');
   }
 }

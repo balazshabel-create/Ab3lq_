@@ -49,7 +49,14 @@ await page.waitForTimeout(700);
 // 1440 px frame, and reading it out of a full screenshot is guesswork.
 await page.locator('.vitals').screenshot({ path: `${OUT}/hud-dial.png` });
 await page.screenshot({ path: `${OUT}/hud-panel.png` });
-console.log(`wrote ${OUT}/hud-panel.png and ${OUT}/hud-dial.png`);
+/*
+ * The crosshair is 26 px in the middle of the frame and cannot be judged from
+ * the full screenshot at all, so it gets its own crop — clipped generously and
+ * scaled up, because what matters is whether the ticks survive their outline.
+ */
+const centre = { x: 720 - 60, y: 405 - 60, width: 120, height: 120 };
+await page.screenshot({ path: `${OUT}/hud-crosshair.png`, clip: centre });
+console.log(`wrote ${OUT}/hud-panel.png, hud-dial.png and hud-crosshair.png`);
 
 await browser.close();
 vite.kill();

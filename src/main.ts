@@ -632,6 +632,19 @@ class Game {
 
       case ServerMsg.KillFeed:
         this.hud.addKill(packet.entry);
+        /*
+         * A hit marker for the hunter, inferred rather than sent.
+         *
+         * There is exactly one hunter in a round, so a kill the server
+         * attributes to "hunter" is this player's kill — no extra field in the
+         * snapshot, and no chance of crediting someone else's shot. It fires
+         * for an animal too, deliberately: that is the shot that kills him, and
+         * he should see the moment it lands rather than read about it.
+         */
+        if (this.state.role === Role.Hunter && packet.entry.cause === 'hunter') {
+          this.hud.showHitMarker(packet.entry.victimWasPlayer);
+          audioSystem.playHitConfirm(packet.entry.victimWasPlayer);
+        }
         break;
 
       case ServerMsg.Result:
@@ -699,8 +712,10 @@ class Game {
           audioSystem.playAttack(pos.x, pos.y, pos.z, false);
         }
         this.renderer.cameraRig.addShake(0.35);
-        // Kick the gun in the player's own hands, if they are holding one.
+        // Kick the gun in the player's own hands, if they are holding one, and
+        // bloom the reticle with it.
         this.renderer.punchViewWeapon();
+        this.hud.punchCrosshair();
       }
       this.lastAttackReady = attackReady;
     }

@@ -45,6 +45,10 @@
 
       // The crosshair is first-person only, which in this game means the hunter.
       hud.setFirstPerson(q.get('role') === 'hunter');
+      // `?kick=1` freezes the reticle mid-bloom and `?hit=animal|player` pins
+      // the hit marker up, both of which are otherwise a third of a second long.
+      if (q.get('kick')) hud.punchCrosshair();
+      if (q.get('hit')) hud.showHitMarker(q.get('hit') === 'player');
 
       hud.update(
         {
