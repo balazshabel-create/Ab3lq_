@@ -2,7 +2,7 @@
  * world-shot.mjs — photograph a named feature of the generated world.
  *
  *   node tools/world-shot.mjs [baseUrl] [subject] [preset]
- *   subjects: bridge | river | underwater
+ *   subjects: bridge | river | lake | trees | sky | underwater
  *
  * ## Why this exists
  *
@@ -173,6 +173,30 @@ const info = await page.evaluate((what) => {
     const radius = Number(new URLSearchParams(location.search).get('r') ?? '') || 34;
     rig.setFreeAnchor(best.x, best.z, radius);
     return { at: [Math.round(best.x), Math.round(best.z)], height: best.height, neighbours: bestScore };
+  }
+
+  if (what === 'lake') {
+    const lake = terrain.lakes[0];
+    if (!lake) return { error: 'no lake in this world' };
+    /*
+     * Taken from above, with the rig switched off.
+     *
+     * The orbit camera sits thirty metres up and looks at a point six metres
+     * over the ground, which from any useful distance means looking *through*
+     * two hundred metres of canopy. A lake is a shape on the floor of the
+     * world; it has to be photographed from above it.
+     */
+    const radius = Number(new URLSearchParams(location.search).get('r') ?? '') || lake.radius * 1.9;
+    rig.setFreeAnchor(lake.x, lake.z, radius);
+    rig.update = () => {};
+    const cam = game.renderer.camera;
+    cam.position.set(lake.x + radius * 0.7, terrain.waterLevel + radius * 0.75, lake.z + radius * 0.7);
+    cam.lookAt(lake.x, terrain.waterLevel, lake.z);
+    return {
+      at: [Math.round(lake.x), Math.round(lake.z)],
+      radius: Math.round(lake.radius),
+      depth: +(terrain.waterLevel - terrain.heightAt(lake.x, lake.z)).toFixed(1),
+    };
   }
 
   if (what === 'sky') {

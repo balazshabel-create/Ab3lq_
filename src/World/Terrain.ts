@@ -15,6 +15,7 @@ import { Noise2D, clamp, clamp01, lerp, smoothstep } from '../Systems/Noise';
 import { Rng } from '../Systems/Rng';
 import {
   DEEP_WATER_DEPTH,
+  LAKE_DEPTH,
   TERRAIN_GRID,
   TERRAIN_HEIGHT,
   RIVER_DEPTH,
@@ -103,6 +104,15 @@ export class Terrain {
 
   readonly rivers: RiverPath[] = [];
   readonly clearings: Clearing[] = [];
+  /**
+   * Standing water on the main river: one broad, deep basin per map.
+   *
+   * Guaranteed rather than rolled for. A river is a corridor — you cross it or
+   * you swim along it — and the crocodile's whole game (dive, hide in the weed,
+   * come up somewhere else) needs a body of water with *area*. Leaving that to
+   * chance meant most maps did not have one.
+   */
+  readonly lakes: { x: number; z: number; radius: number }[] = [];
 
   /**
    * Bridge decks, as walkable surfaces laid over the water.
@@ -185,6 +195,17 @@ export class Terrain {
     };
     const main = this.meander(start, end, rng, 26, 46);
     this.rivers.push({ points: main, width: rng.range(20, 27), flow: entryAngle + Math.PI });
+
+    /*
+     * The lake, on the main channel, somewhere in its middle third.
+     *
+     * Placed on the river rather than dropped anywhere: a basin the river runs
+     * through has an inlet and an outlet, which is what makes it read as part
+     * of the map instead of as a puddle someone left. Kept off the ends so it
+     * cannot half fall outside the playable rim.
+     */
+    const lakeAt = main[rng.int(Math.floor(main.length * 0.35), Math.floor(main.length * 0.65))];
+    this.lakes.push({ x: lakeAt.x, z: lakeAt.z, radius: rng.range(52, 78) });
 
     // Tributaries branch off the main channel.
     const tributaries = rng.int(2, 4);
@@ -380,6 +401,25 @@ export class Terrain {
       height = lerp(height, channelDepth, carve);
     }
 
+    /*
+     * Carve the lake.
+     *
+     * Deeper than the river and with a floor that is genuinely flat across most
+     * of its width — the point of it is the volume of water, so a bowl that
+     * only reaches its depth at one point would defeat the exercise. The rim is
+     * a wide shelf, which is where the reeds and the lily pads end up.
+     */
+    let lakeT = 0;
+    for (const lake of this.lakes) {
+      const d = Math.hypot(x - lake.x, z - lake.z);
+      const t = 1 - smoothstep(lake.radius * 0.62, lake.radius, d);
+      if (t > lakeT) lakeT = t;
+    }
+    if (lakeT > 0) {
+      const floor = WATER_LEVEL - LAKE_DEPTH;
+      height = lerp(height, floor, Math.pow(lakeT, 0.5));
+    }
+
     // Flatten clearings a little so they read as usable open ground.
     for (const c of this.clearings) {
       const d = Math.hypot(x - c.x, z - c.z);
@@ -397,7 +437,9 @@ export class Terrain {
       height = lerp(height, TERRAIN_HEIGHT * 1.75, t);
     }
 
-    return { h: height, riverT };
+    // The lake counts as river for everything downstream of this: foliage
+    // thinning, the water-depth texture, and the "is this water" tests.
+    return { h: height, riverT: Math.max(riverT, lakeT) };
   }
 
   /** Coarse height used as a flattening target for clearings. */

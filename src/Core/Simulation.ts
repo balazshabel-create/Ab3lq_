@@ -181,6 +181,21 @@ interface Obstacle {
   radius: number;
 }
 
+/**
+ * The actions that exist as a press rather than as a state.
+ *
+ * These are the ones that have to survive between packets and be spent once —
+ * everything else (movement, sprint, eat) is sampled fresh every tick and can
+ * simply be overwritten.
+ */
+const ONE_SHOT_ACTIONS =
+  InputAction.Whistle |
+  InputAction.Ability |
+  InputAction.Listen |
+  InputAction.Attack |
+  InputAction.Jump |
+  InputAction.Fly;
+
 const statBase = {
   animalSpeed: ANIMAL_SPEED,
   sprintMultiplier: SPRINT_MULTIPLIER,
@@ -348,13 +363,6 @@ export class Simulation implements AiContext {
      * because only the former is a near miss worth counting.
      */
     source: 'attack' | 'starvation' | 'storm' = 'attack',
-    /**
-     * Bypass the hunter's immunity.
-     *
-     * Set only by his own misfire. See the note below on why he is otherwise
-     * untouchable and why that one case has to get through anyway.
-     */
-    unavoidable = false,
   ): boolean {
     const target = this.actors.get(targetId);
     if (!target || target.flags & ActorFlags.Dead) return false;
@@ -369,17 +377,19 @@ export class Simulation implements AiContext {
      * happened to be in the reeds he walked past is a round whose central
      * question — can he tell a player from an animal — never got asked.
      *
-     * Two things get through, and both are deliberate:
+     * Exactly one thing gets through: **the storm**. The circle is not the
+     * jungle, it is the clock, and a clock that applies to everyone except the
+     * hunter is not a clock — he could stand outside the ring in perfect safety
+     * and shoot inwards while the survivors were herded past him.
      *
-     *  • **The storm.** The circle is not the jungle, it is the clock, and a
-     *    clock that applies to everyone except the hunter is not a clock. If he
-     *    could stand outside the ring in perfect safety he would simply wait
-     *    there and shoot inwards while the survivors were herded past him.
-     *  • **His own bullet in the wrong animal** (`unavoidable`). That death is
-     *    the entire point of the role, so it is the one thing immunity must
-     *    never swallow.
+     * His own bullet in the wrong animal used to get through too, and no longer
+     * does. The mistake still has a price — it costs him the points a person
+     * would have been worth, see `tryShoot` — but ending his round on it made
+     * the role a coin toss: two hundred metres of undergrowth, a shape between
+     * two trunks, and one wrong guess deleted a fifteen minute round for
+     * everybody.
      */
-    if (!unavoidable && source !== 'storm' && target.kind === ActorKind.Player) {
+    if (source !== 'storm' && target.kind === ActorKind.Player) {
       const player = target as PlayerActor;
       if (player.role === Role.Hunter) return false;
     }
@@ -859,7 +869,21 @@ export class Simulation implements AiContext {
     const existing = this.inputs.get(player.id);
     // Ignore out-of-order packets.
     if (existing && input.seq < existing.seq) return;
-    this.inputs.set(player.id, input);
+    /*
+     * One-shot actions accumulate; everything else is replaced.
+     *
+     * A held key can be sampled again next tick, but a press exists in exactly
+     * one packet. The client sends those the instant they happen rather than
+     * waiting for its next scheduled input — and that is precisely what made
+     * them fragile here: the scheduled packet follows a few milliseconds later
+     * with the bit clear, arrives before the simulation has stepped, and
+     * overwrites the press with nothing. From the player's side the whistle
+     * simply did not happen, and they pressed Q again.
+     *
+     * So the bits survive until a tick actually reads them.
+     */
+    const carried = existing ? existing.actions & ONE_SHOT_ACTIONS : 0;
+    this.inputs.set(player.id, { ...input, actions: input.actions | carried });
     player.lastInputTime = this.time;
   }
 
@@ -1260,7 +1284,18 @@ export class Simulation implements AiContext {
     player.flags &= ~ActorFlags.Whistling;
 
     // --- Actions ---------------------------------------------------------
-    if (input) this.handleActions(player, input, stats);
+    if (input) {
+      this.handleActions(player, input, stats);
+      /*
+       * Spend the presses. They were carried across packets so none could be
+       * overwritten before a tick saw them (see applyInput); if they were not
+       * cleared here the same press would fire on every tick until the next
+       * packet arrived.
+       */
+      if (input.actions & ONE_SHOT_ACTIONS) {
+        this.inputs.set(player.id, { ...input, actions: input.actions & ~ONE_SHOT_ACTIONS });
+      }
+    }
 
     // --- Chase tracking, for the "longest escape" award -------------------
     let beingChased = false;
@@ -1674,12 +1709,17 @@ export class Simulation implements AiContext {
     this.damageActor(victim.id, victim.maxHealth, player.id);
     if (ANIMALS[victim.species].playable) {
       /*
-       * He was wrong. Attributed to actor 0 rather than to himself so the reveal
-       * reads "the jungle took him" instead of naming him as his own killer,
-       * and flagged as an attack so the round-over screen can tell this apart
-       * from starving to death.
+       * He was wrong: that animal was only ever an animal.
+       *
+       * It used to kill him outright. It now costs him what a person would have
+       * been worth instead — the same hundred, taken away — so a misidentified
+       * shot is a real setback without ending fifteen minutes of everyone
+       * else's round on one guess made through undergrowth.
+       *
+       * Floored at zero: a negative score reads as a bug, and being in debt is
+       * not a state this game has anywhere else.
        */
-      this.damageActor(player.id, player.maxHealth, 0, 'attack', true);
+      player.stats.score = Math.max(0, player.stats.score - SCORE_HUNTER_KILL);
     }
   }
 

@@ -389,6 +389,17 @@ export const WATER_LEVEL = 5.8;
 export const RIVER_DEPTH = 8.5;
 
 /**
+ * How far the lake's floor sits below the water line, in metres.
+ *
+ * Deeper than the river, because the lake is where a crocodile is meant to be
+ * able to disappear: deep enough that a diver is well clear of the surface, and
+ * deep enough for the underwater weed to stand at full height without breaking
+ * through it. Kept inside WATER_DEPTH_BAND so the depth texture still resolves
+ * the floor rather than clamping flat across it.
+ */
+export const LAKE_DEPTH = 11.5;
+
+/**
  * How the baked depth texture maps ground height into 0..1.
  *
  * `WATER_DEPTH_ABOVE` is how far *below* the water line the range starts and
@@ -453,7 +464,19 @@ export const BACKDROP_TREES = { low: 1400, medium: 3200, high: 6000 } as const;
  * cheapest props we have — one instanced draw per chunk, no collision, no AI.
  */
 export const WORLD_PROPS = {
-  trees: 4200,
+  /*
+   * Trees.
+   *
+   * Raised from 4,200: the jungle read as woodland with clearings rather than
+   * as rainforest, and the fix is both more of them and a lower density floor
+   * in the placer (see placeScattered) so they reach the thinner ground instead
+   * of piling into the parts that were already thick.
+   *
+   * The cost is bounded by the view distance, not by this number: at 290 m the
+   * camera can see about a quarter of the map, and frustum culling takes most
+   * of that again.
+   */
+  trees: 6000,
   bushes: 7600,
   /*
    * No grass budget: grass is streamed around the camera rather than scattered

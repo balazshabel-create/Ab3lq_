@@ -162,7 +162,9 @@ export function generateWorld(
   // --- Trees ---------------------------------------------------------------
   // The canopy giants. Density follows the foliage field; nothing grows in
   // water or on cliffs.
-  placeScattered(terrain, treeRng, WORLD_PROPS.trees, 0.34, (x, z, y, rng) => {
+  // 0.18 rather than 0.34: the floor decides where trees are *allowed*, and at
+  // a third the map's thinner ground was bare by rule.
+  placeScattered(terrain, treeRng, WORLD_PROPS.trees, 0.18, (x, z, y, rng) => {
     /*
      * Pick the species first, because everything else depends on it.
      *
@@ -291,7 +293,26 @@ export function generateWorld(
   for (const river of terrain.rivers) {
     if (content.bridges.length >= WORLD_PROPS.bridges) break;
     if (river.width < 9 && structRng.chance(0.5)) continue;
-    const idx = structRng.int(3, Math.max(3, river.points.length - 4));
+    /*
+     * Pick a point that is actually in the water.
+     *
+     * A river's centre line is not water everywhere: a shallow tributary can
+     * come up above the water line for a stretch, and a bridge planted there
+     * measures its banks at two metres and produces a ten-metre deck over dry
+     * ground — a plank in a forest. Sampling a handful of candidates and
+     * requiring water under the middle costs nothing and makes the crossing
+     * real, whatever the channel happens to be doing.
+     */
+    let idx = -1;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const candidate = structRng.int(3, Math.max(3, river.points.length - 4));
+      const p = river.points[candidate];
+      if (terrain.isWater(p.x, p.z)) {
+        idx = candidate;
+        break;
+      }
+    }
+    if (idx < 0) continue;
     const a = river.points[idx];
     const b = river.points[Math.min(river.points.length - 1, idx + 1)];
     // Perpendicular to the local flow direction.

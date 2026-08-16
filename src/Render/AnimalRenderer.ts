@@ -24,6 +24,15 @@ import { buildAnimalModel, type AnimalModel } from './AnimalModels';
 import { clamp01, lerp } from '../Systems/Noise';
 
 /** Client-side interpolation state for one actor. */
+/** One authoritative pose, with the time it was received. */
+interface PoseSample {
+  t: number;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+}
+
 interface RenderActor {
   id: number;
   species: Species;
@@ -37,6 +46,12 @@ interface RenderActor {
   /** Interpolated yaw. */
   yaw: number;
   targetYaw: number;
+  /**
+   * The last few authoritative poses, newest last.
+   *
+   * This is what the render position is actually built from — see `interpolate`.
+   */
+  samples: PoseSample[];
   gait: number;
   flags: number;
   flies: number;
@@ -111,6 +126,16 @@ const BITE_DURATION = 0.42;
  */
 const MAX_SLOPE_PITCH = 0.56;
 
+/**
+ * How far behind the newest snapshot the world is drawn, in seconds.
+ *
+ * Snapshots arrive every 100 ms, so this has to be at least that or there is
+ * frequently no second pose to interpolate towards and the playback stalls
+ * every few frames — which is the very stutter it exists to remove. 130 ms
+ * leaves 30 ms of slack for jitter.
+ */
+const INTERP_DELAY = 0.13;
+
 export class AnimalRenderer {
   private group = new THREE.Group();
   private actors = new Map<number, RenderActor>();
@@ -127,7 +152,6 @@ export class AnimalRenderer {
    * artefact, it is an opaque wall two centimetres from the near plane.
    */
   private hideLocal = false;
-  private tmpVec = new THREE.Vector3();
   /** Supplied by the Renderer, which owns the terrain heightfield. */
   private waterTest: ((x: number, z: number, y: number) => boolean) | null = null;
   /** Ground height lookup, for pitching bodies to the slope they stand on. */
@@ -216,6 +240,7 @@ export class AnimalRenderer {
           target: new THREE.Vector3(s.x, s.y, s.z),
           yaw: s.yaw,
           targetYaw: s.yaw,
+          samples: [],
           gait: s.gait,
           flags: s.flags,
           flies: s.flies,
@@ -245,6 +270,21 @@ export class AnimalRenderer {
 
       actor.target.set(s.x, s.y, s.z);
       actor.targetYaw = s.yaw;
+      /*
+       * Record the pose with its arrival time. `interpolate` plays these back
+       * on a short delay rather than chasing the newest one — see the note
+       * there for why chasing stutters.
+       */
+      const now = performance.now() / 1000;
+      const last = actor.samples[actor.samples.length - 1];
+      if (last && Math.hypot(s.x - last.x, s.y - last.y, s.z - last.z) > 12) {
+        // A teleport (respawn, a new round). Interpolating across it would
+        // glide the animal over the map, so the history goes with it.
+        actor.samples.length = 0;
+        actor.pos.set(s.x, s.y, s.z);
+      }
+      actor.samples.push({ t: now, x: s.x, y: s.y, z: s.z, yaw: s.yaw });
+      if (actor.samples.length > 8) actor.samples.shift();
       actor.gait = s.gait;
       actor.flags = s.flags;
       actor.flies = s.flies;
@@ -338,23 +378,96 @@ export class AnimalRenderer {
     }
   }
 
-  /** Smooth the render transform towards the authoritative one. */
+  /**
+   * Play the authoritative poses back, on a delay.
+   *
+   * ## Why not simply chase the newest one
+   *
+   * The old version smoothed exponentially towards the latest snapshot, and
+   * that is what made animals walk in surges. Snapshots arrive ten times a
+   * second, so the target sits still for a hundred milliseconds and then jumps;
+   * an exponential follower sprints at the jump and decelerates as it closes,
+   * which draws a fast-slow-fast-slow gait on top of the animal's own. On
+   * something moving at eight metres a second the surge is most of a metre.
+   *
+   * Interpolating *between two known poses* instead gives constant velocity
+   * between them, which is what real movement looks like. The cost is one
+   * interpolation window of latency — everything is drawn where it was
+   * INTERP_DELAY ago — which is invisible in a game where nothing is decided
+   * on the client anyway.
+   *
+   * If the stream stalls (a dropped packet, a hitching host) there is no second
+   * pose to aim at, and the animal holds its last one rather than guessing:
+   * extrapolation looks worse than a pause, because it has to be taken back.
+   */
   private interpolate(actor: RenderActor, dt: number): void {
-    // Exponential smoothing, with a snap for large corrections (teleports,
-    // respawns) so the animal does not visibly glide across the map.
-    const d = this.tmpVec.copy(actor.target).sub(actor.pos).length();
-    if (d > 12) {
-      actor.pos.copy(actor.target);
-    } else {
-      const k = 1 - Math.exp(-14 * dt);
-      actor.pos.lerp(actor.target, k);
+    const samples = actor.samples;
+    const now = performance.now() / 1000;
+
+    /*
+     * Your own animal is predicted, not delayed.
+     *
+     * Everything else can be drawn a hundred and thirty milliseconds in the
+     * past for free — you have no idea where those animals "should" be. Your
+     * own is different: you are pressing a key and watching for the result, and
+     * adding an interpolation window on top of the network round trip is the
+     * difference between controls that feel connected and controls that feel
+     * like a video call. So the local animal runs on the last known velocity
+     * instead, and any correction is absorbed by the smoothing rather than
+     * shown as a jump.
+     */
+    if (actor.id === this.localId && samples.length >= 2) {
+      const b = samples[samples.length - 1];
+      const a = samples[samples.length - 2];
+      const span = Math.max(1e-3, b.t - a.t);
+      // Bounded: with no packets at all this would sail off across the map.
+      const ahead = Math.min(0.25, Math.max(0, now - b.t));
+      const vx = (b.x - a.x) / span;
+      const vy = (b.y - a.y) / span;
+      const vz = (b.z - a.z) / span;
+      const k = 1 - Math.exp(-22 * dt);
+      actor.pos.x = lerp(actor.pos.x, b.x + vx * ahead, k);
+      actor.pos.y = lerp(actor.pos.y, b.y + vy * ahead, k);
+      actor.pos.z = lerp(actor.pos.z, b.z + vz * ahead, k);
+      let own = (b.yaw - actor.yaw) % (Math.PI * 2);
+      if (own > Math.PI) own -= Math.PI * 2;
+      if (own < -Math.PI) own += Math.PI * 2;
+      actor.yaw += own * Math.min(1, dt * 16);
+      actor.fade = Math.min(1, actor.fade + dt * 3);
+      return;
     }
 
-    // Shortest-arc yaw interpolation.
-    let diff = (actor.targetYaw - actor.yaw) % (Math.PI * 2);
-    if (diff > Math.PI) diff -= Math.PI * 2;
-    if (diff < -Math.PI) diff += Math.PI * 2;
-    actor.yaw += diff * Math.min(1, dt * 12);
+    const renderTime = now - INTERP_DELAY;
+
+    if (samples.length >= 2) {
+      // Newest pair that brackets the render time; otherwise the newest pair
+      // there is, which holds the last pose once the stream runs dry.
+      let a = samples[samples.length - 2];
+      let b = samples[samples.length - 1];
+      for (let i = 0; i < samples.length - 1; i++) {
+        if (samples[i].t <= renderTime && samples[i + 1].t >= renderTime) {
+          a = samples[i];
+          b = samples[i + 1];
+          break;
+        }
+      }
+      const span = b.t - a.t;
+      const f = span > 1e-4 ? clamp01((renderTime - a.t) / span) : 1;
+      actor.pos.set(lerp(a.x, b.x, f), lerp(a.y, b.y, f), lerp(a.z, b.z, f));
+
+      // Yaw the short way round, between the same two poses.
+      let turn = (b.yaw - a.yaw) % (Math.PI * 2);
+      if (turn > Math.PI) turn -= Math.PI * 2;
+      if (turn < -Math.PI) turn += Math.PI * 2;
+      actor.yaw = a.yaw + turn * f;
+    } else if (samples.length === 1) {
+      actor.pos.set(samples[0].x, samples[0].y, samples[0].z);
+      actor.yaw = samples[0].yaw;
+    } else {
+      // Nothing to play back yet: fall back to the old chase so a newly seen
+      // actor still moves rather than standing at the origin.
+      actor.pos.lerp(actor.target, 1 - Math.exp(-14 * dt));
+    }
 
     actor.fade = Math.min(1, actor.fade + dt * 3);
   }

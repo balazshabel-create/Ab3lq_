@@ -820,7 +820,23 @@ class Game {
     // the sound is feedback for a button press, and 100 ms of lag on it feels
     // broken even though the mechanic itself is server-authoritative.
     if ((state.actions & InputAction.Whistle) !== 0) {
-      audioSystem.playWhistle(0, 0, 0, this.state.actorId, true);
+      /*
+       * Only if the whistle will actually go out.
+       *
+       * The sound used to play on the key press unconditionally, and a whistle
+       * refused for being inside its cooldown then *sounded* exactly like one
+       * that worked — while the minute did not reset. That is the whole of
+       * "sometimes it does not register": it did register, the server said not
+       * yet, and nothing on this side said so. The cooldown is in the snapshot,
+       * so the client can tell the difference and give the honest answer.
+       */
+      const ready = (this.state.latestSnapshot?.self?.whistleCooldown ?? 0) <= 0;
+      if (ready) {
+        audioSystem.playWhistle(0, 0, 0, this.state.actorId, true);
+      } else {
+        audioSystem.playUiClick('back');
+        this.hud.toast('Catching your breath — wait a moment before whistling again', false, 1.6);
+      }
     }
 
     this.inputAccumulator += dt;

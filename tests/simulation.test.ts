@@ -294,7 +294,11 @@ test('the hunter is a player, never AI, and cannot be killed', () => {
   assert.ok(hunter.health < before, 'the storm must hurt the hunter');
   hunter.health = hunter.maxHealth;
 
-  // Except the one thing that is meant to: his own bullet in the wrong animal.
+  /*
+   * And his own bullet in the wrong animal, which used to be the exception,
+   * no longer is: it costs him the points instead. One wrong guess through two
+   * hundred metres of undergrowth should not delete everybody's round.
+   */
   let bystander: Actor | null = null;
   sim.forEachNearby(hunter.pos.x, hunter.pos.z, 10_000, (a) => {
     if (bystander) return;
@@ -316,8 +320,40 @@ test('the hunter is a player, never AI, and cannot be killed', () => {
     pitch: 0,
     actions: InputAction.Attack,
   });
+  const scoreBefore = hunter.stats.score;
   sim.update(SIM_DT);
-  assert.equal(hunter.health, 0, 'shooting wildlife is still fatal to the hunter');
+  assert.ok(hunter.health > 0, 'nothing but the storm may kill the hunter');
+  assert.ok(
+    hunter.stats.score <= scoreBefore,
+    'shooting wildlife must cost the hunter, not kill him',
+  );
+});
+
+test('every map has one broad, deep lake on its main river', () => {
+  /*
+   * Guaranteed, not rolled for. The crocodile's whole game — dive, hide in the
+   * weed, surface somewhere else — needs a body of water with area to it, and
+   * before this most maps offered a corridor you could only cross.
+   */
+  for (const seed of [1, 7, 99, 20250815, 424242]) {
+    const terrain = new Terrain(seed);
+    assert.equal(terrain.lakes.length, 1, `seed ${seed} must have exactly one lake`);
+    const lake = terrain.lakes[0];
+    assert.ok(lake.radius >= 45, `seed ${seed} lake is too small at ${lake.radius.toFixed(0)} m`);
+
+    // Deep in the middle, and genuinely wide rather than deep at one point.
+    const middle = terrain.waterLevel - terrain.heightAt(lake.x, lake.z);
+    assert.ok(middle > 9, `seed ${seed} lake is only ${middle.toFixed(1)} m deep`);
+    let wet = 0;
+    const samples = 24;
+    for (let i = 0; i < samples; i++) {
+      const a = (i / samples) * Math.PI * 2;
+      const x = lake.x + Math.cos(a) * lake.radius * 0.5;
+      const z = lake.z + Math.sin(a) * lake.radius * 0.5;
+      if (terrain.isWater(x, z)) wet++;
+    }
+    assert.ok(wet >= samples - 2, `seed ${seed} lake is not water at half its radius (${wet}/${samples})`);
+  }
 });
 
 test('every bridge is a real crossing, and the hunter needs one', () => {
@@ -942,11 +978,15 @@ test('the rifle kills a player outright', () => {
   assert.ok(hunter.health > 0, 'shooting an actual player must not hurt the hunter');
 });
 
-test('shooting an animal that was only an animal kills the hunter', () => {
+test('shooting an animal that was only an animal costs the hunter his points', () => {
   /*
-   * The rule the round hangs on. Verified by putting an AI animal of a *playable*
-   * species — one a survivor could have been wearing — squarely in the sights and
-   * pulling the trigger.
+   * The price of a misidentified shot. Verified by putting an AI animal of a
+   * *playable* species — one a survivor could have been wearing — squarely in
+   * the sights and pulling the trigger.
+   *
+   * It used to kill him outright, and that is what changed: the penalty is now
+   * the hundred a person would have been worth, because ending the round on one
+   * guess made through undergrowth made the role a coin toss.
    */
   const sim = new Simulation(2470);
   for (let i = 0; i < 4; i++) sim.addPlayer(`p${i}`, `P${i}`);
@@ -980,8 +1020,9 @@ test('shooting an animal that was only an animal kills the hunter', () => {
   });
   sim.update(SIM_DT);
 
-  assert.equal(hunter.health, 0, 'a hunter who shoots wildlife dies for it');
-  assert.ok((hunter.flags & ActorFlags.Dead) !== 0, 'the hunter must be dead');
+  assert.ok(hunter.health > 0, 'a hunter who shoots wildlife survives it');
+  assert.equal((hunter.flags & ActorFlags.Dead) !== 0, false, 'and is not dead');
+  assert.equal(hunter.stats.score, 0, 'but is charged for it, floored at zero');
 });
 
 test('a clean miss costs the hunter nothing but the noise', () => {
