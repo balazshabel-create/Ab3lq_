@@ -1659,7 +1659,15 @@ export class Simulation implements AiContext {
      * than flavour: every survivor within earshot learns roughly where he is
      * standing and that he has just committed to something.
      */
-    this.emitNoise(player.pos.x, player.pos.z, NOISE_ATTACK * 3.4, NoiseKind.Attack, player.id);
+    /*
+     * The report, as its own kind of noise.
+     *
+     * Loud — three and a half times a bite — and now distinguishable from one,
+     * so a survivor who hears it knows a *shot* was fired and roughly from
+     * where. That is information the hunter is meant to give away every time he
+     * pulls the trigger; it is the price of the only weapon in the game.
+     */
+    this.emitNoise(player.pos.x, player.pos.z, NOISE_ATTACK * 3.4, NoiseKind.Gunshot, player.id);
 
     /*
      * Hitscan down the aim line, cone-limited rather than swept: the tightest

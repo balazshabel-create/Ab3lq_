@@ -1158,6 +1158,112 @@ export class AudioSystem {
     }
   }
 
+  /**
+   * A shotgun going off.
+   *
+   * ## Why it is four sounds
+   *
+   * The hunter's shot used the bite sound with the volume turned up, and a
+   * filtered noise burst is a slap, not a gun. A real report is made of parts
+   * that arrive at different times, and every one of them is doing a job:
+   *
+   *  • the **crack**, two milliseconds of nearly unfiltered noise — this is the
+   *    part that makes a listener flinch, and it is what carries the direction;
+   *  • the **body**, a low sweep that gives it size, so it reads as a gun rather
+   *    than as a whip;
+   *  • the **tail**, a long quiet decay for the sound rolling out across the
+   *    canopy and coming back — the reason a shot in a jungle is unmistakable
+   *    even from a kilometre away;
+   *  • the **action**, the break and the close, a third of a second later. The
+   *    mechanical part is what tells everyone in earshot that he has just used
+   *    one of his two shells.
+   *
+   * `nearby` is set for the hunter's own shot: his gun gets the full crack, and
+   * everyone else's is heard through several hundred metres of trees.
+   */
+  playGunshot(x: number, y: number, z: number, nearby: boolean): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.sfxBus || !this.noiseBuffer) return;
+    const t = ctx.currentTime;
+    const panner = () => this.createPanner(x, y, z, 600);
+
+    // --- Crack ---------------------------------------------------------
+    {
+      const source = ctx.createBufferSource();
+      source.buffer = this.noiseBuffer;
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = nearby ? 900 : 500;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(nearby ? 0.85 : 0.3, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.055);
+      source.connect(hp).connect(gain).connect(panner()).connect(this.sfxBus);
+      source.start(t, Math.random() * 0.5, 0.1);
+    }
+
+    // --- Body ----------------------------------------------------------
+    {
+      const source = ctx.createBufferSource();
+      source.buffer = this.noiseBuffer;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.setValueAtTime(1400, t);
+      lp.frequency.exponentialRampToValueAtTime(120, t + 0.28);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(nearby ? 0.7 : 0.34, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+      source.connect(lp).connect(gain).connect(panner()).connect(this.sfxBus);
+      source.start(t, Math.random() * 0.5, 0.4);
+      // A sub thump under it, which is the difference between a bang and a boom.
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(120, t);
+      osc.frequency.exponentialRampToValueAtTime(38, t + 0.32);
+      const oscGain = ctx.createGain();
+      oscGain.gain.setValueAtTime(nearby ? 0.55 : 0.28, t);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.34);
+      osc.connect(oscGain).connect(panner()).connect(this.sfxBus);
+      osc.start(t);
+      osc.stop(t + 0.36);
+    }
+
+    // --- Tail: the roll across the canopy -------------------------------
+    {
+      const source = ctx.createBufferSource();
+      source.buffer = this.noiseBuffer;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(700, t);
+      bp.frequency.exponentialRampToValueAtTime(220, t + 1.1);
+      bp.Q.value = 0.7;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(nearby ? 0.16 : 0.2, t + 0.09);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+      source.connect(bp).connect(gain).connect(panner()).connect(this.sfxBus);
+      source.start(t + 0.02, Math.random() * 0.4, 1.3);
+    }
+
+    // --- The action, a moment later -------------------------------------
+    if (nearby) {
+      for (const [at, freq] of [
+        [0.34, 1500],
+        [0.52, 1100],
+      ] as const) {
+        const osc = ctx.createOscillator();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(freq, t + at);
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.0001, t + at);
+        gain.gain.exponentialRampToValueAtTime(0.07, t + at + 0.004);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.05);
+        osc.connect(gain).connect(this.sfxBus);
+        osc.start(t + at);
+        osc.stop(t + at + 0.06);
+      }
+    }
+  }
+
   /** Eating: a soft rhythmic crunch. */
   playEat(x: number, y: number, z: number): void {
     const ctx = this.ctx;
@@ -1512,6 +1618,10 @@ export class AudioSystem {
         break;
       case NoiseKind.Attack:
         this.playAttack(x, y, z, false);
+        break;
+      case NoiseKind.Gunshot:
+        // Somebody else's shot: heard through the jungle rather than fired here.
+        this.playGunshot(x, y, z, false);
         break;
       case NoiseKind.Death:
         this.playDeath(x, y, z);

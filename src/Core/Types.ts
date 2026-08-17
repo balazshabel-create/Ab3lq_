@@ -290,6 +290,15 @@ export enum NoiseKind {
   Death = 'death',
   Eat = 'eat',
   Call = 'call',
+  /**
+   * A gunshot.
+   *
+   * Separate from Attack on purpose. A shot is not a bite: it is twenty times
+   * louder, it carries across the whole map, and it is *supposed* to tell every
+   * survivor in earshot roughly where the hunter is and that he has just fired.
+   * Sharing the bite's sound threw that information away.
+   */
+  Gunshot = 'gunshot',
 }
 
 /** A footprint left behind, readable by the hunter. */

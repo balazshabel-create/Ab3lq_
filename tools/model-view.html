@@ -29,7 +29,7 @@
     <div id="label"></div>
     <script type="module">
       import * as THREE from 'three';
-      import { buildAnimalModel } from '/src/Render/AnimalModels.ts';
+      import { buildAnimalModel, buildShotgunViewmodel } from '/src/Render/AnimalModels.ts';
       import { ANIMALS } from '/src/Animals/AnimalTypes.ts';
 
       const params = new URLSearchParams(location.search);
@@ -67,6 +67,32 @@
       );
       ground.receiveShadow = true;
       scene.add(ground);
+
+      /*
+       * `?viewmodel=1` shows the gun the hunter sees instead of an animal.
+       *
+       * It is the most-looked-at object in the game — it sits in front of one
+       * player's eyes for a whole round — and it is the one thing that cannot be
+       * photographed from the turntable, because it lives on the camera rather
+       * than in the world.
+       */
+      if (params.get('viewmodel') === '1') {
+        const gun = buildShotgunViewmodel();
+        // The real one hangs bottom-right of the camera; this reproduces that
+        // offset so the framing matches what a player actually sees.
+        // These must match Renderer.setViewWeapon's per-frame transform.
+        gun.position.set(0.16, -0.19, -0.52);
+        gun.rotation.set(0.04, 0.11, 0.04);
+        gun.scale.setScalar(0.92);
+        const rig = new THREE.Group();
+        rig.add(gun);
+        scene.add(rig);
+        // The game's own fov, so this framing is the framing a player gets.
+        const cam = new THREE.PerspectiveCamera(74, window.innerWidth / window.innerHeight, 0.01, 50);
+        renderer.render(scene, cam);
+        window.__modelReady = true;
+        throw new Error('viewmodel drawn');
+      }
 
       const model = buildAnimalModel(species, detail);
       scene.add(model.root);

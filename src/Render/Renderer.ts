@@ -370,8 +370,19 @@ export class Renderer {
        */
       const sway = Math.sin(this.time * 2.1) * 0.006;
       const bob = Math.sin(this.time * 4.2) * 0.004;
-      this.viewWeapon.position.set(0.19 + sway, -0.17 + bob - kick * 0.02, -0.42 + kick * 0.1);
-      this.viewWeapon.rotation.set(kick * 0.34, 0.06, kick * 0.06);
+      /*
+       * Where the gun sits in the hunter's own view.
+       *
+       * Lower and further right than it was, and toed in slightly so the muzzle
+       * sits near the crosshair rather than off to one side: at the old offset
+       * the barrels ran up the middle of the screen and the hands were below the
+       * bottom edge, so it read as a gun *floating* in front of the camera
+       * rather than as one being carried. Scaled down a little for the same
+       * reason — it was covering a third of the frame.
+       */
+      this.viewWeapon.position.set(0.16 + sway, -0.19 + bob - kick * 0.02, -0.52 + kick * 0.12);
+      this.viewWeapon.rotation.set(0.04 + kick * 0.34, 0.11, 0.04 + kick * 0.06);
+      this.viewWeapon.scale.setScalar(0.92);
     }
 
     // --- Sky and lighting ------------------------------------------------

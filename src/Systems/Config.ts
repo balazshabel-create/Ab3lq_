@@ -491,7 +491,11 @@ export const WORLD_PROPS = {
   ferns: 6400,
   vines: 1300,
   /** Reeds and lilies at the waterline, and weed on the river bed. */
-  reeds: 13000,
+  /*
+   * Reeds. Raised with the trees: every metre of waterline in the world has a
+   * bank, and a bare bank next to a dense jungle reads as a mown verge.
+   */
+  reeds: 19000,
   /*
    * Weed on the river bed.
    *
@@ -502,7 +506,7 @@ export const WORLD_PROPS = {
    * has to be a bed dense enough to disappear into rather than a scattering of
    * plants to swim past.
    */
-  underwaterPlants: 52000,
+  underwaterPlants: 64000,
   huts: 11,
   bridges: 8,
   caves: 10,

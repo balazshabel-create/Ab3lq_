@@ -764,7 +764,12 @@ class Game {
       if (this.lastAttackReady && !attackReady) {
         const pos = this.tmpVec;
         if (this.renderer.animals.getPosition(this.state.actorId, pos)) {
-          audioSystem.playAttack(pos.x, pos.y, pos.z, false);
+          // The hunter's weapon is a gun; everyone else's is their teeth.
+          if (this.state.role === Role.Hunter) {
+            audioSystem.playGunshot(pos.x, pos.y, pos.z, true);
+          } else {
+            audioSystem.playAttack(pos.x, pos.y, pos.z, false);
+          }
         }
         this.renderer.cameraRig.addShake(0.35);
         // Kick the gun in the player's own hands, if they are holding one, and

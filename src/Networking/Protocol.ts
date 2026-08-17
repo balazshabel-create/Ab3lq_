@@ -285,6 +285,8 @@ const NOISE_KINDS: NoiseKind[] = [
   'death',
   'eat',
   'call',
+  // Appended: the index is the wire format, so a new kind goes on the end.
+  'gunshot',
 ] as NoiseKind[];
 
 // Frame layout sizes. These must match the writes in encodeSnapshot exactly —
