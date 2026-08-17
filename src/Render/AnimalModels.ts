@@ -102,21 +102,44 @@ function box(w: number, h: number, d: number): THREE.BufferGeometry {
   return g;
 }
 
+/**
+ * How many segments a round mass actually gets.
+ *
+ * ## Why this is not just a number at each call site
+ *
+ * Every builder asks for segments in the form `detail > 0.5 ? 10 : 5` — a
+ * near-model count and a far-model one. Ten segments is enough to read as round
+ * on a screenshot of a body and nowhere near enough to read as an *animal*: at
+ * that resolution a haunch is a faceted crystal, and the facets are the single
+ * loudest "this is a low-poly model" cue on the whole roster, louder than any
+ * missing anatomy.
+ *
+ * Rather than editing two hundred call sites, the near-model counts are scaled
+ * up here — the far ones (five and under, chosen for animals that are a dozen
+ * pixels tall) are left exactly as they were, because nothing about them is
+ * visible. The cost lands only on the handful of animals close to the camera.
+ */
+function round(segments: number): number {
+  return segments >= 7 ? Math.round(segments * 1.5) : segments;
+}
+
 function sphere(r: number, segments = 8): THREE.BufferGeometry {
-  const key = `sph:${r.toFixed(3)}:${segments}`;
+  const s = round(segments);
+  const key = `sph:${r.toFixed(3)}:${s}`;
   let g = geometryCache.get(key);
   if (!g) {
-    g = new THREE.SphereGeometry(r, segments, Math.max(4, segments >> 1));
+    g = new THREE.SphereGeometry(r, s, Math.max(4, s >> 1));
     geometryCache.set(key, g);
   }
   return g;
 }
 
 function capsule(r: number, len: number, radial = 8): THREE.BufferGeometry {
-  const key = `cap:${r.toFixed(3)}:${len.toFixed(3)}:${radial}`;
+  const s = round(radial);
+  const key = `cap:${r.toFixed(3)}:${len.toFixed(3)}:${s}`;
   let g = geometryCache.get(key);
   if (!g) {
-    g = new THREE.CapsuleGeometry(r, len, Math.max(3, radial >> 1), radial);
+    g = new THREE.CapsuleGeometry(r, len, Math.max(3, s >> 1), s);
     geometryCache.set(key, g);
   }
   return g;
@@ -134,10 +157,11 @@ function capsule(r: number, len: number, radial = 8): THREE.BufferGeometry {
  * normals correct.
  */
 function ellipsoid(rx: number, ry: number, rz: number, segments = 8): THREE.BufferGeometry {
-  const key = `ell:${rx.toFixed(3)}:${ry.toFixed(3)}:${rz.toFixed(3)}:${segments}`;
+  const s = round(segments);
+  const key = `ell:${rx.toFixed(3)}:${ry.toFixed(3)}:${rz.toFixed(3)}:${s}`;
   let g = geometryCache.get(key);
   if (!g) {
-    g = new THREE.SphereGeometry(1, segments, Math.max(4, segments >> 1));
+    g = new THREE.SphereGeometry(1, s, Math.max(4, s >> 1));
     g.scale(rx, ry, rz);
     g.computeVertexNormals();
     geometryCache.set(key, g);
@@ -149,19 +173,200 @@ function cone(r: number, h: number): THREE.BufferGeometry {
   const key = `cone:${r.toFixed(3)}:${h.toFixed(3)}`;
   let g = geometryCache.get(key);
   if (!g) {
-    g = new THREE.ConeGeometry(r, h, 7);
+    g = new THREE.ConeGeometry(r, h, 9);
     geometryCache.set(key, g);
   }
   return g;
 }
 
-function material(color: number, flat = true): THREE.MeshLambertMaterial {
+/**
+ * ## Smooth shading, and why it is the default now
+ *
+ * Everything on every animal used to be flat-shaded, which draws each triangle
+ * in one flat tone. On a box that is correct — a box *has* flat faces. On a
+ * body it is the thing that made these animals look like carved wooden toys:
+ * a shoulder built from a sphere came out as thirty separate tiles of colour,
+ * and no amount of extra anatomy survives being painted like a disco ball.
+ *
+ * Smooth shading interpolates the normal across each triangle, so a mass reads
+ * as one curved surface lit from one direction — which is what a real flank
+ * does. It costs nothing at all: the same triangles, the same one material.
+ *
+ * Boxes are unaffected either way, because `BoxGeometry` gives every face its
+ * own vertices and its own normal, so there is nothing for the interpolation to
+ * average. That is what makes flipping the default safe: hair, teeth, planks
+ * and slabs look exactly as they did, and every curved mass stops faceting.
+ */
+function material(color: number, flat = false): THREE.MeshLambertMaterial {
   const key = `${color}:${flat}`;
   let m = materialCache.get(key);
   if (!m) {
     m = new THREE.MeshLambertMaterial({ color, flatShading: flat });
     materialCache.set(key, m);
   }
+  return m;
+}
+
+/**
+ * A wet surface: an eye, a pupil, a nose.
+ *
+ * These three are the only parts of an animal that are actually *shiny*, and a
+ * highlight on them is the difference between an animal and a taxidermy mount.
+ * Lambert shading has no specular term at all, so this is the one place where a
+ * Phong material earns its cost — and there are three or four such meshes per
+ * model, so the cost is nil.
+ */
+const glossCache = new Map<number, THREE.MeshPhongMaterial>();
+
+function glossMaterial(color: number): THREE.MeshPhongMaterial {
+  let m = glossCache.get(color);
+  if (!m) {
+    m = new THREE.MeshPhongMaterial({
+      color,
+      shininess: 90,
+      specular: 0x8f8f8f,
+      // Smooth, so the highlight slides across the surface rather than
+      // switching on and off facet by facet.
+      flatShading: false,
+    });
+    glossCache.set(color, m);
+  }
+  return m;
+}
+
+/** Like `mesh`, but wet — see glossMaterial. */
+function glossy(
+  geometry: THREE.BufferGeometry,
+  color: number,
+  parent: THREE.Object3D,
+  x = 0,
+  y = 0,
+  z = 0,
+): THREE.Mesh {
+  const m = new THREE.Mesh(geometry, glossMaterial(color));
+  m.position.set(x, y, z);
+  m.castShadow = false;
+  parent.add(m);
+  return m;
+}
+
+/** Multiply a hex colour's channels, for shading one colour into another. */
+function shade(color: number, factor: number): number {
+  const r = Math.min(255, Math.round(((color >> 16) & 0xff) * factor));
+  const g = Math.min(255, Math.round(((color >> 8) & 0xff) * factor));
+  const b = Math.min(255, Math.round((color & 0xff) * factor));
+  return (r << 16) | (g << 8) | b;
+}
+
+/**
+ * One material for every counter-shaded mass, because the colour lives in the
+ * geometry. Sharing it means the gradient costs no extra draw calls.
+ */
+const COUNTERSHADE_MATERIAL = new THREE.MeshLambertMaterial({ vertexColors: true });
+
+/**
+ * An ellipsoid painted dark on top and pale underneath.
+ *
+ * ## Counter-shading is most of what "real" means here
+ *
+ * Nearly every animal alive is darker along the back than under the belly, and
+ * the transition is a gradient, not a line. A body built from one flat colour
+ * with a separate pale slab for a belly can never look like one: the eye reads
+ * the join, and a join is what a *painted model* has.
+ *
+ * Baking the gradient into the vertex colours costs one attribute and no draw
+ * calls, works with the existing Lambert lighting, and is the single change
+ * that stops these animals looking like toys — the shading now agrees with the
+ * light instead of fighting it.
+ */
+function shadedEllipsoid(
+  rx: number,
+  ry: number,
+  rz: number,
+  segments: number,
+  color: number,
+  /** How far to go each way: 0.2 means 20% darker on top, 20% paler below. */
+  spread = 0.2,
+): THREE.BufferGeometry {
+  const s = round(segments);
+  const key = `grad:${rx.toFixed(3)}:${ry.toFixed(3)}:${rz.toFixed(3)}:${s}:${color}:${spread}`;
+  let g = geometryCache.get(key);
+  if (g) return g;
+
+  g = new THREE.SphereGeometry(1, s, Math.max(4, s >> 1));
+  g.scale(rx, ry, rz);
+  g.computeVertexNormals();
+
+  const top = new THREE.Color(shade(color, 1 - spread));
+  const bottom = new THREE.Color(shade(color, 1 + spread * 1.35));
+  const pos = g.getAttribute('position');
+  const colors = new Float32Array(pos.count * 3);
+  const mixed = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    // -1 at the belly, +1 along the spine. Eased so the back stays dark over
+    // most of its area and the pale side is confined to the underside, which is
+    // how it sits on a real animal.
+    const t = Math.max(0, Math.min(1, pos.getY(i) / ry * 0.5 + 0.5));
+    mixed.copy(bottom).lerp(top, Math.pow(t, 0.7));
+    colors[i * 3] = mixed.r;
+    colors[i * 3 + 1] = mixed.g;
+    colors[i * 3 + 2] = mixed.b;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometryCache.set(key, g);
+  return g;
+}
+
+/**
+ * Bake a batch of small same-coloured pieces into one mesh.
+ *
+ * Markings come in dozens: seven patches around a leg, four bands down it,
+ * four legs — a hundred and twelve meshes on one tiger, each its own draw call,
+ * on up to forty animals at once. They never move relative to the limb they
+ * are painted on, so there is no reason for them to be separate objects. This
+ * takes the pieces with their local transforms and returns one mesh.
+ *
+ * `place` is called once per piece with a scratch object: set its position and
+ * rotation, and return the geometry to stamp there.
+ */
+function bakedMarkings(
+  parent: THREE.Object3D,
+  color: number,
+  count: number,
+  place: (index: number, at: THREE.Object3D) => THREE.BufferGeometry | null,
+): THREE.Mesh | null {
+  const scratch = new THREE.Object3D();
+  const pieces: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < count; i++) {
+    scratch.position.set(0, 0, 0);
+    scratch.rotation.set(0, 0, 0);
+    const geometry = place(i, scratch);
+    if (!geometry) continue;
+    scratch.updateMatrix();
+    pieces.push(geometry.clone().applyMatrix4(scratch.matrix));
+  }
+  if (pieces.length === 0) return null;
+  const merged = mergeGeometries(pieces, false);
+  for (const g of pieces) g.dispose();
+  if (!merged) return null;
+  const m = new THREE.Mesh(merged, material(color));
+  m.castShadow = false;
+  parent.add(m);
+  return m;
+}
+
+/** A counter-shaded mass. The colour is in the geometry — see shadedEllipsoid. */
+function shadedMesh(
+  geometry: THREE.BufferGeometry,
+  parent: THREE.Object3D,
+  x = 0,
+  y = 0,
+  z = 0,
+): THREE.Mesh {
+  const m = new THREE.Mesh(geometry, COUNTERSHADE_MATERIAL);
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  parent.add(m);
   return m;
 }
 
@@ -881,7 +1086,14 @@ function buildQuadruped(
   for (let i = 0; i < masses.length; i++) {
     const m = masses[i];
     const seg = detail > 0.5 ? (i === 0 ? 10 : 9) : 6;
-    const piece = mesh(ellipsoid(m.rx, m.ry, m.rz, seg), c.body, bodyGroup, m.cx, m.cy, 0);
+    // Counter-shaded: dark along the spine, paler underneath, as an animal is.
+    const piece = shadedMesh(
+      shadedEllipsoid(m.rx, m.ry, m.rz, seg, c.body, 0.22),
+      bodyGroup,
+      m.cx,
+      m.cy,
+      0,
+    );
     piece.castShadow = true;
   }
 
@@ -1034,9 +1246,8 @@ function buildQuadruped(
     throat.castShadow = true;
   }
 
-  const skull = mesh(
-    ellipsoid(W * 0.5, W * 0.4, W * 0.4, detail > 0.5 ? 10 : 5),
-    c.body,
+  const skull = shadedMesh(
+    shadedEllipsoid(W * 0.5, W * 0.4, W * 0.4, detail > 0.5 ? 10 : 5, c.body, 0.18),
     neck,
     L * 0.1,
     0,
@@ -1075,7 +1286,8 @@ function buildQuadruped(
      * once you look at the face straight on, which is exactly the angle a player
      * spends the whole round looking at other animals from.
      */
-    mesh(
+    // The nose pad, wet like the eyes — a dry nose is a stuffed animal.
+    glossy(
       ellipsoid(L * 0.025, H * 0.035, W * 0.09, 6),
       c.accent,
       neck,
@@ -1259,9 +1471,11 @@ function buildQuadruped(
         mesh(ellipsoid(W * 0.15, W * 0.13, W * 0.05, 6), c.belly, neck, L * 0.14, H * 0.06, side * W * 0.23);
         mesh(ellipsoid(W * 0.115, W * 0.095, W * 0.05, 6), c.accent, neck, L * 0.152, H * 0.06, side * W * 0.236);
       }
-      mesh(sphere(W * 0.088, 7), c.eye, neck, L * 0.168, H * 0.06, side * W * 0.242);
+      // Wet, both of them: an eyeball and the pupil in front of it. The
+      // highlight is what makes an eye look at you.
+      glossy(sphere(W * 0.088, 7), c.eye, neck, L * 0.168, H * 0.06, side * W * 0.242);
       if (detail > 0.6) {
-        mesh(sphere(W * 0.042, 5), 0x0d0b09, neck, L * 0.196, H * 0.065, side * W * 0.25);
+        glossy(sphere(W * 0.042, 5), 0x0d0b09, neck, L * 0.196, H * 0.065, side * W * 0.25);
       }
       /*
        * An upper lid, in coat colour, hooding the top of the eyeball.
@@ -1455,29 +1669,29 @@ function buildQuadruped(
         const hip = model.legs[model.legs.length - 1];
         const spotted = def.species === Species.Leopard;
         const ring = spotted ? [0.5, 1.8, 3.1, 4.4, 5.6] : [0, 0.9, 1.8, 2.7, 3.6, 4.5, 5.4];
-        for (let b = 0; b < 4; b++) {
+        const patch = ellipsoid(
+          legR * 0.15,
+          legR * (spotted ? 0.3 : 0.24),
+          legR * (spotted ? 0.34 : 0.6),
+          5,
+        );
+        // One mesh for all twenty-eight marks on this leg: they are painted on
+        // it, so they can be part of it.
+        bakedMarkings(hip, c.accent, 4 * ring.length, (i, at) => {
+          const b = Math.floor(i / ring.length);
+          const around = ring[i % ring.length];
           const y = -legLen * (0.16 + b * 0.19);
-          for (const around of ring) {
-            const j = Math.abs(Math.sin(b * 12.9 + around * 7.7));
-            const band = mesh(
-              ellipsoid(
-                legR * 0.15,
-                legR * (spotted ? 0.3 : 0.24),
-                legR * (spotted ? 0.34 : 0.6),
-                5,
-              ),
-              c.accent,
-              hip,
-              Math.cos(around) * legR * 0.9,
-              y - j * legLen * 0.03,
-              Math.sin(around) * legR * 0.9,
-            );
-            // Turn the flattened axis outwards, so the patch lies on the leg
-            // instead of standing off it edge-on.
-            band.rotation.y = -around;
-            band.castShadow = false;
-          }
-        }
+          const j = Math.abs(Math.sin(b * 12.9 + around * 7.7));
+          at.position.set(
+            Math.cos(around) * legR * 0.9,
+            y - j * legLen * 0.03,
+            Math.sin(around) * legR * 0.9,
+          );
+          // Turn the flattened axis outwards, so the patch lies on the leg
+          // instead of standing off it edge-on.
+          at.rotation.y = -around;
+          return patch;
+        });
       }
 
     }
@@ -1540,6 +1754,17 @@ function buildQuadruped(
    * the outward normal, which is exactly the freedom a marking on a cylinder
    * needs and no more.
    */
+  /*
+   * The marks are collected and baked, not added one at a time.
+   *
+   * A tiger carries eleven bands a side, each drawn as eleven overlapping
+   * patches so it follows the curve of the barrel — two hundred and forty
+   * meshes, which as separate objects is two hundred and forty draw calls on an
+   * animal the renderer is willing to draw forty of. They are paint on a hide
+   * and never move relative to it, so they end up as one mesh per colour.
+   */
+  const bodyMarks = new Map<number, THREE.BufferGeometry[]>();
+  const markScratch = new THREE.Object3D();
   const markOnBody = (
     along: number,
     ring: number,
@@ -1556,8 +1781,17 @@ function buildQuadruped(
     // buried is invisible and fully proud reads as a welt.
     const y = mass.cy + Math.cos(ring) * mass.ry * shrink * 0.97;
     const z = side * Math.sin(ring) * mass.rz * shrink * 0.97;
-    const m = mesh(ellipsoid(rx, tangential, rx * 0.3, 5), color, bodyGroup, along, y, z);
-    m.rotation.x = side * (ring - Math.PI / 2);
+    markScratch.position.set(along, y, z);
+    markScratch.rotation.set(side * (ring - Math.PI / 2), 0, 0);
+    markScratch.updateMatrix();
+    let batch = bodyMarks.get(color);
+    if (!batch) {
+      batch = [];
+      bodyMarks.set(color, batch);
+    }
+    batch.push(
+      ellipsoid(rx, tangential, rx * 0.3, 5).clone().applyMatrix4(markScratch.matrix),
+    );
   };
 
   if (detail > 0.6 && def.species === Species.Tiger) {
@@ -1636,6 +1870,17 @@ function buildQuadruped(
       }
     }
   }
+
+  // Bake the hide: one mesh per marking colour, however many marks went into it.
+  for (const [colour, pieces] of bodyMarks) {
+    if (pieces.length === 0) continue;
+    const merged = mergeGeometries(pieces, false);
+    for (const g of pieces) g.dispose();
+    if (!merged) continue;
+    const coat = new THREE.Mesh(merged, material(colour));
+    coat.castShadow = false;
+    bodyGroup.add(coat);
+  }
 }
 
 /** Crocodile, caiman, iguana, chameleon: low, long, sprawling limbs. */
@@ -1673,9 +1918,8 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
    * animal read as something stamped out of sheet metal. A crocodilian is
    * flattened, not flat: roughly two thirds as deep as it is wide.
    */
-  const torso = mesh(
-    ellipsoid(L * 0.34, W * 0.33, W * 0.48, detail > 0.5 ? 10 : 6),
-    c.body,
+  const torso = shadedMesh(
+    shadedEllipsoid(L * 0.34, W * 0.33, W * 0.48, detail > 0.5 ? 10 : 6, c.body, 0.24),
     bodyGroup,
   );
   torso.castShadow = true;
@@ -1835,7 +2079,7 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
         skullDeep * 0.85,
         side * W * 0.2,
       );
-      mesh(sphere(W * 0.08, 7), c.eye, head, L * 0.02, skullDeep * 1.25, side * W * 0.21);
+      glossy(sphere(W * 0.08, 7), c.eye, head, L * 0.02, skullDeep * 1.25, side * W * 0.21);
       if (detail > 0.6) {
         // A vertical slit pupil, which is what makes it read as a reptile eye
         // rather than as a bead.
@@ -2075,7 +2319,7 @@ function buildSerpent(model: AnimalModel, def: AnimalDef, detail: number): void 
   skull.scale.set(1.6, 0.7, 1);
   if (detail > 0.4) {
     for (const side of [-1, 1]) {
-      mesh(sphere(W * 0.11, 6), c.eye, head, W * 0.4, W * 0.16, side * W * 0.3);
+      glossy(sphere(W * 0.11, 6), c.eye, head, W * 0.4, W * 0.16, side * W * 0.3);
     }
     // Forked tongue, because it costs four triangles and sells the whole animal.
     if (detail > 0.75) {
@@ -2143,7 +2387,7 @@ function buildPrimate(model: AnimalModel, def: AnimalDef, detail: number): void 
     const face = mesh(sphere(W * 0.3, 7), c.belly, head, W * 0.28, -W * 0.04, 0);
     face.scale.set(0.6, 0.85, 0.8);
     for (const side of [-1, 1]) {
-      mesh(sphere(W * 0.07, 6), c.eye, head, W * 0.36, W * 0.1, side * W * 0.15);
+      glossy(sphere(W * 0.07, 6), c.eye, head, W * 0.36, W * 0.1, side * W * 0.15);
       // Ears.
       mesh(sphere(W * 0.11, 5), c.body, head, -W * 0.02, W * 0.14, side * W * 0.42);
     }
@@ -2263,9 +2507,11 @@ function buildApe(model: AnimalModel, def: AnimalDef, detail: number): void {
     masses.push({ cx: L * 0.16, cy: H * 0.28, rx: L * 0.14, ry: W * 0.26, rz: W * 0.62 });
   }
   for (const m of masses) {
-    const piece = mesh(
-      ellipsoid(m.rx, m.ry, m.rz, detail > 0.5 ? 10 : 6),
-      c.body,
+    // Counter-shaded, like the quadruped's barrel: a gorilla's back catches the
+    // light and its chest sits in shadow, and one flat black mass cannot do
+    // that however many segments it has.
+    const piece = shadedMesh(
+      shadedEllipsoid(m.rx, m.ry, m.rz, detail > 0.5 ? 10 : 6, c.body, 0.26),
       bodyGroup,
       m.cx,
       m.cy,
@@ -2349,8 +2595,12 @@ function buildApe(model: AnimalModel, def: AnimalDef, detail: number): void {
         const p = surfacePoint(x, angle);
         if (!p) continue;
         const patch = mesh(
-          ellipsoid(L * 0.06, W * 0.032, W * 0.11, detail > 0.6 ? 7 : 5),
-          c.accent,
+          ellipsoid(L * 0.075, W * 0.032, W * 0.13, detail > 0.6 ? 7 : 5),
+          // Knocked well down from the palette's accent. At full brightness the
+          // saddle read as patches of snow on a black animal; a silverback's is
+          // a *slightly* paler grey than the coat around it, and the coat here
+          // is nearly black.
+          shade(c.accent, 0.62),
           bodyGroup,
           p[0],
           // Sunk in along the local normal, so only the cap of each patch shows.
@@ -2523,7 +2773,7 @@ function buildBird(model: AnimalModel, def: AnimalDef, detail: number): void {
     const beak = mesh(cone(W * 0.12, L * 0.3), c.accent, neck, L * 0.16, 0, 0);
     beak.rotation.z = -Math.PI / 2;
     for (const side of [-1, 1]) {
-      mesh(sphere(W * 0.06, 6), c.eye, neck, W * 0.14, W * 0.08, side * W * 0.16);
+      glossy(sphere(W * 0.06, 6), c.eye, neck, W * 0.14, W * 0.08, side * W * 0.16);
     }
   }
 
@@ -2596,7 +2846,7 @@ function buildAmphibian(model: AnimalModel, def: AnimalDef, detail: number): voi
   });
   if (detail > 0.3) {
     for (const side of [-1, 1]) {
-      mesh(sphere(W * 0.17, 6), c.eye, head, W * 0.16, W * 0.3, side * W * 0.3);
+      glossy(sphere(W * 0.17, 6), c.eye, head, W * 0.16, W * 0.3, side * W * 0.3);
     }
     // Dart-frog warning patches.
     for (let i = 0; i < 4; i++) {
@@ -2795,7 +3045,7 @@ function buildShelled(model: AnimalModel, def: AnimalDef, detail: number): void 
       // A pale ring round the eye, so a near-black eye on a dark head is
       // findable at all. Placed before the eye so the eye reads as set into it.
       mesh(ellipsoid(W * 0.07, W * 0.06, W * 0.04, 6), c.accent, head, W * 0.2, W * 0.08, side * W * 0.145);
-      mesh(sphere(W * 0.05, 6), c.eye, head, W * 0.215, W * 0.085, side * W * 0.155);
+      glossy(sphere(W * 0.05, 6), c.eye, head, W * 0.215, W * 0.085, side * W * 0.155);
       if (detail > 0.6) mesh(sphere(W * 0.024, 5), 0xd8cba0, head, W * 0.245, W * 0.095, side * W * 0.163);
     }
   }
@@ -2885,8 +3135,8 @@ function buildFish(model: AnimalModel, def: AnimalDef, detail: number): void {
   model.tail.push(tail);
 
   if (detail > 0.4) {
-    mesh(sphere(L * 0.06, 5), c.eye, bodyGroup, L * 0.3, L * 0.08, W * 0.2);
-    mesh(sphere(L * 0.06, 5), c.eye, bodyGroup, L * 0.3, L * 0.08, -W * 0.2);
+    glossy(sphere(L * 0.06, 5), c.eye, bodyGroup, L * 0.3, L * 0.08, W * 0.2);
+    glossy(sphere(L * 0.06, 5), c.eye, bodyGroup, L * 0.3, L * 0.08, -W * 0.2);
   }
 
   /*

@@ -803,10 +803,24 @@ function injectTintMask(shader: { vertexShader: string }): void {
     );
 }
 
-export function vertexColorMaterial(options: { transparent?: boolean; side?: THREE.Side } = {}): THREE.Material {
+export function vertexColorMaterial(
+  options: { transparent?: boolean; side?: THREE.Side; smooth?: boolean } = {},
+): THREE.Material {
   const material = new THREE.MeshLambertMaterial({
     vertexColors: true,
-    flatShading: true,
+    /*
+     * Flat by default, and that is the right default: a leaf card, a rock facet
+     * and a plank all *have* flat faces, and shading them smoothly would round
+     * off exactly the hard edges they are made of.
+     *
+     * `smooth` is for the things that are round in the world. A trunk is a
+     * cylinder, and flat-shaded it reads as a folded paper cone standing in the
+     * jungle — which was the loudest un-real thing left in a wide shot, because
+     * a hundred trunks fill most of the screen. The leaf cards merged into the
+     * same geometry are planar, so their normals are already identical across
+     * each card and smoothing changes nothing about them.
+     */
+    flatShading: options.smooth !== true,
     side: options.side ?? THREE.FrontSide,
     transparent: options.transparent ?? false,
   });
@@ -1636,7 +1650,7 @@ function buildTree(detail: number, variant = 0): PropAssets {
     });
   }
 
-  return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
+  return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide, smooth: true }) };
 }
 
 
@@ -2283,7 +2297,7 @@ function buildLog(detail: number): PropAssets {
     moss.translate(0, 0.44, 0);
     parts.push({ geometry: moss, color: new THREE.Color(0x3c5c26) });
   }
-  return { geometry: merge(parts), material: vertexColorMaterial() };
+  return { geometry: merge(parts), material: vertexColorMaterial({ smooth: true }) };
 }
 
 /** A hanging vine. */
@@ -2297,7 +2311,7 @@ function buildVine(): PropAssets {
     leaf.translate(0.15, -1 - i * 1.2, 0);
     parts.push({ geometry: leaf, color: new THREE.Color(0x53883a) });
   }
-  return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
+  return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide, smooth: true }) };
 }
 
 /** A lily pad floating on the shallows. */
@@ -2519,7 +2533,7 @@ function buildBridge(): PropAssets {
     }
   }
 
-  return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide }) };
+  return { geometry: merge(parts), material: vertexColorMaterial({ side: THREE.DoubleSide, smooth: true }) };
 }
 
 /** A cave mouth: a dark arch set into a slope. */
