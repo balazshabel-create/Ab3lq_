@@ -21,7 +21,7 @@ import { GrassField } from './GrassField';
 import { BackdropSystem } from './BackdropSystem';
 import { StormRenderer, type StormCircle } from './StormRenderer';
 import { AnimalRenderer } from './AnimalRenderer';
-import { buildShotgunViewmodel } from './AnimalModels';
+import { buildShotgunViewmodel, initWeaponEnvironment } from './Weapon';
 import { EffectsRenderer, type FlySwarmInput } from './EffectsRenderer';
 import { PostProcessing } from './PostProcessing';
 import { CameraRig } from '../Player/CameraRig';
@@ -148,6 +148,13 @@ export class Renderer {
      * cover the whole frame, passes included.
      */
     this.renderer.info.autoReset = false;
+
+    /*
+     * The gun's reflection environment, prefiltered once here because it needs a
+     * live GL context. Assigned to the weapon's materials only — see Weapon.ts
+     * for why it is not the scene's environment.
+     */
+    initWeaponEnvironment(this.renderer);
 
     this.scene = new THREE.Scene();
     // Exponential fog: the jungle should close in around you, and it is also
@@ -380,9 +387,34 @@ export class Renderer {
        * rather than as one being carried. Scaled down a little for the same
        * reason — it was covering a third of the frame.
        */
-      this.viewWeapon.position.set(0.16 + sway, -0.19 + bob - kick * 0.02, -0.52 + kick * 0.12);
-      this.viewWeapon.rotation.set(0.04 + kick * 0.34, 0.11, 0.04 + kick * 0.06);
-      this.viewWeapon.scale.setScalar(0.92);
+      /*
+       * Closer than it was, and turned further in.
+       *
+       * The rebuilt gun is a longer object than the old one, and at the previous
+       * half-metre stand-off its barrels receded to a point in the middle of the
+       * frame — a gun being *looked at* rather than carried. A viewmodel wants to
+       * be near enough that the receiver and the hands have real size on screen
+       * and the muzzle sits just under the crosshair.
+       */
+      /*
+       * ## Distance is what decides how much of a viewmodel you can see
+       *
+       * The instinct is that pulling the gun closer makes it read bigger, and
+       * for the *barrel* that is true — but the receiver and the hands are the
+       * parts with the detail on them, and at thirty centimetres the frame is
+       * only about twenty centimetres tall at their depth, so they fall out of
+       * the bottom of the screen and all that is left is a rib disappearing into
+       * the distance. Half a metre out, the whole action, both hands and the
+       * near half of the barrels fit in the corner of the frame at once.
+       *
+       * The yaw is small for the same reason it is not zero: enough to show the
+       * side of the action rather than a view straight along the rib, and since a
+       * positive yaw swings the muzzle back towards −X, it ends up just right of
+       * the crosshair instead of off in the corner.
+       */
+      this.viewWeapon.position.set(0.17 + sway, -0.17 + bob - kick * 0.02, -0.48 + kick * 0.11);
+      this.viewWeapon.rotation.set(0.04 + kick * 0.34, 0.15, 0.05 + kick * 0.06);
+      this.viewWeapon.scale.setScalar(0.85);
     }
 
     // --- Sky and lighting ------------------------------------------------

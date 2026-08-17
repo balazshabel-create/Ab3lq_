@@ -29,7 +29,8 @@
     <div id="label"></div>
     <script type="module">
       import * as THREE from 'three';
-      import { buildAnimalModel, buildShotgunViewmodel } from '/src/Render/AnimalModels.ts';
+      import { buildAnimalModel } from '/src/Render/AnimalModels.ts';
+      import { buildShotgunViewmodel, initWeaponEnvironment } from '/src/Render/Weapon.ts';
       import { ANIMALS } from '/src/Animals/AnimalTypes.ts';
 
       const params = new URLSearchParams(location.search);
@@ -77,13 +78,16 @@
        * than in the world.
        */
       if (params.get('viewmodel') === '1') {
+        // The metal needs something to reflect, and the prefilter needs a live
+        // GL context — same call the game makes at renderer construction.
+        initWeaponEnvironment(renderer);
         const gun = buildShotgunViewmodel();
         // The real one hangs bottom-right of the camera; this reproduces that
         // offset so the framing matches what a player actually sees.
         // These must match Renderer.setViewWeapon's per-frame transform.
-        gun.position.set(0.16, -0.19, -0.52);
-        gun.rotation.set(0.04, 0.11, 0.04);
-        gun.scale.setScalar(0.92);
+        gun.position.set(0.17, -0.17, -0.48);
+        gun.rotation.set(0.04, 0.15, 0.05);
+        gun.scale.setScalar(0.85);
         const rig = new THREE.Group();
         rig.add(gun);
         scene.add(rig);

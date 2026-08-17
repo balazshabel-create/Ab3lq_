@@ -1,0 +1,45 @@
+<!doctype html>
+<!--
+  probe-gun.html — report what the gun's materials actually got.
+
+  A black metal part can mean three different things: no environment map, an
+  environment map that failed to prefilter, or lighting that a conductor cannot
+  respond to. Guessing between them from a screenshot wasted a round trip, so
+  this page reports the material state as data instead.
+-->
+<html>
+  <head><meta charset="utf-8" /><title>gun probe</title></head>
+  <body>
+    <script type="module">
+      import * as THREE from 'three';
+      import { buildShotgunViewmodel, initWeaponEnvironment } from '/src/Render/Weapon.ts';
+
+      const renderer = new THREE.WebGLRenderer({ antialias: false });
+      renderer.setSize(320, 240);
+      document.body.appendChild(renderer.domElement);
+
+      initWeaponEnvironment(renderer);
+      const gun = buildShotgunViewmodel();
+
+      const seen = new Map();
+      gun.traverse((o) => {
+        if (!o.isMesh) return;
+        const m = o.material;
+        if (seen.has(m.uuid)) return;
+        seen.set(m.uuid, {
+          type: m.type,
+          color: m.color?.getHexString(),
+          metalness: m.metalness,
+          roughness: m.roughness,
+          envMap: m.envMap ? m.envMap.type ?? 'texture' : null,
+          map: m.map ? 'yes' : null,
+          roughnessMap: m.roughnessMap ? 'yes' : null,
+          bumpMap: m.bumpMap ? 'yes' : null,
+        });
+      });
+      let meshes = 0;
+      gun.traverse((o) => { if (o.isMesh) meshes++; });
+      window.__probe = { meshes, materials: [...seen.values()] };
+    </script>
+  </body>
+</html>
