@@ -18,6 +18,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { buildShotgun } from './Weapon';
+import { buildBigCat } from './BigCat';
 import {
   ANIMALS,
   BodyPlan,
@@ -418,9 +419,25 @@ export function buildAnimalModel(species: Species, detail = 1): AnimalModel {
     case BodyPlan.Quadruped:
       buildQuadruped(model, def, detail, 0);
       break;
-    case BodyPlan.Feline:
-      buildQuadruped(model, def, detail, 1);
+    case BodyPlan.Feline: {
+      /*
+       * The cats get their own builder, for the same reason the gorilla does.
+       * A tiger run through the generic quadruped came out as a union of
+       * ellipsoids with stripes glued on top: visible seams where the masses
+       * met, cylindrical legs with no taper, and markings that hovered above
+       * the skin. `buildBigCat` lofts one continuous body from measured
+       * cross-sections and paints the coat into its vertices.
+       */
+      const parts = buildBigCat(root, def, detail);
+      model.body = parts.body;
+      model.head = parts.head;
+      model.jaw = parts.jaw;
+      model.legs = parts.legs;
+      model.knees = parts.knees;
+      model.ears = parts.ears;
+      model.tail = parts.tail;
       break;
+    }
     case BodyPlan.Reptile:
       buildReptile(model, def, detail);
       break;
