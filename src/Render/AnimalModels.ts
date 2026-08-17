@@ -1060,14 +1060,33 @@ function buildQuadruped(
    * `surfaceAt` can find the widest one at any point along the body and put the
    * marking on it.
    */
+  /*
+   * ## Stocky animals are a different shape, not a smaller one
+   *
+   * A capybara photographed from the side is a *loaf*: a flat back, a deep
+   * barrel that hangs almost to the ground, no visible neck, a big blunt head,
+   * and legs so short the body looks like it is resting on them. Run it through
+   * the same proportions as a jaguar and you get a small jaguar with a rodent's
+   * colour, which is what it looked like — long legs, a slim barrel, daylight
+   * under the belly and a neck it does not have.
+   *
+   * The three animals that share this shape (capybara, peccary, tapir) get a
+   * deeper barrel, shorter legs, a shorter neck and a heavier skull. Nothing
+   * else about the builder changes.
+   */
+  const stocky =
+    def.species === Species.Capybara ||
+    def.species === Species.Peccary ||
+    def.species === Species.Tapir;
+
   type Mass = { cx: number; cy: number; rx: number; ry: number; rz: number };
   const masses: Mass[] = [
     {
       cx: 0,
       cy: 0,
-      rx: L * (style === 1 ? 0.34 : 0.3),
-      ry: barrelR * 0.94,
-      rz: barrelR * (style === 1 ? 0.84 : 0.96),
+      rx: L * (style === 1 ? 0.34 : 0.32),
+      ry: barrelR * (stocky ? 1.04 : 0.94),
+      rz: barrelR * (style === 1 ? 0.84 : 0.98),
     },
   ];
   if (detail > 0.4) {
@@ -1076,11 +1095,19 @@ function buildQuadruped(
       cx: L * 0.26,
       cy: -H * 0.04,
       rx: L * 0.19,
-      ry: barrelR * 0.9,
-      rz: barrelR * (style === 1 ? 0.82 : 0.9),
+      ry: barrelR * (stocky ? 0.98 : 0.9),
+      rz: barrelR * (style === 1 ? 0.82 : 0.94),
     });
-    // Hindquarters, heavier and set slightly higher — the push-off end.
-    masses.push({ cx: -L * 0.26, cy: H * 0.02, rx: L * 0.2, ry: barrelR, rz: barrelR * 0.94 });
+    // Hindquarters, heavier and set slightly higher — the push-off end. On the
+    // stocky ones this is the highest point of the animal, as a capybara's rump
+    // is: the back rises towards the tail rather than falling away.
+    masses.push({
+      cx: -L * 0.26,
+      cy: H * (stocky ? 0.0 : 0.02),
+      rx: L * 0.21,
+      ry: barrelR * (stocky ? 1.0 : 1),
+      rz: barrelR * (stocky ? 1.02 : 0.94),
+    });
   }
 
   for (let i = 0; i < masses.length; i++) {
@@ -1180,10 +1207,16 @@ function buildQuadruped(
       // was: a coat is legible through the number of edges in it, and thin
       // hairs can be packed at a count that would have been a hedge of planks.
       count: shaggy ? 260 : 190,
-      length: (shaggy ? 0.2 : 0.15) * W,
-      // Coat colours only. A cream tuft on a tiger's back reads as a chip of
-      // bone stuck to it, because a tiger's pale fur is on its underside.
-      colors: [c.body, c.accent, c.body],
+      length: (shaggy ? 0.28 : 0.15) * W,
+      /*
+       * Shades of the coat itself, not the marking colour.
+       *
+       * These used to include `accent` — which on a tiger is near-black and on a
+       * capybara is dark umber — so the coat came out as a scatter of dark chips
+       * on the flank rather than as hair. Real fur varies in *brightness* within
+       * one hue, and that is what catches the light along each strand.
+       */
+      colors: [c.body, shade(c.body, 0.84), shade(c.body, 1.14)],
       topOnly: true,
     });
     /*
@@ -1200,16 +1233,22 @@ function buildQuadruped(
       rz: barrelR * 0.78,
       count: 90,
       length: (shaggy ? 0.22 : 0.17) * W,
-      // Coat colours only. A pale tuft in the ruff reads as a chip of bone
-      // stuck to the animal's neck, not as fur catching the light.
-      colors: [c.body, c.accent, c.body],
+      // Same shades as the barrel's coat, for the same reason.
+      colors: [c.body, shade(c.body, 0.86), shade(c.body, 1.1)],
       centre: [L * 0.3, 0, 0],
     });
   }
 
-  // Head on a short neck.
+  /*
+   * Head, on a neck whose length is the animal's.
+   *
+   * A cat carries its head clear of the shoulders; a capybara's is set straight
+   * onto them, low and forward, with the top of the skull barely above the line
+   * of the back. That difference is most of what tells the two silhouettes
+   * apart at fifty metres.
+   */
   const neck = new THREE.Group();
-  neck.position.set(L * 0.4, H * 0.18, 0);
+  neck.position.set(L * (stocky ? 0.36 : 0.4), H * (stocky ? 0.1 : 0.18), 0);
   bodyGroup.add(neck);
   model.head = neck;
 
@@ -1246,8 +1285,26 @@ function buildQuadruped(
     throat.castShadow = true;
   }
 
+  /*
+   * The skull. Broad on a cat, and bigger still on the stocky ones — a
+   * capybara's head is a quarter of its body length and almost as deep as the
+   * barrel behind it, which is why a scaled-down cat skull made it look like a
+   * different animal wearing a rodent's colours.
+   */
+  const skullSize: [number, number, number] = [
+    W * (stocky ? 0.62 : style === 1 ? 0.56 : 0.5),
+    W * (stocky ? 0.46 : style === 1 ? 0.44 : 0.4),
+    W * (stocky ? 0.44 : style === 1 ? 0.46 : 0.4),
+  ];
   const skull = shadedMesh(
-    shadedEllipsoid(W * 0.5, W * 0.4, W * 0.4, detail > 0.5 ? 10 : 5, c.body, 0.18),
+    shadedEllipsoid(
+      skullSize[0],
+      skullSize[1],
+      skullSize[2],
+      detail > 0.5 ? 10 : 5,
+      c.body,
+      0.18,
+    ),
     neck,
     L * 0.1,
     0,
@@ -1308,7 +1365,9 @@ function buildQuadruped(
      * direction leaves the ellipsoid.
      */
     const skullCentre: [number, number, number] = [L * 0.1, 0, 0];
-    const skullR: [number, number, number] = [W * 0.5, W * 0.4, W * 0.4];
+    // The skull the animal actually got — a hardcoded triple here would bury
+    // every facial marking inside a broad head and float them off a narrow one.
+    const skullR: [number, number, number] = skullSize;
     const markOnSkull = (
       dir: [number, number, number],
       size: [number, number, number],
@@ -1582,8 +1641,16 @@ function buildQuadruped(
    * the chest hanging out past its own legs is the other half of that look.
    */
   if (detail > 0.25) {
-    const legLen = H * 0.92;
-    const legR = W * (style === 1 ? 0.17 : 0.155);
+    /*
+     * Leg length, which is the loudest proportion on any four-legged animal.
+     *
+     * At 0.92 of the shoulder height every species here stood like a cat. A
+     * capybara's legs are a little over half its standing height and the barrel
+     * hangs between them almost to the ground; the photograph is unmistakable
+     * about it, and so is the silhouette once the numbers are right.
+     */
+    const legLen = H * (stocky ? 0.62 : 0.92);
+    const legR = W * (stocky ? 0.185 : style === 1 ? 0.17 : 0.155);
     const positions: [number, number, 1 | -1][] = [
       [L * 0.33, W * 0.36, 1],
       [L * 0.33, -W * 0.36, 1],
@@ -1628,9 +1695,9 @@ function buildQuadruped(
         const hip = model.legs[model.legs.length - 1];
         const mass = mesh(
           ellipsoid(
-            legR * (forward > 0 ? 1.5 : 1.9),
-            legLen * 0.3,
-            legR * 1.45,
+            legR * (forward > 0 ? (stocky ? 1.15 : 1.5) : stocky ? 1.35 : 1.9),
+            legLen * (stocky ? 0.24 : 0.3),
+            legR * (stocky ? 1.15 : 1.45),
             // A haunch is the biggest smooth mass on the animal, so it is the
             // one that shows facets first: at eight segments the tiger's back
             // legs came out as a pair of paper cones.
@@ -1811,7 +1878,17 @@ function buildQuadruped(
       const along = ((b + 0.5) / bands - 0.5) * L * 0.86;
       // How far down the flank this one reaches. Short bands over the shoulder,
       // long ones over the ribs — which is where a tiger's are longest.
-      const reach = 1.05 + Math.sin((b / bands) * Math.PI) * 0.75 + jitter * 0.3;
+      /*
+       * How far down the flank a band reaches, in radians from the spine.
+       *
+       * It used to stop around 1.8 at most — a little past the side of the
+       * barrel — so the tiger was striped along the back and plain from the
+       * elbow down, which is not what a tiger looks like from the side at all.
+       * In a photograph the bands run all the way to where the white belly
+       * starts, about 2.4 radians round, and the longest of them are over the
+       * ribs.
+       */
+      const reach = 1.5 + Math.sin((b / bands) * Math.PI) * 0.85 + jitter * 0.3;
       /*
        * Narrower than they were, and forked.
        *
@@ -1832,7 +1909,10 @@ function buildQuadruped(
           // comes out as a dotted line down the flank.
           const span = (reach / steps) * barrelR * 0.8;
           // Lean the band backwards as it descends: they are not vertical.
-          const lean = along - ring * L * 0.05;
+          // A slight backward lean, not a slant. At 0.05 the bands raked back
+          // so far they read as combed hair; on a photograph a tiger's stripes
+          // are close to vertical and only the shoulder bands tilt much.
+          const lean = along - ring * L * 0.022;
           markOnBody(lean, ring, side, width * (1 - t * 0.35), span, c.accent);
           // The second limb of a forked stripe, peeling away below halfway.
           if (forks && t > 0.5) {
@@ -1923,6 +2003,40 @@ function buildReptile(model: AnimalModel, def: AnimalDef, detail: number): void 
     bodyGroup,
   );
   torso.castShadow = true;
+
+  /*
+   * Cross-banding over the back.
+   *
+   * A basking crocodilian is not one flat olive tone: dark bars run across the
+   * back and continue as rings down the tail, and against pale ground they are
+   * the pattern you actually see from a distance. Without them the animal read
+   * as a single moulded shape — the right colour, and still plainly a toy.
+   *
+   * Laid on the torso's cross-section by angle, in one baked mesh.
+   */
+  if (detail > 0.6) {
+    const barsAlong = 6;
+    const across = 7;
+    const bar = ellipsoid(L * 0.022, W * 0.05, W * 0.09, 5);
+    bakedMarkings(bodyGroup, shade(c.accent, 0.72), barsAlong * across, (i, at) => {
+      const b = Math.floor(i / across);
+      const h = Math.sin(b * 43.21) * 43758.5453;
+      const jitter = h - Math.floor(h);
+      // Uneven spacing and reach: a banding pattern is never regular.
+      const x = (b / (barsAlong - 1) - 0.5) * L * 0.6 + (jitter - 0.5) * L * 0.03;
+      const t = (x / (L * 0.34)) ** 2;
+      const shrink = Math.sqrt(Math.max(0.05, 1 - t));
+      const reach = 1.0 + jitter * 0.35;
+      const angle = ((i % across) / (across - 1) - 0.5) * 2 * reach;
+      at.position.set(
+        x,
+        Math.cos(angle) * W * 0.33 * shrink * 0.97,
+        Math.sin(angle) * W * 0.48 * shrink * 0.97,
+      );
+      at.rotation.x = angle;
+      return bar;
+    });
+  }
 
   if (detail > 0.4) {
     /*
@@ -2583,35 +2697,71 @@ function buildApe(model: AnimalModel, def: AnimalDef, detail: number): void {
      * flattened to a fifth of its old height, sunk far enough in that only its
      * cap shows, and made long enough to run into its neighbours.
      */
-    const stations = detail > 0.6 ? 9 : 5;
-    for (let i = 0; i < stations; i++) {
-      const t = i / (stations - 1);
-      const x = L * (-0.26 + t * 0.54);
-      // Wider over the shoulders, narrowing towards the hips, like the animal's.
-      const reach = 0.8 - t * 0.3;
-      const across = detail > 0.6 ? 5 : 3;
-      for (let j = 0; j < across; j++) {
-        const angle = (j / (across - 1) - 0.5) * 2 * reach;
-        const p = surfacePoint(x, angle);
-        if (!p) continue;
-        const patch = mesh(
-          ellipsoid(L * 0.075, W * 0.032, W * 0.13, detail > 0.6 ? 7 : 5),
-          // Knocked well down from the palette's accent. At full brightness the
-          // saddle read as patches of snow on a black animal; a silverback's is
-          // a *slightly* paler grey than the coat around it, and the coat here
-          // is nearly black.
-          shade(c.accent, 0.62),
-          bodyGroup,
-          p[0],
-          // Sunk in along the local normal, so only the cap of each patch shows.
-          p[1] - Math.cos(angle) * W * 0.035,
-          p[2] - Math.sin(angle) * W * 0.035,
-        );
-        // Rolled to lie flat on the curve at this point around the body.
-        patch.rotation.x = angle;
-        patch.castShadow = false;
+    /*
+     * ## Where the silver actually is
+     *
+     * In a photograph of a mature male the silver is one continuous band across
+     * the *lower* back and the loins, wrapping well down both flanks, and it
+     * stops at the shoulder — the shoulders, arms and head stay black. The first
+     * version spread scattered patches from shoulder to hip, which read as
+     * lichen or as snow rather than as the animal's one unmistakable marking.
+     *
+     * So: rear half only, wrapping further round, and packed densely enough that
+     * the pieces merge into a single field of colour. They are baked into one
+     * mesh, because a saddle is paint on a back — see bakedMarkings.
+     */
+    /*
+     * ## The saddle is a skin, not a set of tiles
+     *
+     * Two attempts at this were made out of separate patches — first spheres,
+     * then flattened discs — and both read as objects lying on the animal:
+     * boulders in the first version, roof shingles in the second, each one's cap
+     * poking out at its own height because a flat disc cannot follow a curve.
+     *
+     * A saddle is a region of the animal's own surface in a different colour, so
+     * that is what this builds: a grid of points evaluated *on* the body, lifted
+     * a centimetre along the normal, stitched into one smooth strip. It follows
+     * the union of masses wherever they go, has no edges of its own inside the
+     * band, and it is one mesh with smooth normals — so it reads as fur that
+     * changed colour, which is what it is.
+     */
+    const cols = detail > 0.6 ? 16 : 8;
+    const rows = detail > 0.6 ? 10 : 5;
+    const verts: number[] = [];
+    const indices: number[] = [];
+    for (let i = 0; i <= cols; i++) {
+      const t = i / cols;
+      // From the base of the spine forward to just behind the shoulder yoke.
+      const x = L * (-0.34 + t * 0.44);
+      // Widest over the loins, tapering out as it approaches the shoulder — and
+      // fading to nothing at the front edge so the band ends rather than stops.
+      const reach = (1.05 - t * 0.45) * Math.min(1, (1 - t) * 3.2);
+      for (let j = 0; j <= rows; j++) {
+        const angle = (j / rows - 0.5) * 2 * reach;
+        const p = surfacePoint(x, angle) ?? [x, 0, 0];
+        // A centimetre proud of the coat, along the local normal.
+        verts.push(p[0], p[1] + Math.cos(angle) * 0.012, p[2] + Math.sin(angle) * 0.012);
       }
     }
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        const a = i * (rows + 1) + j;
+        const b = a + rows + 1;
+        indices.push(a, b, a + 1, a + 1, b, b + 1);
+      }
+    }
+    const saddleGeometry = new THREE.BufferGeometry();
+    saddleGeometry.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    saddleGeometry.setIndex(indices);
+    saddleGeometry.computeVertexNormals();
+    const saddle = new THREE.Mesh(
+      saddleGeometry,
+      // Knocked down from the palette's accent: a silverback's saddle is a
+      // *paler grey* against a nearly black coat, not a white blanket.
+      new THREE.MeshLambertMaterial({ color: shade(c.accent, 0.72), side: THREE.DoubleSide }),
+    );
+    saddle.castShadow = false;
+    bodyGroup.add(saddle);
   }
 
   // --- Head --------------------------------------------------------------
@@ -2897,11 +3047,29 @@ function buildShelled(model: AnimalModel, def: AnimalDef, detail: number): void 
   model.root.add(bodyGroup);
   model.body = bodyGroup;
 
-  // Domed shell.
-  const shell = mesh(sphere(W * 0.62, detail > 0.5 ? 10 : 6), c.accent, bodyGroup, 0, H * 0.1, 0);
+  /*
+   * Domed shell.
+   *
+   * The dome is the *seams*, not the shell: it only shows in the gaps between
+   * the scutes laid on top of it, so it is nearly black. On a photograph of a
+   * young tortoise those dark lines between tan plates are the single most
+   * recognisable thing about the animal — with the dome painted the same tan as
+   * the plates there was no pattern at all, just a brown hat.
+   */
+  const shell = mesh(
+    sphere(W * 0.62, detail > 0.5 ? 10 : 6),
+    shade(c.accent, 0.45),
+    bodyGroup,
+    0,
+    H * 0.1,
+    0,
+  );
   shell.scale.set(L / (W * 1.24), 0.62, 1);
   // Plastron.
-  mesh(box(L * 0.7, H * 0.12, W * 0.8), c.belly, bodyGroup, 0, -H * 0.24, 0);
+  // An ellipsoid, not a box. As a box its four corners stuck out past the
+  // carapace as pale blocks, which is exactly the kind of thing you stop seeing
+  // once you know it is there and cannot un-see in a screenshot.
+  mesh(ellipsoid(L * 0.34, H * 0.07, W * 0.34, 8), c.belly, bodyGroup, 0, -H * 0.22, 0);
 
   /*
    * Scutes: the plated pattern that makes a shell a shell.
@@ -2936,26 +3104,61 @@ function buildShelled(model: AnimalModel, def: AnimalDef, detail: number): void 
       // `along` is -1..1 down the shell, `ring` the angle from the spine.
       const t = Math.max(-0.999, Math.min(0.999, along));
       const shrink = Math.sqrt(1 - t * t);
+      const x = t * shellR[0] * 0.97;
+      const y = shellY + Math.cos(ring) * shellR[1] * 0.97 * shrink;
+      const z = side * Math.sin(ring) * shellR[2] * 0.97 * shrink;
       const m = mesh(
         ellipsoid(size * L * 0.5, size * W * 0.5, size * W * 0.14, 6),
         color,
         bodyGroup,
-        t * shellR[0] * 0.97,
-        shellY + Math.cos(ring) * shellR[1] * 0.97 * shrink,
-        side * Math.sin(ring) * shellR[2] * 0.97 * shrink,
+        x,
+        y,
+        z,
       );
       m.rotation.x = side * (ring - Math.PI / 2);
       m.castShadow = false;
+
+      /*
+       * The blotch in the middle of the scute.
+       *
+       * Every scute on a young tortoise carries a dark mark in it — roughly a
+       * triangle, roughly centred, and different on every plate. Without them
+       * the carapace is a mosaic of plain tan tiles, which is a shell nobody
+       * would photograph; with them it is *this* tortoise. Placed on top of the
+       * plate it sits on, and slightly proud of it so it is never swallowed.
+       */
+      if (detail > 0.7) {
+        const blotch = mesh(
+          ellipsoid(size * L * 0.24, size * W * 0.24, size * W * 0.12, 5),
+          shade(c.accent, 0.24),
+          bodyGroup,
+          x + size * L * 0.05,
+          y + Math.cos(ring) * size * W * 0.04,
+          z + side * Math.sin(ring) * size * W * 0.04,
+        );
+        blotch.rotation.x = m.rotation.x;
+        blotch.castShadow = false;
+      }
     };
 
-    // A central row of vertebrals, flanked by two rows of costals a side.
+    /*
+     * A central row of vertebrals, flanked by two rows of costals a side.
+     *
+     * All of them in the shell's own tan now. The middle row used to alternate
+     * with the plastron's pale cream, which put a stripe of belly colour down
+     * the top of the carapace — on the photograph the scutes are all the same
+     * ground colour and it is the dark blotches that make the pattern.
+     */
     for (let i = 0; i < 5; i++) {
-      plate((i / 4 - 0.5) * 1.35, 0, 1, 0.3, c.body);
+      plate((i / 4 - 0.5) * 1.4, 0, 1, 0.36, c.body);
     }
     for (const side of [-1, 1]) {
       for (let i = 0; i < 4; i++) {
-        plate((i / 3 - 0.5) * 1.3, 0.62, side, 0.28, c.belly);
-        plate((i / 3 - 0.5) * 1.2, 1.18, side, 0.24, c.body);
+        plate((i / 3 - 0.5) * 1.34, 0.6, side, 0.34, c.body);
+        plate((i / 3 - 0.5) * 1.26, 1.14, side, 0.3, shade(c.body, 1.06));
+        // The marginal row, around the rim of the carapace. Without it the dome
+        // showed through as a bare dark band all along the lower flank.
+        plate((i / 3 - 0.5) * 1.18, 1.62, side, 0.24, shade(c.body, 0.92));
       }
     }
     // A rim around the lower edge of the carapace, which is what gives a shell
