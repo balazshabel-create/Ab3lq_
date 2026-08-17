@@ -165,6 +165,16 @@ const info = await page.evaluate((what) => {
     const offZ = deck.dirX;
     const radius = Number(new URLSearchParams(location.search).get('r') ?? '') || deck.halfLength * 1.5 + 26;
     rig.setFreeAnchor(deck.x + offX * 6, deck.z + offZ * 6, radius);
+    /*
+     * Taken from above the canopy, off to the side of the span. The orbit camera
+     * sits thirty metres up and looks at a point six metres over the ground,
+     * which in a jungle this dense means photographing a leaf — the bridge is
+     * down among the trunks and has to be looked *down* at.
+     */
+    rig.update = () => {};
+    const cam = game.renderer.camera;
+    cam.position.set(deck.x + offX * radius * 0.7, deck.y + 26, deck.z + offZ * radius * 0.7);
+    cam.lookAt(deck.x, deck.y, deck.z);
     return { span: deck.halfLength * 2, deckY: deck.y };
   }
 

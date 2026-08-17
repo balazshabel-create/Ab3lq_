@@ -157,6 +157,10 @@ class Game {
   private lastLightningTime = -99;
   /** Tracks the attack cooldown edge, so a bite can be heard and felt. */
   private lastAttackReady = true;
+  /** Airborne last frame, so a jump and a landing can be heard once each. */
+  private wasAirborne = false;
+  /** Seconds since the last swimming stroke was heard. */
+  private swimStrokeTimer = 0;
   /**
    * The heading the player is steering towards, in the animal's own frame.
    *
@@ -751,6 +755,22 @@ class Game {
       audioSystem.updateFlyBuzz(snapshot.self.flies);
 
       /*
+       * Leaving the ground and hitting it again.
+       *
+       * Driven off the authority's own airborne flag rather than off the jump
+       * key, so a jump the server refused — no stamina, already in the air —
+       * makes no sound. The landing is "hard" when the animal was up for long
+       * enough to have fallen rather than hopped.
+       */
+      const airborne = self ? (self.flags & ActorFlags.Airborne) !== 0 : false;
+      if (this.renderer.animals.getPosition(this.state.actorId, this.tmpVec)) {
+        const p = this.tmpVec;
+        if (airborne && !this.wasAirborne) audioSystem.playJump(p.x, p.y, p.z);
+        if (!airborne && this.wasAirborne) audioSystem.playLand(p.x, p.y, p.z, false);
+      }
+      this.wasAirborne = airborne;
+
+      /*
        * Bite feedback.
        *
        * The server emits an attack noise, but noises are only streamed to a
@@ -823,7 +843,7 @@ class Game {
     }
 
     this.renderer.render(dt, this.state.world);
-    this.updateAudioListener();
+    this.updateAudioListener(dt);
     this.updateHud(dt);
 
     requestAnimationFrame((t) => this.frame(t));
@@ -997,7 +1017,7 @@ class Game {
     return self ? (self.flags & ActorFlags.Airborne) !== 0 : false;
   }
 
-  private updateAudioListener(): void {
+  private updateAudioListener(dt: number): void {
     const camera = this.renderer.camera;
     camera.getWorldDirection(this.cameraForward);
     audioSystem.setListener(
@@ -1024,6 +1044,43 @@ class Game {
       storm: this.renderer.stormExposure,
       dt: 0,
     });
+
+    /*
+     * The wall's rumble, and one stroke per swimming beat.
+     *
+     * `stormExposure` is how deep into the storm the camera is, which is the
+     * right number for the *effect* of standing in it — but the rumble has to
+     * start well before that, because its whole job is to warn. So it is driven
+     * from the distance to the circle's edge instead: audible at eighty metres,
+     * loud at the boundary.
+     */
+    const zone = this.state.zone;
+    let rumble = this.renderer.stormExposure;
+    if (zone) {
+      const d = Math.hypot(camera.position.x - zone.x, camera.position.z - zone.z);
+      const toEdge = zone.radius - d;
+      rumble = Math.max(rumble, clamp01(1 - toEdge / 80));
+    }
+    audioSystem.updateStormRumble(rumble);
+
+    if (self && !this.state.dead) {
+      const swimming = this.terrain.isWater(camera.position.x, camera.position.z);
+      const moving = (this.state.latestSnapshot?.actors ?? []).some(
+        (a) => a.id === this.state.actorId && a.gait > 0.25,
+      );
+      if (swimming && moving) {
+        this.swimStrokeTimer -= dt;
+        if (this.swimStrokeTimer <= 0) {
+          // Roughly a stroke a second, jittered so a long swim does not tick.
+          this.swimStrokeTimer = 0.75 + Math.random() * 0.35;
+          if (this.renderer.animals.getPosition(this.state.actorId, this.tmpVec)) {
+            audioSystem.playSwimStroke(this.tmpVec.x, this.tmpVec.y, this.tmpVec.z);
+          }
+        }
+      } else {
+        this.swimStrokeTimer = 0;
+      }
+    }
   }
 
   /** How close the player is to open water, for the river ambience. */

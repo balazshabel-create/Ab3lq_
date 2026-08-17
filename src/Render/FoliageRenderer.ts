@@ -2459,18 +2459,63 @@ function buildBridge(): PropAssets {
       hanger.translate(side * 1.15, bottom + h * 0.5, t * half);
       parts.push({ geometry: hanger, color: new THREE.Color(0x342f26) });
     }
-    // Handrail at hand height, following the deck's own sag.
-    for (let i = 0; i < 14; i++) {
-      const t0 = (i / 14) * 2 - 1;
-      const t1 = ((i + 1) / 14) * 2 - 1;
-      const y0 = deckY + 0.95 - Math.cos(t0 * Math.PI * 0.5) * sag;
-      const y1 = deckY + 0.95 - Math.cos(t1 * Math.PI * 0.5) * sag;
-      const dz = (t1 - t0) * half;
-      const len = Math.hypot(dz, y1 - y0);
-      const rail = new THREE.BoxGeometry(0.07, 0.07, len);
-      rail.rotateX(-Math.atan2(y1 - y0, dz));
-      rail.translate(side * 1.12, (y0 + y1) * 0.5, (t0 + t1) * 0.5 * half);
-      parts.push({ geometry: rail, color: new THREE.Color(0x40331f) });
+    /*
+     * Two rails, at hand height and at knee height, both following the deck's
+     * own sag — and posts between them.
+     *
+     * A single rail hanging in the air over a deck is the thing that gave this
+     * away as a set of separate objects rather than a structure: nothing was
+     * holding it up. The posts are what tie the deck, the rails and the cables
+     * into one bridge, and they cost eight boxes a side.
+     */
+    for (const [height, thickness, color] of [
+      [0.95, 0.07, 0x40331f],
+      [0.48, 0.05, 0x3a2e1c],
+    ] as const) {
+      for (let i = 0; i < 14; i++) {
+        const t0 = (i / 14) * 2 - 1;
+        const t1 = ((i + 1) / 14) * 2 - 1;
+        const y0 = deckY + height - Math.cos(t0 * Math.PI * 0.5) * sag;
+        const y1 = deckY + height - Math.cos(t1 * Math.PI * 0.5) * sag;
+        const dz = (t1 - t0) * half;
+        const len = Math.hypot(dz, y1 - y0);
+        const rail = new THREE.BoxGeometry(thickness, thickness, len);
+        rail.rotateX(-Math.atan2(y1 - y0, dz));
+        rail.translate(side * 1.12, (y0 + y1) * 0.5, (t0 + t1) * 0.5 * half);
+        parts.push({ geometry: rail, color: new THREE.Color(color) });
+      }
+    }
+    // Posts from the deck up to the handrail.
+    for (let i = 0; i <= 8; i++) {
+      const t = (i / 8) * 2 - 1;
+      const deck = deckY - Math.cos(t * Math.PI * 0.5) * sag;
+      const post = new THREE.BoxGeometry(0.06, 1.0, 0.05);
+      post.translate(side * 1.12, deck + 0.5, t * half);
+      parts.push({ geometry: post, color: new THREE.Color(0x4a3a24) });
+    }
+  }
+
+  /*
+   * --- Anchors ------------------------------------------------------------
+   *
+   * The cables used to end in mid-air at the deck ends. A suspension bridge is
+   * held up by whatever its cables are tied to, and a pile of stones at each end
+   * is both the honest answer and the thing that makes the crossing look built
+   * rather than placed — you can see where the work went.
+   */
+  for (const end of [-1, 1]) {
+    const block = new THREE.BoxGeometry(3.1, 0.55, 0.06);
+    block.translate(0, deckY - 0.2, end * half * 0.995);
+    parts.push({ geometry: block, color: new THREE.Color(0x5c5a52) });
+    for (const side of [-1, 1]) {
+      // A boulder over each cable end, and a lashing where the rope enters it.
+      const stone = new THREE.SphereGeometry(0.42, 7, 5);
+      stone.scale(1, 0.7, 0.5);
+      stone.translate(side * 1.15, deckY - 0.1, end * half * 0.99);
+      parts.push({ geometry: stone, color: new THREE.Color(0x6b675d) });
+      const lash = new THREE.BoxGeometry(0.14, 0.14, 0.05);
+      lash.translate(side * 1.15, deckY + 0.16, end * half * 0.985);
+      parts.push({ geometry: lash, color: new THREE.Color(0x241f18) });
     }
   }
 

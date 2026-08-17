@@ -1037,11 +1037,135 @@ export class AudioSystem {
    * Non-positional for your own swarm: you should be able to *hear* that you are
    * in trouble even when the camera is pointed away from you.
    */
+  /**
+   * The storm wall's rumble, as a held loop rather than an event.
+   *
+   * The circle is the round's clock and its edge is a wall of weather, and until
+   * now it was silent: you could walk into damage with nothing but a HUD line to
+   * warn you. A low roll that grows as you approach is the warning a wall of
+   * rain would actually give, and it is the one cue that works when the wall is
+   * behind you.
+   */
+  private stormBed: { gain: GainNode; source: AudioBufferSourceNode } | null = null;
+
   private flySwarm: {
     gain: GainNode;
     filter: BiquadFilterNode;
     voices: { osc: OscillatorNode; drift: OscillatorNode; driftGain: GainNode }[];
   } | null = null;
+
+  /**
+   * Set the storm rumble's level, 0..1. Called every frame.
+   *
+   * Built from the same noise buffer everything else here uses, looped through a
+   * lowpass — a storm heard from inside the jungle is almost entirely below
+   * 200 Hz, because that is all that survives a kilometre of leaves.
+   */
+  updateStormRumble(level: number): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.ambienceBus || !this.noiseBuffer) return;
+    const want = clamp01(level);
+
+    if (!this.stormBed) {
+      if (want <= 0.01) return;
+      const source = ctx.createBufferSource();
+      source.buffer = this.noiseBuffer;
+      source.loop = true;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 190;
+      lp.Q.value = 0.6;
+      // A second, even lower band for the pressure you feel rather than hear.
+      const sub = ctx.createBiquadFilter();
+      sub.type = 'lowpass';
+      sub.frequency.value = 70;
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      source.connect(lp).connect(sub).connect(gain).connect(this.ambienceBus);
+      source.start(0);
+      this.stormBed = { gain, source };
+    }
+    // Eased over a second: the wall does not arrive suddenly, and a level that
+    // jumped with the camera would read as a mixing fault.
+    this.stormBed.gain.gain.setTargetAtTime(want * 0.5, ctx.currentTime, 0.6);
+  }
+
+  /** A jump: an exhale and the rustle of leaving the ground. */
+  playJump(x: number, y: number, z: number): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.sfxBus || !this.noiseBuffer) return;
+    const t = ctx.currentTime;
+    const source = ctx.createBufferSource();
+    source.buffer = this.noiseBuffer;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(700, t);
+    bp.frequency.exponentialRampToValueAtTime(1500, t + 0.12);
+    bp.Q.value = 0.8;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.12, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    source.connect(bp).connect(gain).connect(this.createPanner(x, y, z, 40)).connect(this.sfxBus);
+    source.start(t, Math.random(), 0.2);
+  }
+
+  /**
+   * A landing. `hard` is for a fall rather than a hop.
+   *
+   * Two parts, because that is what landing sounds like: the impact, which is
+   * mostly under 200 Hz and is the part you feel, and the leaf litter that flies
+   * up afterwards.
+   */
+  playLand(x: number, y: number, z: number, hard: boolean): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.sfxBus || !this.noiseBuffer) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(hard ? 110 : 150, t);
+    osc.frequency.exponentialRampToValueAtTime(42, t + 0.16);
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(hard ? 0.4 : 0.2, t);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    osc.connect(oscGain).connect(this.createPanner(x, y, z, 60)).connect(this.sfxBus);
+    osc.start(t);
+    osc.stop(t + 0.22);
+
+    const source = ctx.createBufferSource();
+    source.buffer = this.noiseBuffer;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(2600, t);
+    lp.frequency.exponentialRampToValueAtTime(500, t + 0.18);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(hard ? 0.22 : 0.12, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    source.connect(lp).connect(gain).connect(this.createPanner(x, y, z, 60)).connect(this.sfxBus);
+    source.start(t, Math.random(), 0.3);
+  }
+
+  /** One swimming stroke: a swirl rather than a splash. */
+  playSwimStroke(x: number, y: number, z: number): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.sfxBus || !this.noiseBuffer) return;
+    if (!this.takeBudget()) return;
+    const t = ctx.currentTime;
+    const source = ctx.createBufferSource();
+    source.buffer = this.noiseBuffer;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    // Rising, then falling: water gathering round a limb and closing behind it.
+    bp.frequency.setValueAtTime(400, t);
+    bp.frequency.exponentialRampToValueAtTime(1100, t + 0.12);
+    bp.frequency.exponentialRampToValueAtTime(320, t + 0.34);
+    bp.Q.value = 0.7;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.1, t + 0.06);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.36);
+    source.connect(bp).connect(gain).connect(this.createPanner(x, y, z, 40)).connect(this.sfxBus);
+    source.start(t, Math.random(), 0.45);
+  }
 
   updateFlyBuzz(intensity: number): void {
     const ctx = this.ctx;
