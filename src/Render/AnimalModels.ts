@@ -16,6 +16,7 @@
  */
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   ANIMALS,
   BodyPlan,
@@ -353,6 +354,12 @@ function addJointedLeg(
     detail: number;
     /** Toes on the foot, for the animals that should show them. */
     toes?: number;
+    /**
+     * Claw colour. A claw is built at the tip of each toe, which is the only
+     * place one can go: guessed positions relative to the ankle put them
+     * through the foot or hanging off the front of it like spurs.
+     */
+    clawColor?: number;
   },
 ): void {
   const { length, radius, detail, forward } = options;
@@ -459,7 +466,7 @@ function addJointedLeg(
       // the leg is thick read as fingers.
       const reach = radius * (0.9 - Math.abs(across) * 0.35);
       const seg = mesh(
-        ellipsoid(reach, radius * 0.34, radius * 0.32, 5),
+        ellipsoid(reach, radius * 0.34, radius * 0.32, detail > 0.8 ? 7 : 5),
         options.footColor,
         toe,
         forward * reach * 0.75,
@@ -467,18 +474,59 @@ function addJointedLeg(
         0,
       );
       seg.castShadow = false;
+
+      /*
+       * A knuckle where the toe leaves the pad, and a claw at the end of it.
+       *
+       * The knuckle is what stops a toe reading as a peg pushed into the foot —
+       * a real digit is thickest at its base joint and tapers from there. The
+       * claw is small on purpose: sheathed claws show as a point at the front
+       * of the toe, and anything longer turns a paw into a garden fork.
+       */
+      if (detail > 0.8) {
+        const knuckle = mesh(
+          ellipsoid(radius * 0.24, radius * 0.3, radius * 0.28, 5),
+          options.footColor,
+          toe,
+          forward * reach * 0.15,
+          radius * 0.06,
+          0,
+        );
+        knuckle.castShadow = false;
+      }
+      if (options.clawColor !== undefined && detail > 0.75) {
+        const claw = mesh(
+          cone(radius * 0.11, radius * 0.34),
+          options.clawColor,
+          toe,
+          forward * (reach * 1.5 + radius * 0.1),
+          -radius * 0.12,
+          0,
+        );
+        // Rolled forward and down: a claw follows the toe and curves under.
+        claw.rotation.z = forward * (-Math.PI / 2 + 0.55);
+        claw.castShadow = false;
+      }
     }
   } else if (toeCount === 0) {
-    // No toes asked for: a hoof-like block, which is what the animals that pass
-    // zero actually have.
-    mesh(
-      box(radius * 1.5, radius * 0.6, radius * 1.5),
-      options.footColor,
-      knee,
-      forward * radius * 0.5,
-      footY,
-      0,
-    );
+    /*
+     * No toes asked for: a hoof.
+     *
+     * Two blocks with a split down the middle rather than one, because the
+     * animals that pass zero here are the cloven-hoofed ones and the split is
+     * the entire visual difference between a hoof and a peg.
+     */
+    for (const side of [-1, 1]) {
+      const half = mesh(
+        box(radius * 1.4, radius * 0.62, radius * 0.62),
+        options.footColor,
+        knee,
+        forward * radius * 0.5,
+        footY,
+        side * radius * 0.4,
+      );
+      half.castShadow = false;
+    }
   }
 
   model.legs.push(hip);
@@ -589,6 +637,10 @@ function addTail(
  * Points are placed on a Fibonacci sphere, which spreads them evenly without any
  * of the clumping at the poles that stepping latitude and longitude produces.
  */
+/** Scratch vectors for the coat, so a hundred tufts do not allocate two hundred. */
+const FUR_AXIS = new THREE.Vector3(0, 0, 1);
+const FUR_DIR = new THREE.Vector3();
+
 function addFur(
   parent: THREE.Object3D,
   options: {
@@ -601,10 +653,18 @@ function addFur(
     /** Only cover the upper half, for animals with a bare belly. */
     topOnly?: boolean;
     centre?: [number, number, number];
+    /**
+     * Which way the coat lies, in the parent's axes. Default is −X, which on
+     * every plan here means "towards the tail".
+     */
+    sweep?: [number, number, number];
   },
 ): void {
   const { rx, ry, rz, count, length, colors } = options;
   const [cx, cy, cz] = options.centre ?? [0, 0, 0];
+  const [sx, sy, sz] = options.sweep ?? [-1, 0, 0];
+  /** One list of transformed hairs per colour, merged into one mesh at the end. */
+  const batches = new Map<number, THREE.BufferGeometry[]>();
   for (let i = 0; i < count; i++) {
     // Fibonacci sphere: even coverage, no polar clumping.
     const y = 1 - (i / (count - 1)) * 2;
@@ -638,19 +698,69 @@ function addFur(
      * is essentially one-dimensional; what makes a coat legible is the *number*
      * of edges breaking the outline, not the area of each one.
      */
-    const tuft = mesh(
-      box(len * 0.2, len * 0.12, len),
-      colors[i % colors.length],
-      parent,
+    const tuft = new THREE.Object3D();
+    tuft.position.set(
       // Base slightly inside the surface, so no tuft floats free of the body.
-      cx + nx * rx * 0.88,
-      cy + y * ry * 0.88,
-      cz + nz * rz * 0.88,
+      cx + nx * rx * 0.9,
+      cy + y * ry * 0.9,
+      cz + nz * rz * 0.9,
     );
-    tuft.lookAt(cx + nx * rx * 2.6, cy + y * ry * 2.6, cz + nz * rz * 2.6);
-    // Then lie it back along the body: fur sweeps, it does not stand on end.
-    tuft.rotateX(0.5 + jitter * 0.5);
-    tuft.castShadow = false;
+
+    /*
+     * ## Fur lies down
+     *
+     * The first version aimed each tuft straight out along the surface normal
+     * and then tilted it back by half a radian, which is nowhere near enough:
+     * a capybara came out wearing a palisade of blocks standing off its spine,
+     * visible from across the map and looking like damage rather than like a
+     * coat. Hair on a living animal lies almost flat, pointing towards the
+     * tail, and only the ends of it leave the body at all.
+     *
+     * So the tuft is aimed along a direction that is mostly *sweep* — down the
+     * body — with a small outward component to keep it clear of the surface.
+     * The jitter goes into that outward part, which is what makes the coat look
+     * combed rather than printed: some hairs stand up a little more than their
+     * neighbours, and none of them stand up like a fence post.
+     */
+    /*
+     * The rotation is set from a local direction rather than with `lookAt`,
+     * which resolves its target in *world* space. Every plan hangs its coat off
+     * a body group that is a metre or so off the origin, so the old lookAt call
+     * — given a target computed in local coordinates — aimed the whole coat at a
+     * point below the animal, and that downward skew is half of why it never
+     * looked like fur.
+     */
+    const lift = 0.16 + jitter * 0.26;
+    FUR_DIR.set(sx + nx * lift, sy + y * lift, sz + nz * lift).normalize();
+    tuft.quaternion.setFromUnitVectors(FUR_AXIS, FUR_DIR);
+    tuft.updateMatrix();
+
+    /*
+     * Baked into a shared geometry rather than added as its own mesh.
+     *
+     * A coat is two hundred and fifty hairs, and two hundred and fifty meshes
+     * is two hundred and fifty draw calls — per animal, with up to forty
+     * animals carrying a full coat at once. Transforming each hair's four
+     * triangles into one buffer per colour turns that into three draw calls,
+     * and it is the only reason the coat can be dense enough to look like fur.
+     */
+    const colour = colors[i % colors.length];
+    let batch = batches.get(colour);
+    if (!batch) {
+      batch = [];
+      batches.set(colour, batch);
+    }
+    batch.push(box(len * 0.09, len * 0.07, len).clone().applyMatrix4(tuft.matrix));
+  }
+
+  for (const [colour, geometries] of batches) {
+    if (geometries.length === 0) continue;
+    const merged = mergeGeometries(geometries, false);
+    for (const g of geometries) g.dispose();
+    if (!merged) continue;
+    const coat = new THREE.Mesh(merged, material(colour));
+    coat.castShadow = false;
+    parent.add(coat);
   }
 }
 
@@ -811,17 +921,26 @@ function buildQuadruped(
       0,
     );
     belly.castShadow = false;
-    // Shoulder blades, standing a little proud of the back.
+    /*
+     * Shoulder blades, standing a little proud of the back.
+     *
+     * Tucked in and rounded off since the first attempt, which put a tall
+     * ellipsoid at six segments half out of the animal's back: from the side it
+     * read as a fin, and it was the first thing the eye landed on. A scapula
+     * shows as a *swelling* that moves under the skin, so it now sits mostly
+     * inside the barrel and only breaks the outline over the top.
+     */
     if (detail > 0.6) {
       for (const side of [-1, 1]) {
-        mesh(
-          ellipsoid(L * 0.09, H * 0.12, W * 0.1, 6),
+        const blade = mesh(
+          ellipsoid(L * 0.055, H * 0.075, W * 0.1, detail > 0.7 ? 9 : 6),
           c.body,
           bodyGroup,
-          L * 0.22,
-          H * 0.18,
-          side * W * 0.3,
+          L * 0.2,
+          H * 0.1,
+          side * W * 0.24,
         );
+        blade.castShadow = false;
       }
     }
   }
@@ -845,8 +964,11 @@ function buildQuadruped(
       rx: L * 0.32,
       ry: barrelR * 0.92,
       rz: barrelR * (style === 1 ? 0.82 : 0.94),
-      count: shaggy ? 130 : 96,
-      length: (shaggy ? 0.24 : 0.17) * W,
+      // Denser than before, because each tuft is now a fifth of the width it
+      // was: a coat is legible through the number of edges in it, and thin
+      // hairs can be packed at a count that would have been a hedge of planks.
+      count: shaggy ? 260 : 190,
+      length: (shaggy ? 0.2 : 0.15) * W,
       // Coat colours only. A cream tuft on a tiger's back reads as a chip of
       // bone stuck to it, because a tiger's pale fur is on its underside.
       colors: [c.body, c.accent, c.body],
@@ -864,8 +986,8 @@ function buildQuadruped(
       rx: L * 0.12,
       ry: barrelR * 0.7,
       rz: barrelR * 0.78,
-      count: 46,
-      length: (shaggy ? 0.22 : 0.16) * W,
+      count: 90,
+      length: (shaggy ? 0.22 : 0.17) * W,
       // Coat colours only. A pale tuft in the ruff reads as a chip of bone
       // stuck to the animal's neck, not as fur catching the light.
       colors: [c.body, c.accent, c.body],
@@ -879,17 +1001,37 @@ function buildQuadruped(
   bodyGroup.add(neck);
   model.head = neck;
 
-  // A visible neck between the chest and the skull, angled up and forward.
+  /*
+   * The neck, as a taper rather than a tube.
+   *
+   * It was one eight-sided capsule laid at a slant, and eight sides on a
+   * cylinder that wide is four visible flat planes: from the side the tiger had
+   * a wedge of plate armour between its head and its shoulders, which was the
+   * most obvious flaw left on the model. A neck is thick where it leaves the
+   * chest and thinner at the skull, so it is built as two overlapping masses
+   * that go from one to the other, with enough segments to round off.
+   */
   if (detail > 0.4) {
-    const neckMesh = mesh(
-      capsule(W * 0.26, L * (style === 1 ? 0.16 : 0.12), detail > 0.5 ? 8 : 5),
+    const neckLen = L * (style === 1 ? 0.16 : 0.12);
+    const seg = detail > 0.5 ? 10 : 5;
+    const base = mesh(
+      ellipsoid(neckLen * 0.7, W * 0.3, W * 0.29, seg),
       c.body,
       neck,
-      -L * 0.02,
-      -H * 0.02,
+      -L * 0.05,
+      -H * 0.05,
       0,
     );
-    neckMesh.rotation.z = Math.PI / 2 - 0.5;
+    base.castShadow = true;
+    const throat = mesh(
+      ellipsoid(neckLen * 0.6, W * 0.25, W * 0.24, seg),
+      c.body,
+      neck,
+      L * 0.03,
+      -H * 0.015,
+      0,
+    );
+    throat.castShadow = true;
   }
 
   const skull = mesh(
@@ -1058,15 +1200,44 @@ function buildQuadruped(
       }
     }
 
-    // Ears, with a darker inner surface set into the cone.
+    /*
+     * Ears, with a darker inner surface set into them.
+     *
+     * Shape follows the animal rather than the builder: a cat's ear is a
+     * triangle and a rodent's is a small round flap, and giving a capybara the
+     * cone made it look like a startled cat from the neck up. Both are hinged
+     * groups so the animator can pin them back when the animal runs.
+     */
     for (const side of [-1, 1]) {
-      const ear = mesh(cone(W * 0.13, H * 0.24), c.accent, neck, L * 0.02, W * 0.32, side * W * 0.25);
+      const pointed = style === 1;
+      const ear = pointed
+        ? mesh(cone(W * 0.13, H * 0.24), c.accent, neck, L * 0.02, W * 0.32, side * W * 0.25)
+        : mesh(
+            ellipsoid(W * 0.11, W * 0.13, W * 0.05, 7),
+            c.accent,
+            neck,
+            L * 0.0,
+            W * 0.3,
+            side * W * 0.28,
+          );
       ear.rotation.x = side * 0.25;
+      if (!pointed) ear.rotation.z = -side * 0.25;
       ear.userData.side = side;
       ear.userData.baseX = ear.rotation.x;
       model.ears.push(ear);
       if (detail > 0.6) {
-        const inner = mesh(cone(W * 0.08, H * 0.17), c.eye, neck, L * 0.035, W * 0.31, side * W * 0.25);
+        const inner = pointed
+          ? mesh(cone(W * 0.08, H * 0.17), c.eye, neck, L * 0.035, W * 0.31, side * W * 0.25)
+          : // Smaller than the flap it sits in, or a round ear reads as a hole
+            // punched through the head rather than as the inside of an ear.
+            mesh(
+              ellipsoid(W * 0.055, W * 0.065, W * 0.03, 6),
+              c.eye,
+              neck,
+              L * 0.012,
+              W * 0.298,
+              side * W * 0.295,
+            );
         inner.rotation.x = side * 0.25;
       }
     }
@@ -1091,6 +1262,44 @@ function buildQuadruped(
       mesh(sphere(W * 0.088, 7), c.eye, neck, L * 0.168, H * 0.06, side * W * 0.242);
       if (detail > 0.6) {
         mesh(sphere(W * 0.042, 5), 0x0d0b09, neck, L * 0.196, H * 0.065, side * W * 0.25);
+      }
+      /*
+       * An upper lid, in coat colour, hooding the top of the eyeball.
+       *
+       * Without one the eye is a full sphere sitting on the head and the animal
+       * stares — every one of them, permanently, which is the difference
+       * between a face and a doll. A lid over the top third also gives the eye
+       * a horizon to sit under, so it reads as set into the skull.
+       */
+      if (detail > 0.75) {
+        const lid = mesh(
+          ellipsoid(W * 0.1, W * 0.055, W * 0.055, 6),
+          c.body,
+          neck,
+          L * 0.16,
+          H * 0.06 + W * 0.075,
+          side * W * 0.238,
+        );
+        lid.rotation.z = -0.25;
+        lid.castShadow = false;
+      }
+    }
+
+    /*
+     * Nostrils. Two dark pits in the nose pad, and nothing else on the model
+     * costs so little for so much: a muzzle without them is a thumb.
+     */
+    if (detail > 0.7) {
+      for (const side of [-1, 1]) {
+        const nostril = mesh(
+          ellipsoid(L * 0.012, H * 0.016, W * 0.022, 5),
+          0x120e0c,
+          neck,
+          L * 0.288,
+          -H * 0.005,
+          side * W * 0.045,
+        );
+        nostril.castShadow = false;
       }
     }
 
@@ -1123,20 +1332,27 @@ function buildQuadruped(
       }
     }
 
-    // Whiskers on the cats: four fine bristles a side, and they read from
-    // surprisingly far away because nothing else on the model is a straight line.
-    if (style === 1 && detail > 0.7) {
+    /*
+     * Whiskers. Every animal on this plan has them, not only the cats — a
+     * capybara's are as long as its head — so they are no longer gated on
+     * style. Finer and swept back rather than sticking straight out to the
+     * sides, which is what turned the tiger's into a painted-on moustache.
+     */
+    if (detail > 0.7) {
       for (const side of [-1, 1]) {
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 4; i++) {
           const whisker = mesh(
-            box(L * 0.11, W * 0.012, W * 0.012),
+            box(L * (0.1 + i * 0.012), W * 0.008, W * 0.008),
             c.belly,
             neck,
             L * 0.25,
-            -H * 0.02 + i * H * 0.025,
-            side * W * 0.13,
+            -H * 0.035 + i * H * 0.022,
+            side * W * 0.11,
           );
-          whisker.rotation.y = side * (0.5 + i * 0.16);
+          // Fanned back and drooping a little more towards the lower rows.
+          whisker.rotation.y = side * (0.62 + i * 0.12);
+          whisker.rotation.z = -0.12 + i * 0.07;
+          whisker.castShadow = false;
         }
       }
     }
@@ -1160,6 +1376,18 @@ function buildQuadruped(
       [-L * 0.31, W * 0.38, -1],
       [-L * 0.31, -W * 0.38, -1],
     ];
+    /*
+     * Toes, on everything that has any.
+     *
+     * Only the cats used to get them and everybody else stood on a block, which
+     * is precisely the "there are no toes, just a box" complaint — a capybara
+     * has four broad toes on each front foot and looked like it was wearing
+     * clogs. The two genuinely hoofed animals here keep a hoof, and it is now a
+     * cloven one rather than a brick.
+     */
+    const hoofed = def.species === Species.Peccary || def.species === Species.Tapir;
+    const toeCount = style === 1 ? 4 : hoofed ? 0 : 3;
+    const carnivore = def.diet === Diet.Carnivore || def.diet === Diet.Omnivore;
     for (const [x, z, forward] of positions) {
       addJointedLeg(model, bodyGroup, {
         x,
@@ -1171,7 +1399,10 @@ function buildQuadruped(
         footColor: c.body,
         forward,
         detail,
-        toes: style === 1 ? 4 : 0,
+        toes: toeCount,
+        // Pale claws on the hunters, dark blunt ones on everything else — an
+        // anteater's claws are the most obvious thing about its feet.
+        clawColor: toeCount > 0 ? (carnivore ? c.belly : 0x27201a) : undefined,
       });
       /*
        * The upper leg, where it meets the body: a shoulder on the front pair and
@@ -1186,7 +1417,10 @@ function buildQuadruped(
             legR * (forward > 0 ? 1.5 : 1.9),
             legLen * 0.3,
             legR * 1.45,
-            detail > 0.7 ? 8 : 5,
+            // A haunch is the biggest smooth mass on the animal, so it is the
+            // one that shows facets first: at eight segments the tiger's back
+            // legs came out as a pair of paper cones.
+            detail > 0.7 ? 12 : 5,
           ),
           c.body,
           hip,
@@ -1204,49 +1438,48 @@ function buildQuadruped(
        * un-see once you have noticed it. Attached to the hip so they swing with
        * the limb rather than staying behind on the body.
        */
+      /*
+       * ## A marking lies *on* the leg
+       *
+       * These used to be near-spherical blobs sitting at 0.86 of the leg radius
+       * with radii of 0.42 — a quarter of their own width proud of the surface.
+       * Four rings of them turned each leg into a string of black beads, which
+       * from any distance read as a caterpillar rather than as a stripe.
+       *
+       * A marking is a *patch of skin*: flat against the surface, long around
+       * the limb and short along it. So each one is flattened radially, stretched
+       * tangentially, and turned to face out from the leg's axis — the same
+       * lesson as the body stripes, applied to a cylinder instead of a barrel.
+       */
       if (detail > 0.7 && style === 1) {
         const hip = model.legs[model.legs.length - 1];
         const spotted = def.species === Species.Leopard;
+        const ring = spotted ? [0.5, 1.8, 3.1, 4.4, 5.6] : [0, 0.9, 1.8, 2.7, 3.6, 4.5, 5.4];
         for (let b = 0; b < 4; b++) {
           const y = -legLen * (0.16 + b * 0.19);
-          const ring = spotted ? [0.6, 2.4, 4.2] : [0, 1.05, 2.1, 3.14, 4.2, 5.25];
           for (const around of ring) {
             const j = Math.abs(Math.sin(b * 12.9 + around * 7.7));
-            mesh(
-              ellipsoid(legR * (spotted ? 0.34 : 0.42), legR * 0.26, legR * 0.42, 5),
+            const band = mesh(
+              ellipsoid(
+                legR * 0.15,
+                legR * (spotted ? 0.3 : 0.24),
+                legR * (spotted ? 0.34 : 0.6),
+                5,
+              ),
               c.accent,
               hip,
-              Math.cos(around) * legR * 0.86,
+              Math.cos(around) * legR * 0.9,
               y - j * legLen * 0.03,
-              Math.sin(around) * legR * 0.86,
+              Math.sin(around) * legR * 0.9,
             );
+            // Turn the flattened axis outwards, so the patch lies on the leg
+            // instead of standing off it edge-on.
+            band.rotation.y = -around;
+            band.castShadow = false;
           }
         }
       }
 
-      // Claws, on the animals that have any use for them.
-      if (detail > 0.7 && (def.diet === Diet.Carnivore || def.diet === Diet.Omnivore)) {
-        const knee = model.knees[model.knees.length - 1];
-        if (knee) {
-          /*
-           * Claws, tucked under the toes rather than projecting past them.
-           * At half a leg-radius long and sticking out in front of the foot they
-           * read as flippers — a cat's claws are sheathed, and what you see of
-           * them is a hint at the front of the paw, not a set of blades.
-           */
-          for (let t = 0; t < 3; t++) {
-            const claw = mesh(
-              cone(legR * 0.1, legR * 0.28),
-              c.belly,
-              knee,
-              forward * legR * 0.45 + legR * 1.1,
-              -legLen * 0.5 - legR * 0.42,
-              (t - 1) * legR * 0.52,
-            );
-            claw.rotation.z = -Math.PI / 2 + 0.9;
-          }
-        }
-      }
     }
   }
 
@@ -1940,6 +2173,7 @@ function buildPrimate(model: AnimalModel, def: AnimalDef, detail: number): void 
         forward: isArm ? -1 : 1,
         detail,
         toes: 3,
+        clawColor: 0x241d18,
       });
     }
   }
@@ -2040,15 +2274,35 @@ function buildApe(model: AnimalModel, def: AnimalDef, detail: number): void {
     piece.castShadow = true;
   }
 
-  /** Height of the topmost surface of the back at this point along the body. */
-  const backTop = (x: number): number => {
-    let top = -Infinity;
+  /**
+   * A point on the body's surface, at `x` along it and `angle` around it —
+   * zero straight up, positive towards +Z.
+   *
+   * The saddle needs this because the back is a *curve*: a wide flat patch laid
+   * across it touches only along the spine and floats over the shoulders, which
+   * is exactly how the first silverback came out — a row of roof tiles balanced
+   * on the animal. Small patches placed around the curve sit down on it.
+   */
+  const surfacePoint = (x: number, angle: number): [number, number, number] | null => {
+    let best: Mass | null = null;
+    let bestR = 0;
     for (const m of masses) {
       const t = (x - m.cx) / m.rx;
       if (Math.abs(t) >= 1) continue;
-      top = Math.max(top, m.cy + m.ry * Math.sqrt(1 - t * t));
+      const shrink = Math.sqrt(1 - t * t);
+      if (m.rz * shrink > bestR) {
+        bestR = m.rz * shrink;
+        best = m;
+      }
     }
-    return top;
+    if (!best) return null;
+    const t = (x - best.cx) / best.rx;
+    const shrink = Math.sqrt(1 - t * t);
+    return [
+      x,
+      best.cy + best.ry * shrink * Math.cos(angle),
+      best.rz * shrink * Math.sin(angle),
+    ];
   };
 
   if (detail >= 1) {
@@ -2073,22 +2327,40 @@ function buildApe(model: AnimalModel, def: AnimalDef, detail: number): void {
      * The silverback saddle, laid along the back in patches that each sit on the
      * surface where they are, and applied after the coat so it reads over it.
      */
-    const patches = detail > 0.6 ? 7 : 4;
-    for (let i = 0; i < patches; i++) {
-      const x = L * (-0.24 + (i / (patches - 1)) * 0.5);
-      const top = backTop(x);
-      if (!Number.isFinite(top)) continue;
+    /*
+     * Flat, overlapping, and sunk into the back.
+     *
+     * The first version used near-spherical patches sitting a whisker below the
+     * surface, and a silverback ended up with a row of grey boulders balanced
+     * along its spine — the shape read as cargo, not as colour. A saddle is a
+     * *patch of hair*: it has no thickness of its own, so each piece is
+     * flattened to a fifth of its old height, sunk far enough in that only its
+     * cap shows, and made long enough to run into its neighbours.
+     */
+    const stations = detail > 0.6 ? 9 : 5;
+    for (let i = 0; i < stations; i++) {
+      const t = i / (stations - 1);
+      const x = L * (-0.26 + t * 0.54);
       // Wider over the shoulders, narrowing towards the hips, like the animal's.
-      const width = W * (0.34 - (i / (patches - 1)) * 0.12);
-      const patch = mesh(
-        ellipsoid(L * 0.06, W * 0.08, width, detail > 0.6 ? 8 : 5),
-        c.accent,
-        bodyGroup,
-        x,
-        top - W * 0.03,
-        0,
-      );
-      patch.castShadow = false;
+      const reach = 0.8 - t * 0.3;
+      const across = detail > 0.6 ? 5 : 3;
+      for (let j = 0; j < across; j++) {
+        const angle = (j / (across - 1) - 0.5) * 2 * reach;
+        const p = surfacePoint(x, angle);
+        if (!p) continue;
+        const patch = mesh(
+          ellipsoid(L * 0.06, W * 0.032, W * 0.11, detail > 0.6 ? 7 : 5),
+          c.accent,
+          bodyGroup,
+          p[0],
+          // Sunk in along the local normal, so only the cap of each patch shows.
+          p[1] - Math.cos(angle) * W * 0.035,
+          p[2] - Math.sin(angle) * W * 0.035,
+        );
+        // Rolled to lie flat on the curve at this point around the body.
+        patch.rotation.x = angle;
+        patch.castShadow = false;
+      }
     }
   }
 
@@ -2181,6 +2453,10 @@ function buildApe(model: AnimalModel, def: AnimalDef, detail: number): void {
         forward: -1,
         detail,
         toes: 4,
+        // Dark nails. An ape has fingernails, not claws, so they are blunt and
+        // barely proud of the finger — but their absence is what made the hands
+        // read as mittens.
+        clawColor: 0x1a1614,
       });
       // A deltoid over the shoulder joint, so the arm does not appear to be
       // pegged into the side of the chest.
@@ -2202,6 +2478,7 @@ function buildApe(model: AnimalModel, def: AnimalDef, detail: number): void {
         forward: 1,
         detail,
         toes: 4,
+        clawColor: 0x1a1614,
       });
       if (detail > 0.5) {
         const hip = model.legs[model.legs.length - 1];
@@ -2543,6 +2820,8 @@ function buildShelled(model: AnimalModel, def: AnimalDef, detail: number): void 
         detail,
         // Stumpy clawed feet: the elephantine forefoot is the tortoise read.
         toes: 3,
+        // And the claws that name it — a tortoise's are heavy, blunt and pale.
+        clawColor: c.accent,
       });
       // Yellow scales down the leg, which is the half of the name the feet were
       // missing. On the hip, so they travel with the limb.

@@ -107,7 +107,7 @@ const CLICK = { force: true, timeout: 180000 };
 
 await page.click('#screen-menu .btn-primary', CLICK);
 await page.waitForTimeout(500);
-await page.click('#screen-lobby .btn:has-text("Start Round")', CLICK);
+await page.click('#screen-lobby .btn:has-text("Start now")', CLICK);
 await page.waitForFunction(() => window.__jj?.state?.actorId > 0, null, { timeout: 30000 });
 
 /*

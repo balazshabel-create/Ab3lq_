@@ -39,7 +39,12 @@ import {
 /** Callbacks the screens fire back into the game. */
 export interface ScreenActions {
   onPlaySolo: () => void;
-  onPlayOnline: (serverUrl: string, roomCode: string) => void;
+  /**
+   * Resolves true once the client is in a lobby, false if the connection
+   * failed. The matchmaking dialog needs the answer, not just the attempt: it
+   * holds a "searching" animation up until one or the other happens.
+   */
+  onPlayOnline: (serverUrl: string, roomCode: string) => Promise<boolean>;
   onOpenSettings: () => void;
   onCloseSettings: () => void;
   onSetReady: (ready: boolean) => void;
@@ -193,7 +198,20 @@ export class MainMenu {
     );
   }
 
-  /** A small inline dialog for entering a server address and room code. */
+  /**
+   * The matchmaking dialog.
+   *
+   * Two modes, because there are exactly two things a player wants here: drop
+   * into whatever jungle has space, or meet friends in a named one. The server
+   * address is the third thing, and it is the one nobody wants to think about,
+   * so it folds away under "advanced" with a sensible guess already in it.
+   *
+   * The searching state is not decoration. Connecting either works in a few
+   * hundred milliseconds or fails after a timeout, and both of those feel like
+   * a frozen button unless something on screen is visibly working. The radar
+   * sweep runs while the socket handshake does, and the status line says what
+   * is actually being attempted.
+   */
   private showOnlineDialog(actions: ScreenActions): void {
     const existing = this.root.querySelector('.online-dialog');
     if (existing) {
@@ -202,11 +220,9 @@ export class MainMenu {
     }
 
     const dialog = el('div', { class: 'panel online-dialog' });
-    dialog.style.cssText =
-      'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:min(430px,90vw);';
 
     const header = el('div', { class: 'panel-header' });
-    header.append(el('h2', { class: 'panel-title' }, 'Join a jungle'));
+    header.append(el('h2', { class: 'panel-title' }, '◈ Find a jungle'));
     const body = el('div', { class: 'panel-body' });
 
     const defaultUrl =
@@ -214,21 +230,66 @@ export class MainMenu {
         ? `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.hostname}:8787`
         : 'ws://localhost:8787';
 
+    // --- Mode chips --------------------------------------------------------
+    let mode: 'quick' | 'code' = 'quick';
+    const modeRow = el('div', { class: 'mm-modes' });
+    const codeField = el('div', { class: 'mm-field' });
+    const codeInput = el('input', {
+      type: 'text',
+      value: '',
+      maxlength: '8',
+      placeholder: 'e.g. MANGO',
+      class: 'mm-code-input',
+    });
+    codeField.append(el('div', { class: 'section-title' }, 'Room code'), codeInput);
+
+    const modes: { id: 'quick' | 'code'; label: string; hint: string }[] = [
+      { id: 'quick', label: 'Quick match', hint: 'First jungle with space' },
+      { id: 'code', label: 'Room code', hint: 'Play with friends' },
+    ];
+    const modeButtons = new Map<string, HTMLElement>();
+    for (const def of modes) {
+      const chip = el('button', { class: 'mm-mode' });
+      chip.append(el('strong', {}, def.label), el('span', {}, def.hint));
+      chip.addEventListener('click', () => {
+        audioSystem.playUiClick();
+        mode = def.id;
+        for (const [id, node] of modeButtons) node.classList.toggle('active', id === mode);
+        codeField.classList.toggle('hidden', mode !== 'code');
+        if (mode === 'code') codeInput.focus();
+      });
+      modeButtons.set(def.id, chip);
+      modeRow.appendChild(chip);
+    }
+    modeButtons.get('quick')!.classList.add('active');
+    codeField.classList.add('hidden');
+
+    // --- Advanced: the server address --------------------------------------
     const urlInput = el('input', { type: 'text', value: defaultUrl });
-    urlInput.style.width = '100%';
-    const codeInput = el('input', { type: 'text', value: '', placeholder: 'Leave blank to join any' });
-    codeInput.style.width = '100%';
+    const advanced = el('details', { class: 'mm-advanced' });
+    const summary = el('summary', {}, 'Server address');
+    advanced.append(summary, urlInput);
+
+    // --- The searching state -----------------------------------------------
+    const searching = el('div', { class: 'mm-searching hidden' });
+    const radar = el('div', { class: 'mm-radar' });
+    radar.append(el('div', { class: 'mm-radar-sweep' }), el('div', { class: 'mm-radar-blip' }));
+    const searchText = el('div', { class: 'mm-search-text' }, 'Scanning the canopy…');
+    searching.append(radar, searchText);
+
+    const error = el('div', { class: 'mm-error hidden' });
 
     body.append(
       el(
         'div',
         { class: 'hint-text' },
-        'Run "npm run server" and share the address. Leave the room code blank to drop into the first jungle with space.',
+        'Multiplayer needs a host: run "npm run server" on one machine and share its address. Everyone else drops in from here.',
       ),
-      el('div', { class: 'section-title' }, 'Server address'),
-      urlInput,
-      el('div', { class: 'section-title' }, 'Room code'),
-      codeInput,
+      modeRow,
+      codeField,
+      advanced,
+      searching,
+      error,
     );
 
     const footer = el('div', { class: 'panel-footer' });
@@ -237,17 +298,58 @@ export class MainMenu {
       audioSystem.playUiClick('back');
       dialog.remove();
     });
-    const connect = el('button', { class: 'btn btn-small btn-primary' }, 'Connect');
-    connect.addEventListener('click', () => {
+    const connect = el('button', { class: 'btn btn-small btn-primary' }, 'Search');
+
+    // Cycle the status line while the socket is opening, so a slow connection
+    // reads as progress rather than as a hang.
+    const PHASES = [
+      'Scanning the canopy…',
+      'Following the river…',
+      'Knocking on the jungle…',
+      'Waiting for the host…',
+    ];
+    let phaseTimer = 0;
+
+    const beginSearch = () => {
       audioSystem.playUiClick('confirm');
-      dialog.remove();
-      actions.onPlayOnline(urlInput.value.trim(), codeInput.value.trim().toUpperCase());
+      error.classList.add('hidden');
+      searching.classList.remove('hidden');
+      dialog.classList.add('is-searching');
+      connect.disabled = true;
+      connect.textContent = 'Searching…';
+      let phase = 0;
+      searchText.textContent = PHASES[0];
+      phaseTimer = window.setInterval(() => {
+        phase = (phase + 1) % PHASES.length;
+        searchText.textContent = PHASES[phase];
+      }, 1400);
+
+      const code = mode === 'code' ? codeInput.value.trim().toUpperCase() : '';
+      void actions.onPlayOnline(urlInput.value.trim(), code).then((ok) => {
+        window.clearInterval(phaseTimer);
+        if (ok) {
+          dialog.remove();
+          return;
+        }
+        searching.classList.add('hidden');
+        dialog.classList.remove('is-searching');
+        connect.disabled = false;
+        connect.textContent = 'Search again';
+        error.classList.remove('hidden');
+        error.textContent =
+          'No jungle answered. Check that the server is running and that the address is reachable from here.';
+      });
+    };
+
+    connect.addEventListener('click', beginSearch);
+    codeInput.addEventListener('keydown', (ev) => {
+      if ((ev as KeyboardEvent).key === 'Enter') beginSearch();
     });
     footer.append(cancel, connect);
 
     dialog.append(header, body, footer);
     this.root.appendChild(dialog);
-    urlInput.focus();
+    connect.focus();
   }
 }
 
@@ -569,28 +671,114 @@ export class SettingsScreen {
 // Lobby
 // ---------------------------------------------------------------------------
 
+/**
+ * A stable colour per player.
+ *
+ * The lobby is the only place where players are told apart by name alone, and
+ * six lines of identical text is a list, not a lobby. Hashing the name into a
+ * hue gives everyone a consistent badge colour for as long as they keep the
+ * name — and it costs nothing over the wire, because both ends derive it from
+ * something they already have.
+ */
+function playerHue(name: string): number {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return hash % 360;
+}
+
+/** The initial shown in a player's badge. */
+function monogram(name: string): string {
+  const trimmed = name.trim();
+  return trimmed ? trimmed[0].toUpperCase() : '?';
+}
+
+/**
+ * How many slots to draw for a lobby of this size.
+ *
+ * Drawing all twelve would make a solo practice lobby eleven-twelfths empty,
+ * which reads as "nobody is here and nobody is coming". Showing a couple of
+ * open slots past the last player reads as "there is room for more" — the
+ * header still says how many the room actually takes.
+ */
+function visibleSlots(playerCount: number): number {
+  return Math.min(MAX_PLAYERS, Math.max(6, playerCount + 2));
+}
+
+/** Seconds between the lobby going all-ready and the round starting itself. */
+const AUTO_START_SECONDS = 3;
+
 export class LobbyScreen {
   readonly root: HTMLElement;
-  private playerList: HTMLElement;
+  private slotGrid: HTMLElement;
   private roomCodeValue: HTMLElement;
+  private copyNote: HTMLElement;
+  private headCount: HTMLElement;
+  private readyFill: HTMLElement;
+  private readyCount: HTMLElement;
+  private searchNote: HTMLElement;
   private speciesGrid: HTMLElement;
   private speciesDetail: HTMLElement;
   private readyButton: HTMLButtonElement;
   private startButton: HTMLButtonElement;
   private statusLine: HTMLElement;
+  private countdownBar: HTMLElement;
+  private countdownNumber: HTMLElement;
+  private countdownFill: HTMLElement;
 
   private ready = false;
   private myClientId = '';
+  private isHost = false;
+  private countdownTimer = 0;
+  private countdownLeft = 0;
+  private startRound: () => void;
+  private setReady: (ready: boolean) => void;
 
   constructor(actions: ScreenActions) {
+    this.startRound = actions.onStartRound;
+    this.setReady = actions.onSetReady;
     this.root = el('div', { id: 'screen-lobby', class: 'screen panel-screen' });
 
-    const panel = el('div', { class: 'panel' });
+    const panel = el('div', { class: 'panel lobby-panel' });
     const header = el('div', { class: 'panel-header' });
-    header.append(el('h2', { class: 'panel-title' }, 'Lobby'));
+    const titleWrap = el('div', { class: 'lobby-heading' });
+    titleWrap.append(
+      el('h2', { class: 'panel-title' }, 'Matchmaking'),
+      el('div', { class: 'lobby-subtitle' }, 'One of you will be the hunter'),
+    );
+    header.appendChild(titleWrap);
+
+    /*
+     * The room code, as a button.
+     *
+     * Sharing it is the entire point of it existing, and the way a person
+     * shares five characters is by copying them. Making the code itself the
+     * control means there is nothing to find.
+     */
+    const roomCode = el('button', { class: 'room-code', title: 'Copy the room code' });
+    this.roomCodeValue = el('div', { class: 'room-code-value' }, '—');
+    this.copyNote = el('div', { class: 'room-code-copied' }, 'Copied');
+    roomCode.append(
+      el('div', { class: 'room-code-label' }, 'Room'),
+      this.roomCodeValue,
+      this.copyNote,
+    );
+    roomCode.addEventListener('click', () => {
+      const code = this.roomCodeValue.textContent ?? '';
+      if (!code || code === '—') return;
+      audioSystem.playUiClick('confirm');
+      // Clipboard access can be refused (insecure origin, denied permission);
+      // the flash is the confirmation either way, so failure is not worth a
+      // dialog — the code is on screen to be typed.
+      void navigator.clipboard?.writeText(code).catch(() => {});
+      this.copyNote.classList.add('show');
+      window.setTimeout(() => this.copyNote.classList.remove('show'), 1100);
+    });
+    header.appendChild(roomCode);
+
     const leave = el('button', { class: 'btn btn-small' }, 'Leave');
     leave.addEventListener('click', () => {
       audioSystem.playUiClick('back');
+      this.cancelCountdown();
       actions.onLeaveLobby();
     });
     header.appendChild(leave);
@@ -598,15 +786,33 @@ export class LobbyScreen {
     const body = el('div', { class: 'panel-body' });
     const grid = el('div', { class: 'lobby-grid' });
 
-    // --- Left: players ---------------------------------------------------
+    // --- Left: the queue ---------------------------------------------------
     const left = el('div');
-    const roomCode = el('div', { class: 'room-code' });
-    this.roomCodeValue = el('div', { class: 'room-code-value' }, '—');
-    roomCode.append(el('div', { class: 'room-code-label' }, 'Room'), this.roomCodeValue);
-    left.appendChild(roomCode);
-    left.appendChild(el('div', { class: 'section-title' }, `Players (max ${MAX_PLAYERS})`));
-    this.playerList = el('div', { class: 'player-list' });
-    left.appendChild(this.playerList);
+
+    /*
+     * The status strip: a live pulse, a head count, and a ready meter.
+     *
+     * Waiting in a lobby is dead time, and dead time with nothing moving on
+     * screen feels broken. The pulse runs whenever the room still has space,
+     * which is exactly when the player is waiting for something to happen.
+     */
+    const strip = el('div', { class: 'mm-strip' });
+    const pulse = el('div', { class: 'mm-pulse' });
+    pulse.append(el('span', {}), el('span', {}), el('span', {}));
+    const stripText = el('div', { class: 'mm-strip-text' });
+    this.headCount = el('div', { class: 'mm-headcount' }, `0 / ${MAX_PLAYERS}`);
+    this.searchNote = el('div', { class: 'mm-search-note' }, 'Searching for players…');
+    stripText.append(this.headCount, this.searchNote);
+    const meter = el('div', { class: 'mm-meter' });
+    this.readyFill = el('div', { class: 'mm-meter-fill' });
+    meter.appendChild(this.readyFill);
+    this.readyCount = el('div', { class: 'mm-ready-count' }, '0 ready');
+    strip.append(pulse, stripText, meter, this.readyCount);
+    left.appendChild(strip);
+
+    this.slotGrid = el('div', { class: 'mm-slots' });
+    left.appendChild(this.slotGrid);
+
     this.statusLine = el('div', { class: 'hint-text' }, '');
     this.statusLine.style.marginTop = '14px';
     left.appendChild(this.statusLine);
@@ -640,21 +846,41 @@ export class LobbyScreen {
     grid.append(left, right);
     body.appendChild(grid);
 
-    const footer = el('div', { class: 'panel-footer' });
-    this.readyButton = el('button', { class: 'btn btn-small' }, 'Ready') as HTMLButtonElement;
+    /*
+     * The drop countdown.
+     *
+     * Once everyone has pressed ready there is nothing left to decide, and
+     * making the host find a button before anything happens is the slowest
+     * part of a lobby. Three seconds is short enough that the ready click is
+     * still the browser's live user gesture when the round starts, which is
+     * what lets the game take the mouse without the player clicking again.
+     */
+    this.countdownBar = el('div', { class: 'mm-countdown hidden' });
+    this.countdownNumber = el('div', { class: 'mm-countdown-number' }, '3');
+    const countdownTrack = el('div', { class: 'mm-countdown-track' });
+    this.countdownFill = el('div', { class: 'mm-countdown-fill' });
+    countdownTrack.appendChild(this.countdownFill);
+    this.countdownBar.append(
+      el('div', { class: 'mm-countdown-label' }, 'Dropping into the jungle'),
+      this.countdownNumber,
+      countdownTrack,
+    );
+
+    const footer = el('div', { class: 'panel-footer lobby-footer' });
+    this.readyButton = el('button', { class: 'btn btn-ready' }, 'Ready') as HTMLButtonElement;
     this.readyButton.addEventListener('click', () => {
       this.ready = !this.ready;
       audioSystem.playUiClick(this.ready ? 'confirm' : 'back');
-      this.readyButton.textContent = this.ready ? '✓ Ready' : 'Ready';
-      this.readyButton.classList.toggle('btn-primary', this.ready);
+      this.setReadyButton(this.ready);
       actions.onSetReady(this.ready);
     });
-    this.startButton = el('button', { class: 'btn btn-small btn-primary' }, 'Start Round') as HTMLButtonElement;
+    this.startButton = el('button', { class: 'btn btn-small btn-primary' }, 'Start now') as HTMLButtonElement;
     this.startButton.addEventListener('click', () => {
       audioSystem.playUiClick('confirm');
+      this.cancelCountdown();
       actions.onStartRound();
     });
-    footer.append(this.readyButton, this.startButton);
+    footer.append(this.countdownBar, this.readyButton, this.startButton);
 
     panel.append(header, body, footer);
     this.root.appendChild(panel);
@@ -742,45 +968,153 @@ export class LobbyScreen {
   /** Render the lobby from a server update. */
   update(lobby: LobbyState): void {
     this.roomCodeValue.textContent = lobby.code;
-    clearChildren(this.playerList);
+    clearChildren(this.slotGrid);
 
-    if (lobby.players.length === 0) {
-      this.playerList.appendChild(el('div', { class: 'lobby-empty' }, 'Waiting for players…'));
-    }
+    const count = lobby.players.length;
+    const slots = visibleSlots(count);
+    this.isHost = false;
 
-    let isHost = false;
-    for (const player of lobby.players) {
-      const row = el('div', { class: 'player-row' });
-      if (player.ready) row.classList.add('ready');
-      if (player.clientId === this.myClientId) {
-        row.classList.add('is-you');
-        isHost = player.isHost;
+    for (let i = 0; i < slots; i++) {
+      const player = lobby.players[i];
+      if (!player) {
+        /*
+         * An open slot, drawn as a slot rather than as blank space.
+         *
+         * The staggered animation delay is what turns a row of identical
+         * placeholders into something that looks like it is listening: the
+         * scan runs across the empty seats instead of flashing them in unison.
+         */
+        const empty = el('div', { class: 'mm-slot empty' });
+        empty.style.animationDelay = `${(i % 6) * 0.18}s`;
+        empty.append(
+          el('div', { class: 'mm-slot-avatar' }, '+'),
+          el('div', { class: 'mm-slot-body' }, 'Open slot'),
+          el('div', { class: 'mm-slot-dots' }, '•••'),
+        );
+        this.slotGrid.appendChild(empty);
+        continue;
       }
-      row.append(el('div', { class: 'ready-dot' }));
+
+      const slot = el('div', { class: 'mm-slot' });
+      if (player.ready) slot.classList.add('ready');
+      if (player.clientId === this.myClientId) {
+        slot.classList.add('is-you');
+        this.isHost = player.isHost;
+      }
+
+      const hue = playerHue(player.name);
+      const avatar = el('div', { class: 'mm-slot-avatar' }, monogram(player.name));
+      avatar.style.background = `linear-gradient(150deg, hsl(${hue} 62% 42%), hsl(${(hue + 40) % 360} 58% 24%))`;
+      avatar.style.borderColor = `hsl(${hue} 70% 58%)`;
+
+      const info = el('div', { class: 'mm-slot-body' });
+      const nameRow = el('div', { class: 'mm-slot-name-row' });
       // Names come from other players, so they go in as text, never markup.
-      row.append(el('div', { class: 'player-name' }, player.name));
-      // No species column: nobody has one until the round is dealt, and the
+      nameRow.appendChild(el('div', { class: 'mm-slot-name' }, player.name));
+      if (player.clientId === this.myClientId) {
+        nameRow.appendChild(el('div', { class: 'mm-tag you' }, 'You'));
+      }
+      if (player.isHost) nameRow.appendChild(el('div', { class: 'mm-tag host' }, 'Host'));
+      info.appendChild(nameRow);
+      // No species line: nobody has one until the round is dealt, and the
       // moment it is dealt it becomes the most secret thing on the screen.
-      row.append(el('div', { class: 'player-species' }, '🎲 Unknown'));
-      if (player.isHost) row.append(el('div', { class: 'host-badge' }, 'Host'));
-      this.playerList.appendChild(row);
+      info.appendChild(
+        el('div', { class: 'mm-slot-state' }, player.ready ? 'Ready' : 'Waiting…'),
+      );
+
+      slot.append(avatar, info, el('div', { class: 'mm-slot-check' }, player.ready ? '✓' : ''));
+      this.slotGrid.appendChild(slot);
     }
 
     const readyCount = lobby.players.filter((p) => p.ready).length;
-    this.statusLine.textContent = `${readyCount}/${lobby.players.length} ready. One of you will be the hunter — and only that player will know.`;
+    this.headCount.textContent = `${count} / ${lobby.maxPlayers}`;
+    this.readyCount.textContent = `${readyCount} ready`;
+    this.readyFill.style.width = `${count > 0 ? (readyCount / count) * 100 : 0}%`;
+    this.searchNote.textContent =
+      count >= lobby.maxPlayers
+        ? 'Jungle full'
+        : count > 1
+          ? 'Searching for more players…'
+          : 'Searching for players — AI animals will fill the rest';
+    this.root.classList.toggle('is-full', count >= lobby.maxPlayers);
+
+    this.statusLine.textContent = lobby.canStart
+      ? 'One of you will be dealt the hunter — and only that player will know. Everyone else is prey, including the animals that are not people.'
+      : 'Waiting for enough players to start.';
 
     // Only the host can start, so hide the button for everybody else rather
     // than showing them a control that does nothing.
-    this.startButton.style.display = isHost ? '' : 'none';
+    this.startButton.style.display = this.isHost ? '' : 'none';
     this.startButton.disabled = !lobby.canStart;
+
+    const allReady = count > 0 && readyCount === count && lobby.canStart;
+    if (allReady) this.beginCountdown();
+    else this.cancelCountdown();
   }
 
+  /** Everyone is ready: run the drop clock. */
+  private beginCountdown(): void {
+    if (this.countdownTimer) return;
+    /*
+     * Only while the lobby is the screen in front of the player.
+     *
+     * Starting a round broadcasts one last lobby state, in which everybody is
+     * still ready — so without this check the clock would start ticking, and
+     * beeping, over the top of the round that has just begun.
+     */
+    if (!this.root.classList.contains('active')) return;
+    this.countdownLeft = AUTO_START_SECONDS;
+    this.countdownBar.classList.remove('hidden');
+    this.paintCountdown();
+    audioSystem.playMatchReady();
 
+    this.countdownTimer = window.setInterval(() => {
+      this.countdownLeft -= 1;
+      if (this.countdownLeft <= 0) {
+        this.cancelCountdown();
+        this.countdownBar.classList.remove('hidden');
+        this.countdownNumber.textContent = 'GO';
+        // Only the host actually starts the round; everybody else is watching
+        // the same clock so the drop does not arrive unannounced.
+        if (this.isHost) this.startRound();
+        return;
+      }
+      this.paintCountdown();
+      audioSystem.playCountdownTick(this.countdownLeft <= 1);
+    }, 1000);
+  }
 
+  private paintCountdown(): void {
+    this.countdownNumber.textContent = String(this.countdownLeft);
+    this.countdownFill.style.width = `${(this.countdownLeft / AUTO_START_SECONDS) * 100}%`;
+  }
+
+  private cancelCountdown(): void {
+    if (this.countdownTimer) {
+      window.clearInterval(this.countdownTimer);
+      this.countdownTimer = 0;
+    }
+    this.countdownBar.classList.add('hidden');
+  }
+
+  private setReadyButton(ready: boolean): void {
+    this.readyButton.textContent = ready ? '✓ Ready' : 'Ready';
+    this.readyButton.classList.toggle('btn-primary', ready);
+    this.readyButton.classList.toggle('is-ready', ready);
+  }
+
+  /**
+   * Clear the ready flag — on both ends.
+   *
+   * The server keeps a client's ready flag across rounds, so returning to the
+   * lobby with only the button reset would leave the room instantly all-ready
+   * and the drop clock would fire before the player had looked at the screen.
+   */
   resetReady(): void {
     this.ready = false;
-    this.readyButton.textContent = 'Ready';
-    this.readyButton.classList.remove('btn-primary');
+    this.setReadyButton(false);
+    this.cancelCountdown();
+    this.setReady(false);
   }
 }
 

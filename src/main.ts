@@ -278,7 +278,7 @@ class Game {
   private buildScreens(): void {
     const actions: ScreenActions = {
       onPlaySolo: () => void this.playSolo(),
-      onPlayOnline: (url, room) => void this.playOnline(url, room),
+      onPlayOnline: (url, room) => this.playOnline(url, room),
       onOpenSettings: () => {
         this.previousScreen = this.screen;
         this.settings.rebuild();
@@ -494,11 +494,17 @@ class Game {
     this.showScreen('lobby');
   }
 
-  /** Connect to a dedicated server. */
-  private async playOnline(url: string, room: string): Promise<void> {
+  /**
+   * Connect to a dedicated server.
+   *
+   * Resolves true once the lobby is on screen and false if the connection
+   * failed — the matchmaking dialog holds its searching animation until this
+   * answers, and reports the failure in place rather than as a toast behind a
+   * dialog nobody closed.
+   */
+  private async playOnline(url: string, room: string): Promise<boolean> {
     await audioSystem.start();
     const target = room ? `${url}?room=${encodeURIComponent(room)}` : url;
-    this.hud.toast(`Connecting to ${url}…`);
     try {
       this.transport?.disconnect();
       const socket = new SocketTransport(target);
@@ -507,6 +513,7 @@ class Game {
       this.lobby.resetReady();
       this.showScreen('lobby');
       this.hud.toast('Connected.');
+      return true;
     } catch (err) {
       this.hud.toast(
         `Could not connect. Is the server running? (${err instanceof Error ? err.message : String(err)})`,
@@ -516,6 +523,7 @@ class Game {
       // Fall back to the local menu world so the client stays usable.
       await this.startLocalHost(Math.floor(Math.random() * 0x7fffffff), 0);
       this.showScreen('menu');
+      return false;
     }
   }
 

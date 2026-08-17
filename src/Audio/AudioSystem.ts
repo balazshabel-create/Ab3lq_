@@ -1516,6 +1516,79 @@ export class AudioSystem {
   }
 
   /**
+   * Match found: a three-note rise over a soft wooden knock.
+   *
+   * It plays once, at the moment the lobby goes all-ready, and its job is to
+   * pull a player who has been staring at a chat window back to the screen
+   * with three seconds to spare. Hence a chord that arrives rather than a
+   * click that acknowledges — the same reason every game does this.
+   */
+  playMatchReady(): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.sfxBus) return;
+    const t = ctx.currentTime;
+    // A major triad, rolled. Rolling it rather than striking it makes three
+    // notes read as one event without the beating of an exact stack.
+    const notes = [523.25, 659.25, 783.99];
+    for (let i = 0; i < notes.length; i++) {
+      const start = t + i * 0.07;
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(notes[i], start);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.11, start + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.55);
+      osc.connect(gain).connect(this.sfxBus);
+      osc.start(start);
+      osc.stop(start + 0.6);
+    }
+    // The knock underneath: a short filtered noise burst that gives the chime
+    // an attack, so it lands on a speaker instead of floating.
+    if (this.noiseBuffer) {
+      const source = ctx.createBufferSource();
+      source.buffer = this.noiseBuffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(340, t);
+      filter.Q.value = 2.4;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.16, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+      source.connect(filter).connect(gain).connect(this.sfxBus);
+      source.start(t);
+      source.stop(t + 0.16);
+    }
+  }
+
+  /**
+   * One second of the drop countdown.
+   *
+   * The last tick is a fourth higher and longer, which is the whole trick: it
+   * tells you the next thing to happen is the round, without anybody having to
+   * count the beeps.
+   */
+  playCountdownTick(final: boolean): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.sfxBus) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(final ? 880 : 660, t);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = final ? 2600 : 1800;
+    const gain = ctx.createGain();
+    const length = final ? 0.34 : 0.13;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(final ? 0.1 : 0.07, t + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + length);
+    osc.connect(filter).connect(gain).connect(this.sfxBus);
+    osc.start(t);
+    osc.stop(t + length + 0.02);
+  }
+
+  /**
    * The hit confirmation: two short ticks, the second a fifth above the first.
    *
    * Deliberately dry and quiet, and nothing like the shot itself. The hunter

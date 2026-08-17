@@ -69,6 +69,8 @@ export class LocalTransport implements Transport {
   private connection: HostConnection;
   private botIds: string[] = [];
   private botState: BotState[] = [];
+  /** Pending "bot presses ready" timers, so leaving the lobby cancels them. */
+  private readyTimers: ReturnType<typeof setTimeout>[] = [];
   /** Fixed-rate clock for the in-process authority. */
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastStep = 0;
@@ -138,6 +140,23 @@ export class LocalTransport implements Transport {
         name: botName(id),
         version: PROTOCOL_VERSION,
       });
+
+      /*
+       * Bots press ready, on a stagger.
+       *
+       * Without this a solo lobby can never be all-ready, so the drop clock
+       * never runs and the only way into a round is the host's own button —
+       * which is the one part of matchmaking a single player should not have
+       * to do by hand. The delay is randomised because six names flipping to
+       * "Ready" in the same frame looks like a scripted set piece, and one at
+       * a time looks like people.
+       */
+      this.readyTimers.push(
+        setTimeout(
+          () => this.host.handlePacket(id, { t: ClientMsg.SetReady, ready: true }),
+          700 + Math.random() * 2600,
+        ),
+      );
     }
 
     handlers.onOpen();
@@ -246,6 +265,8 @@ export class LocalTransport implements Transport {
       clearInterval(this.timer);
       this.timer = null;
     }
+    for (const t of this.readyTimers) clearTimeout(t);
+    this.readyTimers.length = 0;
     this.host.removeConnection(this.clientId);
     for (const id of this.botIds) this.host.removeConnection(id);
     this.handlers = null;

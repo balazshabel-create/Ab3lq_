@@ -232,9 +232,12 @@ await page.click('#screen-settings .btn:has-text("Close")');
 await page.waitForSelector('#screen-menu.active', { timeout: 10_000 });
 await page.click('#screen-menu .btn-primary');
 await page.waitForSelector('#screen-lobby.active', { timeout: 60_000 });
-const lobbyPlayers = await page.locator('.player-row').count();
+// Filled slots only: the open ones are placeholders, and counting them would
+// report a full lobby in a solo round.
+const lobbyPlayers = await page.locator('.mm-slot:not(.empty)').count();
+const readySlots = await page.locator('.mm-slot.ready').count();
 const speciesCards = await page.locator('.species-card').count();
-log('lobby', `${lobbyPlayers} players, ${speciesCards} species to pick`);
+log('lobby', `${lobbyPlayers} players (${readySlots} ready), ${speciesCards} species listed`);
 await page.waitForTimeout(600);
 await page.screenshot({ path: `${outDir}/03-lobby.png` });
 
@@ -248,7 +251,7 @@ await page.screenshot({ path: `${outDir}/03-lobby.png` });
  */
 await page.locator('.species-card').nth(1).click({ force: true });
 await page.waitForTimeout(300);
-await page.click('#screen-lobby .btn:has-text("Start Round")', { force: true });
+await page.click('#screen-lobby .btn:has-text("Start now")', { force: true });
 
 // --- Role card -------------------------------------------------------------
 /*

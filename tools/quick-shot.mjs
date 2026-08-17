@@ -48,7 +48,7 @@ await page.click('#screen-menu .btn:has-text("Play")', { force: true, timeout: 6
 await page.waitForSelector('#screen-lobby.active', { timeout: 60_000 });
 console.log('lobby up');
 
-await page.click('#screen-lobby .btn:has-text("Start Round")', { force: true, timeout: 60_000 });
+await page.click('#screen-lobby .btn:has-text("Start now")', { force: true, timeout: 60_000 });
 console.log('start clicked');
 
 for (let i = 0; i < 90; i++) {
