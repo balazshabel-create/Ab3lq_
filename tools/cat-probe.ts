@@ -15,7 +15,9 @@ import * as THREE from 'three';
 import { buildAnimalModel } from '../src/Render/AnimalModels';
 import { Species } from '../src/Animals/AnimalTypes';
 
-const model = buildAnimalModel(Species.Tiger, 1);
+// `DETAIL=0.3 npx tsx tools/cat-probe.ts` inspects a lower LOD tier.
+const detail = Number(process.env.DETAIL ?? 1);
+const model = buildAnimalModel(Species.Tiger, detail);
 model.root.updateMatrixWorld(true);
 
 const rows: string[] = [];

@@ -35,81 +35,71 @@
 
 import * as THREE from 'three';
 import { Species, type AnimalDef } from '../Animals/AnimalTypes';
+import {
+  coatMaps,
+  furShell,
+  irisTexture,
+  type CoatPart,
+  type CoatSpec,
+} from './CatCoat';
 
 // ---------------------------------------------------------------------------
 // The coat
 // ---------------------------------------------------------------------------
 
 /**
- * A fur surface map: fine directional noise, used as bump and roughness.
+ * The coat material for one part of the animal.
  *
- * Vertex colours give the coat its *pattern*; this gives it its *texture*. A
- * smoothly shaded lofted body with no surface variation reads as painted
- * plastic — the light falls across it in one clean gradient, which is exactly
- * what fur never does. The strokes run along the map's U, which the loft lays
- * along the body, so the grain follows the animal from nose to tail.
- */
-let furTexture: THREE.CanvasTexture | null | undefined;
-
-function furMap(): THREE.CanvasTexture | null {
-  if (furTexture !== undefined) return furTexture;
-  if (typeof document === 'undefined') {
-    furTexture = null;
-    return null;
-  }
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#808080';
-  ctx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 2600; i++) {
-    const x = Math.random() * 256;
-    const y = Math.random() * 256;
-    const len = 3 + Math.random() * 9;
-    const v = Math.random() < 0.5 ? 60 + Math.random() * 50 : 150 + Math.random() * 70;
-    ctx.strokeStyle = `rgba(${v},${v},${v},0.5)`;
-    ctx.lineWidth = 0.7 + Math.random() * 0.8;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    // Swept back and slightly down, the way a coat lies.
-    ctx.lineTo(x + len, y + (Math.random() - 0.4) * 2.5);
-    ctx.stroke();
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(6, 3);
-  furTexture = texture;
-  return texture;
-}
-
-let coatMaterial: THREE.Material | null = null;
-
-/**
- * One material for every part of the cat.
+ * ## Textures, not vertex colours
  *
- * It can be one because all the colour lives in the vertices — body, legs, head
- * and tail share it, so the whole animal is a handful of draw calls however much
- * pattern it carries. Standard rather than Lambert: fur is not perfectly
- * diffuse, and the faint sheen along a lit flank is most of what stops a model
- * looking like a toy.
+ * The pattern used to be painted into the mesh's vertices. That put it *on* the
+ * surface, which was the important thing, but a body of forty-four sections has
+ * only about a thousand colour samples to spend on a two-metre animal — every
+ * stripe edge was a centimetre of blur, and there was no detail at all between
+ * one vertex and the next.
+ *
+ * Each part now wears a generated PBR set instead: base colour, normal,
+ * roughness and ambient occlusion, drawn at load time in the part's own natural
+ * parameterisation (see CatCoat.ts). The vertex colours stay as the fallback,
+ * for the headless tools where there is no canvas to draw into — and they are
+ * still what the paws and toes use, being too small to be worth a map.
+ *
+ * `envMapIntensity` is deliberately low. Fur is not shiny; what a little
+ * environment light does is keep the shadow side from going flat black, which is
+ * the other half of what makes a model look like plastic.
  */
-function coat(): THREE.Material {
-  if (coatMaterial) return coatMaterial;
+const coatMaterials = new Map<string, THREE.Material>();
+
+function coat(spec: CoatSpec, part: CoatPart, key: string): THREE.Material {
+  const cacheKey = `${key}:${part}`;
+  const hit = coatMaterials.get(cacheKey);
+  if (hit) return hit;
+
   const material = new THREE.MeshStandardMaterial({
-    vertexColors: true,
     metalness: 0,
     roughness: 0.86,
+    envMapIntensity: 0.25,
   });
-  const fur = furMap();
-  if (fur) {
-    material.bumpMap = fur;
-    material.bumpScale = 1.4;
-    material.roughnessMap = fur;
+  const maps = coatMaps(spec, part, key);
+  if (maps) {
+    material.map = maps.map;
+    material.normalMap = maps.normalMap;
+    // Hair is fine, so the normal detail is left strong across the coat and
+    // eased off a little only where the map is stretched over a small part.
+    material.normalScale = new THREE.Vector2(part === 'body' ? 1 : 0.75, part === 'body' ? 1 : 0.75);
+    material.roughnessMap = maps.roughnessMap;
+    material.aoMap = maps.aoMap;
+    material.aoMapIntensity = 0.9;
+  } else {
+    material.vertexColors = true;
   }
-  coatMaterial = material;
+  coatMaterials.set(cacheKey, material);
   return material;
+}
+
+/** True when the generated maps are available, so parts can skip vertex paint. */
+function textured(spec: CoatSpec, key: string): boolean {
+  return coatMaps(spec, 'body', key) !== null;
 }
 
 /** Glossy, for eyes and a wet nose. */
@@ -177,6 +167,32 @@ function shade(color: number, factor: number): number {
   const g = Math.min(255, Math.round(((color >> 8) & 0xff) * factor));
   const b = Math.min(255, Math.round((color & 0xff) * factor));
   return (r << 16) | (g << 8) | b;
+}
+
+/**
+ * The palette, as the texture generator wants it.
+ *
+ * Three coat tones and a marking colour, in plain 0..255 triples because the
+ * maps are drawn into a canvas and mixed in that space. The tiger's values are
+ * read off the reference photograph: a deep rust along the spine, a bright
+ * orange flank, and a belly that is genuinely white rather than cream.
+ */
+function coatSpec(def: AnimalDef): CoatSpec {
+  const c = def.silhouette.colors;
+  const stripes = def.species === Species.Tiger;
+  const rgb = (hex: number): [number, number, number] => [
+    (hex >> 16) & 0xff,
+    (hex >> 8) & 0xff,
+    hex & 0xff,
+  ];
+  return {
+    back: rgb(stripes ? 0xa8531a : shade(c.body, 0.8)),
+    flank: rgb(stripes ? 0xd9812f : c.body),
+    belly: rgb(stripes ? 0xf4efe6 : c.belly),
+    marking: rgb(stripes ? 0x120e0b : c.accent),
+    pattern: stripes ? 'stripes' : 'rosettes',
+    seed: stripes ? 3 : 11,
+  };
 }
 
 /**
@@ -442,6 +458,22 @@ function resample(key: Station[], count: number): Station[] {
 // The cat
 // ---------------------------------------------------------------------------
 
+
+/**
+ * Roll a lofted part's UVs around its axis.
+ *
+ * The coat maps are drawn once, with the pale underside at v = 0.5; a limb needs
+ * that band on its *inner* face, which is a quarter turn away and in opposite
+ * directions on the two sides of the animal. Shifting the attribute is free —
+ * the textures wrap — and it means one map serves all four legs.
+ */
+function rollUv(geometry: THREE.BufferGeometry, amount: number): void {
+  const uv = geometry.getAttribute('uv') as THREE.BufferAttribute | undefined;
+  if (!uv) return;
+  for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) + amount);
+  uv.needsUpdate = true;
+}
+
 /** What the builder reports back, in the shape the animator already drives. */
 export interface BigCatParts {
   body: THREE.Group;
@@ -449,6 +481,8 @@ export interface BigCatParts {
   jaw: THREE.Object3D;
   legs: THREE.Object3D[];
   knees: THREE.Object3D[];
+  /** The third joint, so a paw can stay flat while the leg swings over it. */
+  ankles: THREE.Object3D[];
   ears: THREE.Object3D[];
   tail: THREE.Object3D[];
 }
@@ -481,8 +515,43 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
   const H = s.height;
   const c = coatOf(def);
   const seed = def.species === Species.Tiger ? 3 : 11;
-  const fine = detail > 0.5;
-  const material = coat();
+  /*
+   * Three tiers. `fine` is the animal you are standing next to; `mid` is the
+   * one across the clearing, which keeps the anatomy and the coat but drops the
+   * parts that are smaller than a pixel at that range; neither is the crude
+   * shape used past sixty metres.
+   */
+  const fine = detail >= 0.9;
+  const mid = detail >= 0.5;
+  /*
+   * One material per part, each wearing its own generated PBR set. Four
+   * materials rather than one costs three extra draw calls and buys a megapixel
+   * of pattern where a thousand vertices used to carry it.
+   */
+  const spec = coatSpec(def);
+  const coatKey = String(def.species);
+  const material = coat(spec, 'body', coatKey);
+  const limbMaterial = coat(spec, 'limb', coatKey);
+  const headMaterial = coat(spec, 'head', coatKey);
+  const tailMaterial = coat(spec, 'tail', coatKey);
+  const mapped = textured(spec, coatKey);
+  /*
+   * Paws and toes keep their vertex paint: they are spheres a few centimetres
+   * across, where a texture would be stretched over four triangles and a solid
+   * tone is indistinguishable from one.
+   */
+  const pawMaterial = (() => {
+    if (!mapped) {
+      // No canvas (the headless tools): fall back to the vertex paint.
+      const m = flat(0xfffffe, 0.88);
+      m.vertexColors = true;
+      return m;
+    }
+    // A plain tone taken from the coat's own flank, darkened a little because a
+    // paw is in its own shadow most of the time.
+    const [r, g, b] = spec.flank;
+    return flat(((r * 0.82) << 16) | ((g * 0.82) << 8) | (b * 0.82), 0.9);
+  })();
 
   /** Barrel length, shoulder to hip. Everything else hangs off this. */
   const bl = H * 1.05;
@@ -511,7 +580,7 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
     { x: -bl * 0.53, y: H * 0.02, up: H * 0.12, down: H * 0.125, half: H * 0.13 },
   ];
   const barrel = new THREE.Mesh(
-    loft(resample(key, fine ? 44 : 11), fine ? 28 : 9, (along, down, _lateral, at, out) => {
+    loft(resample(key, fine ? 44 : mid ? 26 : 11), fine ? 28 : mid ? 16 : 9, (along, down, _lateral, at, out) => {
       const marks =
         c.pattern === 'stripes'
           ? stripeField(along, down, 15, seed)
@@ -522,6 +591,31 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
   );
   barrel.castShadow = true;
   body.add(barrel);
+
+  /*
+   * ## Fur
+   *
+   * Two shells over the barrel: the same surface pushed a few millimetres out
+   * along its normals, cut away by a thresholded noise mask so what is left
+   * reads as the tips of hairs. See CatCoat.furShell for why this rather than a
+   * strand groom — in one line, WebGL2 with no compute shaders, forty animals,
+   * and a jungle to draw as well.
+   *
+   * What it buys is the *silhouette*. A smooth loft has a mathematically clean
+   * outline, and a clean outline is the single loudest signal that something is
+   * a model rather than an animal; a ragged one is what says "fur" from thirty
+   * metres, long before any texture detail is resolvable.
+   *
+   * LOD0 only. At the mid tier the shells are gone and the coat is carried by
+   * the normal map alone.
+   */
+  if (detail >= 1) {
+    const shellMaps = coatMaps(spec, 'body', coatKey);
+    for (let level = 0; level < 2; level++) {
+      const shell = furShell(barrel.geometry, H * (0.006 + level * 0.007), level, shellMaps);
+      if (shell) body.add(shell);
+    }
+  }
 
   // --- Neck ---------------------------------------------------------------
   /*
@@ -538,15 +632,15 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
           { x: bl * 0.5, y: H * 0.05, up: H * 0.165, down: H * 0.17, half: H * 0.172 },
           { x: bl * 0.58, y: H * 0.065, up: H * 0.16, down: H * 0.15, half: H * 0.165 },
         ],
-        fine ? 12 : 6,
+        fine ? 12 : mid ? 8 : 6,
       ),
-      fine ? 20 : 10,
+      fine ? 20 : mid ? 14 : 10,
       (along, down, _lateral, at, out) => {
         const marks = c.pattern === 'stripes' ? stripeField(along * 0.14, down, 15, seed + 5) : 0;
         coatColour(out, c, 0.04, down, marks, seed + at);
       },
     ),
-    material,
+    headMaterial,
   );
   neck.castShadow = true;
   body.add(neck);
@@ -578,9 +672,9 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
           { x: skullLen * 0.46, y: -skullW * 0.11, up: skullW * 0.22, down: skullW * 0.26, half: skullW * 0.26 },
           { x: skullLen * 0.56, y: -skullW * 0.15, up: skullW * 0.15, down: skullW * 0.17, half: skullW * 0.17 },
         ],
-        fine ? 16 : 7,
+        fine ? 16 : mid ? 11 : 7,
       ),
-      fine ? 22 : 10,
+      fine ? 22 : mid ? 15 : 10,
       (along, down, _lateral, at, out) => {
         /*
          * The face pattern, painted rather than glued on: white round the
@@ -602,7 +696,7 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
         coatColour(out, c, 0.02, Math.min(1, down * 0.42 + white * 0.8), marks, seed + at);
       },
     ),
-    material,
+    headMaterial,
   );
   skull.castShadow = true;
   head.add(skull);
@@ -656,7 +750,7 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
             coatColour(out, c, 0.02, 0.45 + down * 0.35, marks, seed + at);
           },
         ),
-        material,
+        headMaterial,
       );
       ruffMesh.castShadow = true;
       head.add(ruffMesh);
@@ -678,29 +772,98 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
   }
 
   /*
-   * Eyes: forward-facing, amber, and *small* — a tiger's eye is about three
-   * centimetres across on a head a third of a metre long, and the first version
-   * of this model had them at twice that, which is the difference between a
-   * predator and a plush toy. Set into a dark rim so they sit in the skull.
+   * ## The eye
+   *
+   * Five parts, because an eye is the one thing on an animal a player looks
+   * *at* rather than past, and a ball of amber is what makes a model read as a
+   * toy however good the body is:
+   *
+   *   • a **sclera** ball, mostly hidden, which is what the lids close over;
+   *   • an **iris** disc carrying a generated texture of radial fibres and a
+   *     dark limbal ring — the ring is the part whose absence looks uncanny;
+   *   • a **slit pupil**, which is a cat's and nothing else's;
+   *   • a **cornea**: a slightly larger, almost-smooth transparent cap, which is
+   *     where the highlight actually lives. A wet eye is not a shiny eye — it is
+   *     a dry eye with a lens of water on it, and the highlight sits on the
+   *     water, offset from the iris underneath;
+   *   • **lids** in coat colour, top and bottom, which frame it and stop the
+   *     ball reading as a bead pushed into the head.
    */
-  if (fine) for (const side of [-1, 1]) {
-    const x = skullLen * 0.14;
-    const y = skullW * 0.14;
-    const z = side * skullW * 0.32;
-    if (fine) {
-      const rim = new THREE.Mesh(new THREE.SphereGeometry(skullW * 0.085, 10, 8), flat(0x140f0c, 0.85));
-      rim.scale.set(0.7, 1, 1);
-      rim.position.set(x - skullW * 0.01, y, z);
-      head.add(rim);
+  const eyeR = skullW * 0.075;
+  if (fine) {
+    for (const side of [-1, 1]) {
+      const socket = new THREE.Group();
+      socket.position.set(skullLen * 0.17, skullW * 0.14, side * skullW * 0.3);
+      // Eyes face forward and a little outward, as a predator's do.
+      socket.rotation.y = side * 0.42;
+      head.add(socket);
+
+      const sclera = new THREE.Mesh(
+        new THREE.SphereGeometry(eyeR, 14, 12),
+        flat(0xdcd2c4, 0.35),
+      );
+      socket.add(sclera);
+
+      const iris = new THREE.Mesh(
+        new THREE.CircleGeometry(eyeR * 0.92, 20),
+        (() => {
+          const m = new THREE.MeshStandardMaterial({ roughness: 0.32, metalness: 0 });
+          const texture = irisTexture(0xd39b2c);
+          if (texture) m.map = texture;
+          else m.color = new THREE.Color(0xd39b2c);
+          return m;
+        })(),
+      );
+      iris.position.x = eyeR * 0.72;
+      iris.rotation.y = Math.PI / 2;
+      socket.add(iris);
+
+      const pupil = new THREE.Mesh(
+        new THREE.CircleGeometry(eyeR * 0.34, 14),
+        flat(0x07060a, 0.2),
+      );
+      pupil.scale.set(1, 1, 0.42);
+      pupil.position.x = eyeR * 0.76;
+      pupil.rotation.y = Math.PI / 2;
+      pupil.rotation.z = Math.PI / 2;
+      socket.add(pupil);
+
+      /*
+       * The cornea. Transparent, nearly smooth, and *not* writing depth — so
+       * the iris shows through it and the highlight lands on top of the eye
+       * rather than replacing it.
+       */
+      const cornea = new THREE.Mesh(
+        new THREE.SphereGeometry(eyeR * 1.06, 14, 12),
+        new THREE.MeshPhysicalMaterial({
+          transparent: true,
+          opacity: 0.32,
+          roughness: 0.04,
+          metalness: 0,
+          clearcoat: 1,
+          clearcoatRoughness: 0.02,
+          depthWrite: false,
+        }),
+      );
+      socket.add(cornea);
+
+      // Lids: two shallow arcs of coat, the upper heavier than the lower.
+      for (const lid of [1, -1]) {
+        const shell = new THREE.Mesh(
+          new THREE.SphereGeometry(eyeR * 1.16, 14, 10, 0, Math.PI * 2, lid > 0 ? 0 : 2.1, 1.1),
+          headMaterial,
+        );
+        if (!mapped) paintSolid(shell.geometry, c, lid > 0 ? 0.25 : 0.55);
+        shell.rotation.z = lid > 0 ? -0.35 : 0.25;
+        socket.add(shell);
+      }
     }
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(skullW * 0.062, 12, 10), gloss(0xcf9a2e));
-    eye.position.set(x + skullW * 0.03, y, z + side * skullW * 0.01);
-    head.add(eye);
-    if (fine) {
-      const pupil = new THREE.Mesh(new THREE.SphereGeometry(skullW * 0.03, 8, 8), gloss(0x090706));
-      pupil.scale.set(0.45, 1.1, 0.5);
-      pupil.position.set(x + skullW * 0.075, y, z + side * skullW * 0.02);
-      head.add(pupil);
+  } else {
+    // Far away: one dark bead a side. Anything more is sub-pixel.
+    for (const side of [-1, 1]) {
+      const bead = new THREE.Mesh(new THREE.SphereGeometry(eyeR, 8, 6), flat(0x1a1208, 0.4));
+      bead.position.set(skullLen * 0.17, skullW * 0.14, side * skullW * 0.3);
+      head.add(bead);
     }
   }
 
@@ -709,7 +872,7 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
    * the white spot every tiger carries there.
    */
   const ears: THREE.Object3D[] = [];
-  if (fine) for (const side of [-1, 1]) {
+  if (mid) for (const side of [-1, 1]) {
     const ear = new THREE.Group();
     ear.position.set(-skullLen * 0.24, skullW * 0.44, side * skullW * 0.33);
     ear.rotation.x = side * 0.5;
@@ -727,9 +890,9 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
     inner.position.set(skullW * 0.06, -skullW * 0.01, 0);
     ear.add(inner);
     if (fine) {
-      const spot = new THREE.Mesh(new THREE.SphereGeometry(skullW * 0.1, 10, 6), flat(0xf2ece2, 0.9));
-      spot.scale.set(0.28, 1, 0.9);
-      spot.position.set(-skullW * 0.075, skullW * 0.015, 0);
+      const spot = new THREE.Mesh(new THREE.SphereGeometry(skullW * 0.055, 10, 8), flat(0xe8e0d2, 0.9));
+      spot.scale.set(0.35, 1, 0.95);
+      spot.position.set(-skullW * 0.06, -skullW * 0.02, 0);
       ear.add(spot);
     }
   }
@@ -741,7 +904,7 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
   const jaw = new THREE.Group();
   jaw.position.set(-skullLen * 0.3, -skullW * 0.28, 0);
   head.add(jaw);
-  if (fine) {
+  if (mid) {
   const jawMesh = new THREE.Mesh(
     loft(
       resample(
@@ -750,12 +913,12 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
           { x: skullLen * 0.42, y: -skullW * 0.01, up: skullW * 0.12, down: skullW * 0.13, half: skullW * 0.26 },
           { x: skullLen * 0.82, y: -skullW * 0.04, up: skullW * 0.08, down: skullW * 0.08, half: skullW * 0.15 },
         ],
-        fine ? 8 : 4,
+        fine ? 8 : mid ? 6 : 4,
       ),
-      fine ? 14 : 8,
+      fine ? 14 : mid ? 10 : 8,
       (_along, _down, _lateral, at, out) => coatColour(out, c, 0.02, 0.94, 0, seed + at),
     ),
-    material,
+    headMaterial,
   );
   jaw.add(jawMesh);
   }
@@ -814,6 +977,7 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
    */
   const legs: THREE.Object3D[] = [];
   const knees: THREE.Object3D[] = [];
+  const ankles: THREE.Object3D[] = [];
   const upperLen = H * 0.33;
   const lowerLen = H * 0.27;
 
@@ -826,7 +990,9 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
     legs.push(hip);
 
     const top = H * (front ? 0.115 : 0.14);
-    const mid = H * (front ? 0.072 : 0.063);
+    // Mid-shaft radius. Named for the anatomy, not for the level of detail —
+    // it was called `mid` and shadowed the LOD flag of that name.
+    const shaft = H * (front ? 0.072 : 0.063);
     const ankle = H * (front ? 0.056 : 0.048);
 
     /**
@@ -880,10 +1046,11 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
             coatColour(out, c, 0.35, Math.min(1, 0.46 + Math.max(0, -lateral * side) * 0.3), marks, seed + at);
           },
         ),
-        material,
+        limbMaterial,
       );
       bulge.rotation.z = -Math.PI / 2;
       bulge.castShadow = true;
+      rollUv(bulge.geometry, side > 0 ? -0.25 : 0.25);
       hip.add(bulge);
     }
 
@@ -893,11 +1060,11 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
           [
             { x: 0, y: 0, up: top, down: top * 0.95, half: top * 0.9 },
             { x: upperLen * 0.42, y: 0, up: top * 0.86, down: top * 0.8, half: top * 0.78 },
-            { x: upperLen, y: 0, up: mid, down: mid, half: mid * 0.95 },
+            { x: upperLen, y: 0, up: shaft, down: shaft, half: shaft * 0.95 },
           ],
-          fine ? 9 : 3,
+          fine ? 9 : mid ? 5 : 3,
         ),
-        fine ? 14 : 7,
+        fine ? 14 : mid ? 10 : 7,
         (along, _down, lateral, at, out) => {
           const marks =
             c.pattern === 'stripes'
@@ -906,10 +1073,11 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
           coatColour(out, c, 0.4, paleness(along * 0.5, lateral), marks, seed + at);
         },
       ),
-      material,
+      limbMaterial,
     );
     upper.rotation.z = -Math.PI / 2;
     upper.castShadow = true;
+    rollUv(upper.geometry, side > 0 ? -0.25 : 0.25);
     hip.add(upper);
 
     const knee = new THREE.Group();
@@ -922,7 +1090,7 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
       loft(
         resample(
           [
-            { x: 0, y: 0, up: mid, down: mid, half: mid * 0.95 },
+            { x: 0, y: 0, up: shaft, down: shaft, half: shaft * 0.95 },
             {
               x: lowerLen * 0.45,
               y: front ? 0 : H * 0.022,
@@ -932,9 +1100,9 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
             },
             { x: lowerLen, y: front ? 0 : H * 0.055, up: ankle, down: ankle, half: ankle },
           ],
-          fine ? 8 : 3,
+          fine ? 8 : mid ? 5 : 3,
         ),
-        fine ? 12 : 7,
+        fine ? 12 : mid ? 9 : 7,
         (along, _down, lateral, at, out) => {
           const marks =
             c.pattern === 'stripes'
@@ -943,10 +1111,11 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
           coatColour(out, c, 0.5, paleness(0.5 + along * 0.5, lateral), marks, seed + at);
         },
       ),
-      material,
+      limbMaterial,
     );
     lower.rotation.z = -Math.PI / 2;
     lower.castShadow = true;
+    rollUv(lower.geometry, side > 0 ? -0.25 : 0.25);
     knee.add(lower);
 
     /*
@@ -954,14 +1123,25 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
      * at the end of each. The gaps between the toes are the whole point — a paw
      * without them is a block, which is what the old model had.
      */
-    if (!fine) return;
+    /*
+     * The ankle. A cat's wrist and hock stay nearly vertical while the paw
+     * rolls flat under them, and without a joint here the whole foot pitches
+     * with the shank — which is what makes a two-segment limb walk like a
+     * stilt. The animator counter-rotates this against the leg's swing.
+     */
+    const ankleJoint = new THREE.Group();
+    ankleJoint.position.y = -lowerLen;
+    knee.add(ankleJoint);
+    ankles.push(ankleJoint);
+
+    if (!mid) return;
     const paw = new THREE.Group();
-    paw.position.y = -lowerLen - ankle * 0.3;
-    knee.add(paw);
+    paw.position.y = -ankle * 0.3;
+    ankleJoint.add(paw);
     const pawR = ankle * (front ? 1.5 : 1.36);
-    const pad = new THREE.Mesh(new THREE.SphereGeometry(pawR, fine ? 12 : 7, fine ? 9 : 5), material);
+    const pad = new THREE.Mesh(new THREE.SphereGeometry(pawR, fine ? 12 : 7, fine ? 9 : 5), pawMaterial);
     pad.scale.set(1.1, 0.62, 1.02);
-    paintSolid(pad.geometry, c, 0.6);
+    if (!mapped) paintSolid(pad.geometry, c, 0.6);
     paw.add(pad);
     const toes = fine ? 4 : 0;
     for (let t = 0; t < toes; t++) {
@@ -971,10 +1151,10 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
       toe.rotation.y = -across * 0.55;
       paw.add(toe);
       const reach = pawR * (0.72 - Math.abs(across) * 0.2);
-      const segment = new THREE.Mesh(new THREE.SphereGeometry(reach, 8, 6), material);
+      const segment = new THREE.Mesh(new THREE.SphereGeometry(reach, 8, 6), pawMaterial);
       segment.scale.set(1, 0.6, 0.6);
       segment.position.x = reach * 0.6;
-      paintSolid(segment.geometry, c, 0.66);
+      if (!mapped) paintSolid(segment.geometry, c, 0.66);
       toe.add(segment);
       const claw = new THREE.Mesh(new THREE.ConeGeometry(ankle * 0.1, ankle * 0.3, 7), flat(0xd8cdba, 0.45));
       claw.rotation.z = -Math.PI / 2 + 0.75;
@@ -997,7 +1177,7 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
    */
   const tail: THREE.Object3D[] = [];
   const tailLen = bl * 0.78;
-  const segments = fine ? 7 : 2;
+  const segments = fine ? 7 : mid ? 5 : 2;
   let parent: THREE.Object3D = body;
   for (let i = 0; i < segments; i++) {
     const g = new THREE.Group();
@@ -1022,7 +1202,7 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
           { x: -segLen * 0.5, y: 0, up: (r0 + r1) * 0.5, down: (r0 + r1) * 0.5, half: (r0 + r1) * 0.5 },
           { x: -segLen * 1.02, y: 0, up: r1, down: r1, half: r1 },
         ],
-        fine ? 12 : 6,
+        fine ? 12 : mid ? 8 : 6,
         (along, down, _lateral, _at, out) => {
           // Rings, closer together towards the tip, and the last hand's width
           // solid black — which is what a tiger's tail ends in.
@@ -1032,13 +1212,13 @@ export function buildBigCat(root: THREE.Group, def: AnimalDef, detail: number): 
           coatColour(out, c, 0.6, 0.3 + down * 0.25, Math.max(ring, tip), seed + u * 31);
         },
       ),
-      material,
+      tailMaterial,
     );
     mesh.castShadow = true;
     g.add(mesh);
   }
 
-  return { body, head, jaw, legs, knees, ears, tail };
+  return { body, head, jaw, legs, knees, ankles, ears, tail };
 }
 
 /**

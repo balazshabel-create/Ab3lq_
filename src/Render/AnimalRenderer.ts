@@ -115,7 +115,22 @@ interface RenderActor {
   rearAmount: number;
 }
 
+/*
+ * ## Three levels of detail, not two
+ *
+ * LOD0 is the animal you are standing next to: every part it has, plus the fur
+ * shells and the eye's five pieces. LOD2 is a shape a dozen pixels tall, where
+ * a nose and an iris are smaller than a pixel and cost draw calls for nothing.
+ *
+ * The gap between them was doing real damage. An animal fifteen metres away —
+ * close enough to read as an animal, too far to be worth a cornea — was getting
+ * either the full model or the crude one, and with the articulated budget spent
+ * on the nearest handful it was usually the crude one. LOD1 is the same body at
+ * lower loft resolution with the small parts dropped: it is what most of the
+ * animals in view actually are.
+ */
 const MODEL_DETAIL_NEAR = 1;
+const MODEL_DETAIL_MID = 0.6;
 const MODEL_DETAIL_FAR = 0.3;
 
 /**
@@ -421,11 +436,19 @@ export class AnimalRenderer {
         continue;
       }
 
-      // Pick a detail level. The local player and near animals get the full
-      // articulated model; the rest get the cheap one.
-      const wantsNear = isLocal || (articulated < maxArticulated && actor.distance < 55);
-      const detail = wantsNear ? MODEL_DETAIL_NEAR : MODEL_DETAIL_FAR;
-      if (wantsNear) articulated++;
+      /*
+       * Pick a detail level. The local player and the nearest few get the full
+       * model; out to the articulation budget they get the middle one; beyond
+       * that, the cheap one.
+       */
+      const wantsNear = isLocal || (articulated < maxArticulated && actor.distance < 22);
+      const wantsMid = !wantsNear && articulated < maxArticulated && actor.distance < 60;
+      const detail = wantsNear
+        ? MODEL_DETAIL_NEAR
+        : wantsMid
+          ? MODEL_DETAIL_MID
+          : MODEL_DETAIL_FAR;
+      if (wantsNear || wantsMid) articulated++;
       shown++;
 
       if (!actor.model || actor.detail !== detail) {
@@ -1059,6 +1082,29 @@ export class AnimalRenderer {
           knee.rotation.z = fold * (0.12 + tuck * drive);
         }
       }
+    }
+
+    /*
+     * ## Keep the paws flat
+     *
+     * A leg built from two segments plants its whole lower half on the ground,
+     * so the foot pitches through the stride and the animal walks as if on
+     * stilts. Where a plan gives its limbs a third joint, the ankle undoes most
+     * of the rotation the hip and knee have applied — which is what an ankle is
+     * for — and adds a small flick as the foot pushes off.
+     *
+     * Run after the leg loop rather than inside it, because it needs the final
+     * angles of both joints above it, and every branch of that loop (walking,
+     * swimming, airborne, standing) sets them differently.
+     */
+    for (let i = 0; i < model.legs.length; i++) {
+      const ankle = model.ankles?.[i];
+      if (!ankle) continue;
+      const leg = model.legs[i];
+      const knee = model.knees[i];
+      const stacked = leg.rotation.z + (knee ? knee.rotation.z : 0);
+      const push = Math.max(0, -leg.rotation.z) * 0.5;
+      ankle.rotation.z = lerp(ankle.rotation.z, -stacked * 0.72 + push, Math.min(1, dt * 14));
     }
 
     // --- Tail ------------------------------------------------------------

@@ -65,6 +65,16 @@ export interface AnimalModel {
    * again as it reaches forward to plant.
    */
   knees: (THREE.Object3D | undefined)[];
+  /**
+   * Ankles, index-matched to `legs`, for the plans that have a third joint.
+   *
+   * A two-segment limb has to plant its whole lower leg on the ground, so the
+   * foot pitches with every step and the animal walks as though on stilts. The
+   * third joint is what lets the paw stay flat while the leg swings over it —
+   * the single clearest difference between a walk cycle that reads and one that
+   * does not.
+   */
+  ankles: (THREE.Object3D | undefined)[];
   /** Tail segments, base first. */
   tail: THREE.Object3D[];
   /** Wings, for flyers. */
@@ -405,6 +415,7 @@ export function buildAnimalModel(species: Species, detail = 1): AnimalModel {
     legs: [],
     ears: [],
     knees: [],
+    ankles: [],
     tail: [],
     wings: [],
     segments: [],
@@ -434,6 +445,7 @@ export function buildAnimalModel(species: Species, detail = 1): AnimalModel {
       model.jaw = parts.jaw;
       model.legs = parts.legs;
       model.knees = parts.knees;
+      model.ankles = parts.ankles;
       model.ears = parts.ears;
       model.tail = parts.tail;
       break;
