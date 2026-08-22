@@ -19,6 +19,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { buildShotgun } from './Weapon';
 import { buildBigCat } from './BigCat';
+import { loft, resample } from './Loft';
 import {
   ANIMALS,
   BodyPlan,
@@ -3506,25 +3507,22 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
    * bob carries the whole figure without the legs sliding out of their sockets.
    */
   const legLength = H * 0.46;
-  const legRadius = H * 0.043;
+  const legRadius = H * 0.032;
   const hipY = legLength + legRadius * 0.65;
-  /*
-   * Feet apart. At H * 0.072 the two legs were closer together than they were
-   * thick, so from behind they merged into a single column and the man read as a
-   * post — which at two metres tall is a lot of post.
-   */
-  const stance = H * 0.098;
-
   const pelvis = new THREE.Group();
   pelvis.position.y = hipY;
   model.root.add(pelvis);
   model.body = pelvis;
 
-  mesh(box(H * 0.125, H * 0.115, H * 0.185), trousers, pelvis, 0, H * 0.005, 0);
-  // The belt. One box, and it is the difference between "trousers" and "legs".
-  mesh(box(H * 0.135, H * 0.03, H * 0.195), leather, pelvis, 0, H * 0.062, 0);
+  /*
+   * No pelvis block any more: the trunk's lowest sections are the hips, and a
+   * box on top of them stood out past the body on both sides like a shelf. What
+   * stays is the belt — one band, and it is the difference between "trousers"
+   * and "legs" — now sized to hug the waist rather than to span it.
+   */
+  mesh(box(H * 0.1, H * 0.022, H * 0.152), leather, pelvis, 0, H * 0.055, 0);
   if (detail > 0.5) {
-    mesh(box(H * 0.018, H * 0.036, H * 0.028), 0xb8973f, pelvis, H * 0.069, H * 0.062, 0);
+    mesh(box(H * 0.014, H * 0.03, H * 0.024), 0xb8973f, pelvis, H * 0.052, H * 0.055, 0);
   }
 
   // --- Legs -------------------------------------------------------------
@@ -3534,20 +3532,71 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
    * direction every viewer knows by heart without being able to name it.
    */
   const shank = legLength * 0.5;
+  /*
+   * ## The legs, and the straddle they used to stand in
+   *
+   * Two things were wrong, and together they were most of why the figure read as
+   * a strange shape rather than as a man. The feet were set 0.098 of his height
+   * out from the centre line — nearly half a metre apart on a two-metre figure,
+   * a stance no one stands in — and each leg was a capsule of one radius, so a
+   * thigh was as thin as an ankle.
+   *
+   * They are lofted now, thick at the hip and tapering to the boot, and they
+   * stand under him. The joint structure is unchanged, because the animator
+   * drives it: a hip group that swings, a knee group that folds backwards.
+   */
+  const stanceZ = H * 0.068;
   for (const side of [1, -1]) {
-    addJointedLeg(model, pelvis, {
-      x: 0,
-      y: -H * 0.02,
-      z: side * stance,
-      length: legLength,
-      radius: legRadius,
-      color: trousers,
-      footColor: leatherDark,
-      forward: 1,
-      detail,
-    });
-    const knee = model.knees[model.knees.length - 1];
-    if (!knee || detail <= 0.4) continue;
+    const hip = new THREE.Group();
+    hip.position.set(0, -H * 0.015, side * stanceZ);
+    hip.userData.front = true;
+    hip.userData.side = side;
+    pelvis.add(hip);
+    model.legs.push(hip);
+
+    const thigh = new THREE.Mesh(
+      loft(
+        resample(
+          [
+            { x: 0, y: 0, up: legRadius * 1.42, down: legRadius * 1.42, half: legRadius * 1.22 },
+            { x: shank * 0.5, y: 0, up: legRadius * 1.22, down: legRadius * 1.28, half: legRadius * 1.14 },
+            { x: shank, y: 0, up: legRadius * 0.92, down: legRadius * 0.96, half: legRadius * 0.9 },
+          ],
+          detail > 0.5 ? 7 : 3,
+        ),
+        detail > 0.5 ? 12 : 7,
+      ),
+      material(trousers),
+    );
+    thigh.rotation.z = -Math.PI / 2;
+    thigh.castShadow = true;
+    hip.add(thigh);
+
+    const knee = new THREE.Group();
+    knee.position.y = -shank;
+    knee.userData.fold = -1;
+    hip.add(knee);
+    model.knees.push(knee);
+
+    const calf = new THREE.Mesh(
+      loft(
+        resample(
+          [
+            { x: 0, y: 0, up: legRadius * 0.95, down: legRadius * 0.98, half: legRadius * 0.95 },
+            { x: shank * 0.42, y: 0, up: legRadius * 1.05, down: legRadius * 0.9, half: legRadius * 1.0 },
+            { x: shank, y: 0, up: legRadius * 0.72, down: legRadius * 0.72, half: legRadius * 0.72 },
+          ],
+          detail > 0.5 ? 7 : 3,
+        ),
+        detail > 0.5 ? 12 : 7,
+      ),
+      material(trousers),
+    );
+    calf.rotation.z = -Math.PI / 2;
+    calf.castShadow = true;
+    knee.add(calf);
+
+    if (detail <= 0.4) continue;
     /*
      * The boot, built onto the shank of the leg just added.
      *
@@ -3557,23 +3606,23 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
      * somewhere, and which way it points is how you read which way a figure is
      * facing when it is too far away to see anything else.
      */
-    mesh(box(legRadius * 2.0, shank * 0.6, legRadius * 2.1), leather, knee, 0, -shank * 0.66, 0);
-    mesh(box(legRadius * 2.4, legRadius * 0.8, legRadius * 2.5), leather, knee, 0, -shank * 0.36, 0);
+    mesh(box(legRadius * 1.7, shank * 0.52, legRadius * 1.8), leather, knee, 0, -shank * 0.72, 0);
+    mesh(box(legRadius * 2.0, legRadius * 0.7, legRadius * 2.1), leather, knee, 0, -shank * 0.46, 0);
     mesh(
-      box(legRadius * 3.4, legRadius * 0.85, legRadius * 2.0),
+      box(legRadius * 3.0, legRadius * 0.8, legRadius * 1.75),
       leatherDark,
       knee,
-      legRadius * 0.7,
-      -shank - legRadius * 0.35,
+      legRadius * 0.6,
+      -shank - legRadius * 0.3,
       0,
     );
     // Toe cap, lower and shorter than the sole, so the boot has a front.
     mesh(
-      box(legRadius * 1.1, legRadius * 0.6, legRadius * 1.8),
+      box(legRadius * 1.0, legRadius * 0.55, legRadius * 1.55),
       leatherDark,
       knee,
-      legRadius * 2.0,
-      -shank - legRadius * 0.55,
+      legRadius * 1.75,
+      -shank - legRadius * 0.5,
       0,
     );
   }
@@ -3590,23 +3639,75 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
   torso.position.y = H * 0.075;
   pelvis.add(torso);
 
-  const chest = mesh(
-    ellipsoid(H * 0.062, H * 0.115, H * 0.1, detail > 0.5 ? 9 : 6),
-    shirt,
-    torso,
-    0,
-    H * 0.175,
-    0,
+  /*
+   * ## One lofted trunk, not two balls and a plank
+   *
+   * The torso was a chest ellipsoid, a smaller belly ellipsoid, and a wide flat
+   * box laid across the top for shoulders. Every one of those choices shows: the
+   * two ellipsoids meet in a seam at the waist, and a plank 0.245 of his height
+   * across sitting on a chest 0.2 across is not a pair of shoulders, it is a
+   * yoke — which is exactly what made the figure read as a strange shape.
+   *
+   * A human trunk is a lofted form: hips, a waist that is genuinely the narrowest
+   * point, ribs that flare above it, and shoulders that are the widest thing on
+   * the body and *continuous* with the chest under them. Stated as six
+   * cross-sections, it is one surface with no seams in it.
+   */
+  const trunk = new THREE.Mesh(
+    loft(
+      resample(
+        [
+          { x: -H * 0.045, y: 0, up: H * 0.05, down: H * 0.054, half: H * 0.078 },
+          { x: -H * 0.02, y: 0, up: H * 0.048, down: H * 0.052, half: H * 0.072 },
+          { x: H * 0.07, y: 0, up: H * 0.056, down: H * 0.062, half: H * 0.088 },
+          { x: H * 0.16, y: 0, up: H * 0.06, down: H * 0.066, half: H * 0.108 },
+          { x: H * 0.24, y: 0, up: H * 0.056, down: H * 0.058, half: H * 0.121 },
+          { x: H * 0.29, y: 0, up: H * 0.04, down: H * 0.04, half: H * 0.082 },
+        ],
+        detail > 0.5 ? 16 : 7,
+      ),
+      detail > 0.5 ? 18 : 9,
+    ),
+    material(shirt),
   );
-  chest.castShadow = true;
-  mesh(ellipsoid(H * 0.052, H * 0.07, H * 0.078, detail > 0.5 ? 8 : 5), shirt, torso, 0, H * 0.05, 0);
+  // The loft runs along +X; a torso stands up, so the mesh takes the quarter
+  // turn rather than the stations being written along an axis it does not use.
+  trunk.rotation.z = Math.PI / 2;
+  trunk.castShadow = true;
+  torso.add(trunk);
+
+  /*
+   * The hips, in trousers. Short, and narrower than the shirt above it — the
+   * line where one garment ends and the next begins is the belt, and getting
+   * that line in the right place is most of what makes clothing read as
+   * clothing rather than as a painted-on colour.
+   */
+  const hips = new THREE.Mesh(
+    loft(
+      resample(
+        [
+          { x: -H * 0.135, y: 0, up: H * 0.05, down: H * 0.052, half: H * 0.076 },
+          { x: -H * 0.075, y: 0, up: H * 0.052, down: H * 0.056, half: H * 0.082 },
+          { x: -H * 0.002, y: 0, up: H * 0.049, down: H * 0.052, half: H * 0.075 },
+        ],
+        detail > 0.5 ? 7 : 3,
+      ),
+      detail > 0.5 ? 14 : 8,
+    ),
+    material(trousers),
+  );
+  hips.rotation.z = Math.PI / 2;
+  hips.castShadow = true;
+  torso.add(hips);
 
   const shoulderY = H * 0.26;
   if (detail > 0.35) {
-    // Shoulder yoke — the horizontal line across the top of a shirt, and the
-    // widest thing on him, which is what makes the taper downwards read.
-    mesh(box(H * 0.1, H * 0.032, H * 0.245), shirt, torso, 0, shoulderY, 0);
-    mesh(box(H * 0.075, H * 0.026, H * 0.115), shirtDark, torso, 0, shoulderY + H * 0.024, 0);
+    /*
+     * The shirt's shoulder seam — a line across the top of the trunk rather
+     * than a slab standing proud of it, now that the shoulders are part of the
+     * body's own shape.
+     */
+    mesh(box(H * 0.07, H * 0.02, H * 0.2), shirtDark, torso, 0, shoulderY + H * 0.012, 0);
     // Buttoned placket down the front.
     mesh(box(H * 0.01, H * 0.17, H * 0.02), shirtDark, torso, H * 0.062, H * 0.14, 0);
     /*
@@ -3676,7 +3777,7 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
    * silhouette carries at distance: the nose and the ears.
    */
   const skull = mesh(
-    ellipsoid(H * 0.052, H * 0.058, H * 0.05, detail > 0.5 ? 11 : 6),
+    ellipsoid(H * 0.058, H * 0.066, H * 0.056, detail > 0.5 ? 11 : 6),
     skin,
     head,
     -H * 0.004,
@@ -3688,7 +3789,7 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
   if (detail > 0.35) {
     // Jaw and chin: shorter than the cranium and set forward and down, which is
     // the whole difference between a face and a sphere.
-    mesh(ellipsoid(H * 0.042, H * 0.03, H * 0.04, detail > 0.5 ? 9 : 6), skin, head, H * 0.012, -H * 0.028, 0);
+    mesh(ellipsoid(H * 0.047, H * 0.034, H * 0.045, detail > 0.5 ? 9 : 6), skin, head, H * 0.012, -H * 0.028, 0);
     // Brow. A single ridge above the eyes does more for a face than the eyes do.
     mesh(box(H * 0.014, H * 0.011, H * 0.072), skin, head, H * 0.042, H * 0.022, 0);
     // Nose: bridge and tip, the one feature that survives at any distance.
@@ -3722,10 +3823,10 @@ function buildHuman(model: AnimalModel, def: AnimalDef, detail: number): void {
    * is what puts the face in shadow and makes him read as a man who does not
    * want to be looked at.
    */
-  mesh(ellipsoid(H * 0.058, H * 0.042, H * 0.054, detail > 0.5 ? 11 : 6), leather, head, -H * 0.006, H * 0.042, 0);
+  mesh(ellipsoid(H * 0.064, H * 0.046, H * 0.06, detail > 0.5 ? 11 : 6), leather, head, -H * 0.006, H * 0.048, 0);
   if (detail > 0.4) {
     // Band around the base of the crown, and a seam over the top.
-    mesh(ellipsoid(H * 0.059, H * 0.009, H * 0.055, detail > 0.5 ? 11 : 6), leatherDark, head, -H * 0.006, H * 0.024, 0);
+    mesh(ellipsoid(H * 0.065, H * 0.01, H * 0.061, detail > 0.5 ? 11 : 6), leatherDark, head, -H * 0.006, H * 0.028, 0);
     mesh(box(H * 0.1, H * 0.008, H * 0.008), leatherDark, head, -H * 0.006, H * 0.076, 0);
   }
   const brim = mesh(box(H * 0.078, H * 0.011, H * 0.112), leather, head, H * 0.07, H * 0.03, 0);
