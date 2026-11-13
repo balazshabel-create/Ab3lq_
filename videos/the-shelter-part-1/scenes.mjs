@@ -240,6 +240,7 @@ function resetPose(p) { p.rotation.order = 'YXZ'; p.rotation.set(0, p.rotation.y
 function pushup(p, t, y0 = 0) { resetPose(p); const k = 0.5 - 0.5 * Math.cos(t * 5), th = 0.42 - k * 0.2, phi = Math.PI / 2 - th; p.rotation.x = phi; p.position.y = y0 + 0.06; p.parts.armL.rotation.x = p.parts.armR.rotation.x = -phi; p.parts.head.rotation.x = -0.5; return k; }
 function squat(p, t, y0 = 0) { resetPose(p); const k = 0.5 - 0.5 * Math.cos(t * 4.5); p.position.y = y0 - k * 0.42; p.parts.legL.rotation.x = p.parts.legR.rotation.x = -k * 1.0; p.parts.torso.rotation.x = k * 0.25; p.parts.armL.rotation.x = p.parts.armR.rotation.x = -1.5 * k - 0.2; return k; }
 function jacks(p, t, y0 = 0) { resetPose(p); const k = 0.5 - 0.5 * Math.cos(t * 7); p.position.y = y0 + Math.abs(Math.sin(t * 3.5)) * 0.12; p.parts.armL.rotation.z = -0.15 - k * 2.6; p.parts.armR.rotation.z = 0.15 + k * 2.6; p.parts.legL.rotation.z = -k * 0.3; p.parts.legR.rotation.z = k * 0.3; return k; }
+function lie(p) { resetPose(p); p.rotation.set(-Math.PI / 2, 0, 0); p.position.set(1.55, 0.82, 1.5); p.parts.head.rotation.y = 0.3; }
 const chunkIndex = (chunks, t) => { let i = 0; chunks.forEach((c, j) => { if (t >= c) i = j; }); return i; };
 
 const RED = '#ff5a5a';
@@ -306,8 +307,8 @@ export default {
       },
     },
     { // 4 Leo doesn't answer
-      vo: 'You call your best friend, Leo. | Once. | Twice. | No answer.',
-      speed: 1.0, pause: 0.55, hold: 0.8,
+      vo: 'You call your best friend, Leo. | It rings. | And rings. | No answer.',
+      speed: 1.02, pause: 0.42, hold: 0.8,
       sfx: [{ type: 'ding', chunk: 1, gain: 0.4 }, { type: 'ding', chunk: 2, gain: 0.4 }, { type: 'hit', chunk: 3, gain: 0.5 }],
       build(ctx) {
         const { THREE, scene, camera, lib, fx } = ctx;
@@ -361,9 +362,9 @@ export default {
         s.cal.draw((g, W, H) => drawCalendar(g, W, H, 0)); s.feed.draw((g, W, H) => drawFeed(g, W, H, 1, 0, 1));
         return (t, p) => {
           s.setLight(t, 0.6 * Math.max(0, 1 - t / 3), Math.sin(t * 2.4) * 0.25 * Math.exp(-t / 2));
-          s.you.position.set(1.0, 0, 0.3); s.you.rotation.y = Math.PI + Math.sin(t * 0.9) * 0.6; lib.idle(s.you, t);
+          s.you.position.set(-0.2, 0, -0.9); s.you.rotation.y = Math.PI + Math.sin(t * 0.9) * 0.6; lib.idle(s.you, t);
           s.fan.rotation.z = t * 6;
-          camera.position.set(-0.3, 1.7, 2.7); camera.lookAt(lib.lerp(-0.8, 0.4, lib.ease(p)), 1.2, -2.5);
+          camera.position.set(-0.7, 1.65, 2.6); { const k = lib.ease(p); camera.lookAt(lib.lerp(1.55, -0.5, k), lib.lerp(0.9, 1.3, k), lib.lerp(0.6, -2.6, k)); }
           fx.fade = Math.max(0, 1 - t * 0.9);
         };
       },
@@ -435,16 +436,18 @@ export default {
       sfx: [{ type: 'whoosh', at: 0.1, gain: 0.5 }],
       build(ctx) {
         const { camera, lib, fx } = ctx; const s = shelter(ctx);
-        const spots = [[-1.1, -1.3, -Math.PI / 2], [0.75, -2.0, Math.PI], [0.15, -0.6, 0.4], [-1.1, -2.3, Math.PI]];
+        const spots = [[-1.1, -1.3, -Math.PI / 2], [0.75, -2.0, Math.PI], [0.0, -0.6, 0.4], null];
+        const cams = [[[0.6, 1.6, 0.4], [-1.4, 1.1, -1.3]], [[0.2, 1.5, -0.6], [0.75, 1.1, -2.8]], [[0.55, 1.35, 2.9], [0.1, 0.95, -0.8]], [[-1.3, 1.55, 2.7], [1.45, 0.85, 0.55]]];
         return (t, p) => {
           const dayF = 1 + p * 1.99, day = Math.floor(dayF), phase = Math.floor((dayF - 1) * 4) % 4;
           s.setLight(t); s.fan.rotation.z = t * 6; s.tick(t * 40, phase === 3 ? (t * 3) % 1 : 0.4);
           s.cal.draw((g, W, H) => drawCalendar(g, W, H, day - 1));
           s.feed.draw((g, W, H) => drawFeed(g, W, H, day, t));
-          const sp = spots[phase]; s.you.position.set(sp[0], 0, sp[1]); s.you.rotation.y = sp[2];
-          if (phase === 2) jacks(s.you, t); else { resetPose(s.you); s.you.position.y = 0; lib.idle(s.you, t); s.you.parts.armR.rotation.x = phase === 0 ? -1.2 : phase === 1 ? -0.6 : -0.9; }
-          s.solarLed.material.color.set(phase === 3 ? '#2aff6a' : '#103a1a');
-          camera.position.set(0.3, 2.1, 2.6); camera.lookAt(0, 1.0, -1.2);
+          const sp = spots[phase];
+          if (phase === 3) lie(s.you);
+          else { s.you.rotation.y = sp[2]; if (phase === 2) { jacks(s.you, t); s.you.position.x = sp[0]; s.you.position.z = sp[1]; } else { resetPose(s.you); s.you.position.set(sp[0], 0, sp[1]); lib.idle(s.you, t); s.you.parts.armR.rotation.x = phase === 0 ? -1.2 : -0.6; } }
+          s.solarLed.material.color.set(phase === 3 ? '#103a1a' : '#2aff6a'); s.setLight(t, 0); if (phase === 3) s.light.intensity = 2.6;
+          const cm = cams[phase]; camera.position.set(...cm[0]); camera.lookAt(...cm[1]);
           fx.title = `DAY ${day}`; fx.titleY = 0.12; fx.titleSize = 90;
         };
       },

@@ -7,7 +7,7 @@
 | 1 | Dark bedroom at midnight. A phone buzzes on the nightstand and lights up the room. | "Imagine you wake up at midnight when your phone buzzes." |
 | 2 | Close-up of the phone: a message from UNKNOWN: "They lied. Missiles inbound. Get underground." | "It's a message from an unknown number. They lied. Missiles are coming. Get underground." |
 | 3 | The TV in the dark room: "NO THREAT. STAY CALM." | "You turn on the news. Nothing. They're saying everything is fine." |
-| 4 | The phone: "Calling Leo…" turns into "No answer". | "You call your best friend, Leo. Once. Twice. No answer." |
+| 4 | The phone: "Calling Leo…" turns into "No answer". | "You call your best friend, Leo. It rings. And rings. No answer." |
 | 5 | Night. You run across the backyard to a metal hatch in the ground. | "So you grab your bag and run to the old shelter in your backyard." |
 | 6 | The hatch slams shut. The horizon flashes white and the ground shakes. | "The second the hatch slams shut, the sky turns white." |
 | 7 | Inside the shelter: one flickering bulb, concrete walls. | "When the shaking stops, you check what you have down there." |
