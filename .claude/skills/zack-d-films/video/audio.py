@@ -88,7 +88,21 @@ def sfx(kind, length=None):
             p = int(k * SR); m = min(n - p, int(SR * 0.08))
             if m > 0: y[p:p + m] += lowpass(rs.standard_normal(m), 12) * np.exp(-np.arange(m) / (SR * 0.02)) * 2
         return y * 0.5
-    raise ValueError(f"unknown sfx {kind!r}; use whoosh boom hit crack glitch riser ding pop heartbeat static buzz hatch footsteps")
+    if kind == "thuds":  # slow, heavy steps on metal (something in the vent)
+        d = length or 3.0; n = int(SR * d); y = np.zeros(n); t = np.arange(n) / SR
+        for k in np.arange(0.1, d - 0.3, 0.85):
+            p = int(k * SR); m = min(n - p, int(SR * 0.6)); tt = np.arange(m) / SR
+            y[p:p + m] += (np.sin(2 * np.pi * 48 * tt) * np.exp(-tt / 0.12) + lowpass(rs.standard_normal(m), 20) * np.exp(-tt / 0.04) * 1.2 + np.sin(2 * np.pi * 410 * tt) * np.exp(-tt / 0.25) * 0.15)
+        return y * 0.7
+    if kind == "scratch":  # three long scrapes on metal
+        d = length or 2.6; n = int(SR * d); y = np.zeros(n)
+        for k in (0.1, 0.9, 1.7):
+            p = int(k * SR); m = min(n - p, int(SR * 0.55)); tt = np.arange(m) / SR
+            if m <= 0: continue
+            x = rs.standard_normal(m); x = x - lowpass(x, 2)
+            y[p:p + m] += x * (0.6 + 0.4 * np.sin(2 * np.pi * 23 * tt)) * np.sin(np.pi * tt / (m / SR)) * 0.5 + np.sin(2 * np.pi * (1900 + 600 * tt) * tt) * np.sin(np.pi * tt / (m / SR)) * 0.05
+        return y
+    raise ValueError(f"unknown sfx {kind!r}; use whoosh boom hit crack glitch riser ding pop heartbeat static buzz hatch footsteps thuds scratch")
 
 
 def radio_fx(x):

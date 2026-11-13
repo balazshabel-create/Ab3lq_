@@ -16,14 +16,19 @@
 | 9 | A calendar on the wall: DAY 1 of 14. | "You make a plan. Two weeks underground, until the radiation outside gets weak enough." |
 | 10 | Time-lapse: the day counter ticks up, the camera shows grey ash outside, the solar light turns on and off. | "Every day, the same routine. Ration the food. Check the camera. Work out. Charge the batteries while the sun is up." |
 | 10b | Daily workout: push-ups, squats, jumping jacks, with a rep counter. | "And every single day, you work out. Push-ups. Squats. Jumping jacks. You have to stay strong." |
-| 11 | DAY 14. You put your hand on the ladder. | "Day fourteen. Everything seems fine. You grab the ladder." |
+| 10c | DAY 3: the camera feed cuts to "NO SIGNAL" for a second. | "Day three. The camera cuts out for a second. Probably just the ash." |
+| 10d | DAY 5: slow, heavy thuds inside the air vent. The fan stops and dust falls from the grate. | "Day five. You hear something moving in the air vent. Slow, heavy steps. You tell yourself it's nothing." |
+| 10e | DAY 8: the solar battery stops charging, and the LED blinks red. | "Day eight. The solar battery stops charging. Like something is standing over the panels. An hour later, it comes back." |
+| 10f | DAY 11: three scrapes on the hatch, with dust falling from the ceiling. | "Day eleven. Something scratches the hatch. Three times. Then, nothing." |
+| 11 | DAY 14. You put your hand on the ladder. | "Day fourteen. It's finally quiet. You grab the ladder." |
 | 12 | The radio's light flickers on. Static. | "Then, the radio crackles." |
 | 13 | Radio close-up. On the camera monitor, the static glitches for a split second. | *(Radio voice)* "Don't come out. Whatever you do… don't come out. It wasn't just a bomb." |
-| 14 | The choice: the ladder up to the hatch (B) and the radio (A). | "So what do you do? A: stay, and trust the man on the radio. Or B: go out and find Leo." |
+| 14 | The choice: the ladder up to the hatch (B) and the radio (A). | "So, what do you do? A. Stay, and trust the man on the radio. Or B. Go outside, and find Leo." |
 | 15 | End card: "COMMENT A OR B", "PART 2 SOON". | "Comment A or B. Part two is coming." |
 
 ## Story notes for Part 2
 
+- **Clues planted in Part 1:** camera dropouts (day 3), heavy steps in the vent (day 5), something blocking the solar panels (day 8), scratching on the hatch (day 11).
 - **What's outside:** very tall (about 7 feet), creepy, alien-like creatures with huge hands and an unsettling face. Part 1 never reveals them. The only hint is a split-second glitch on the camera monitor in scene 13.
 - **Branch A (stay):** the radio man knows about the creatures. Is he really trying to help?
 - **Branch B (go out):** you look for Leo in the ash-covered town.

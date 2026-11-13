@@ -21,13 +21,13 @@ function drawPhone(g, W, H, mode, t, k = 1) {
   if (mode === 'lock' || mode === 'message') {
     g.font = '300 150px Inter'; g.fillText('12:00', W / 2, 230); g.font = '500 34px Inter'; g.fillStyle = '#c7d2ee'; g.fillText('Tuesday', W / 2, 290);
     const cardY = 380, alpha = mode === 'lock' ? 1 : 1;
-    g.globalAlpha = alpha; rr(g, 30, cardY, W - 60, mode === 'message' ? 330 : 150, 34, 'rgba(255,255,255,0.14)');
+    g.globalAlpha = alpha; rr(g, 30, cardY, W - 60, mode === 'message' ? 380 : 150, 34, 'rgba(255,255,255,0.14)');
     g.textAlign = 'left'; g.fillStyle = '#ff5a5a'; g.font = '800 42px Inter'; g.fillText('UNKNOWN', 64, cardY + 60);
     g.fillStyle = '#9aa8c8'; g.font = '500 28px Inter'; g.textAlign = 'right'; g.fillText('now', W - 64, cardY + 56); g.textAlign = 'left';
-    g.fillStyle = '#ffffff'; g.font = '800 54px Inter';
-    const msg = mode === 'lock' ? 'New message' : 'They lied. Missiles inbound. Get underground. NOW.';
-    const shown = mode === 'message' ? msg.slice(0, Math.ceil(msg.length * k)) : msg;
-    wrap(g, shown, 64, cardY + 130, W - 128, 66); g.globalAlpha = 1;
+    g.fillStyle = '#ffffff'; g.font = '800 50px Inter';
+    if (mode === 'lock') g.fillText('New message', 64, cardY + 120);
+    else ['They lied.', 'Missiles inbound.', 'Get underground.', 'NOW.'].forEach((ln, i) => { if (i < Math.min(k, 3) + (k >= 3 ? 1 : 0)) { g.fillStyle = i === 3 ? '#ff5a5a' : '#fff'; g.fillText(ln, 64, cardY + 125 + i * 64); } });
+    g.globalAlpha = 1;
   } else {
     g.font = '600 40px Inter'; g.fillStyle = '#c7d2ee'; g.fillText(mode === 'calling' ? 'calling…' : 'No answer', W / 2, 200);
     g.beginPath(); g.arc(W / 2, 400, 120, 0, 7); g.fillStyle = '#3b6fb6'; g.fill();
@@ -152,7 +152,7 @@ function shelter({ THREE, scene, lib }) {
   const crateTag = screen(THREE, 0.3, 0.1, 256); crateTag.draw((g, W, H) => { g.fillStyle = '#3e6fa8'; g.fillRect(0, 0, W, H); g.fillStyle = '#fff'; g.font = '900 56px Inter'; g.textAlign = 'center'; g.fillText('WATER', W / 2, 66); }); crateTag.mesh.position.set(-1.34, 0.75, 0.23); scene.add(crateTag.mesh);
   for (let i = 0; i < 4; i++) add(new THREE.BoxGeometry(0.22, 0.04, 0.3), ['#7a2f2f', '#2f4f7a', '#4e6b2f', '#7a6a2f'][i], 1.75, 0.84 + i * 0.04, -2.75);
   const rug = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.0), lib.mat('#6a3b2a')); rug.rotation.x = -Math.PI / 2; rug.position.set(0.1, 0.012, 0.5); rug.receiveShadow = true; scene.add(rug);
-  const matE = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 1.6), lib.mat('#2f6fb0')); matE.rotation.x = -Math.PI / 2; matE.position.set(0.15, 0.02, -0.6); scene.add(matE);
+  const matE = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 1.6), lib.mat('#2f6fb0')); matE.rotation.set(-Math.PI / 2, 0, Math.PI / 2); matE.position.set(0.0, 0.02, -0.6); scene.add(matE);
   const clock = screen(THREE, 0.26, 0.26, 256); clock.mesh.position.set(-1.985, 2.1, 0.0); clock.mesh.rotation.y = Math.PI / 2; scene.add(clock.mesh);
   const map = screen(THREE, 0.7, 0.5, 400); map.draw((g, W, H) => { g.fillStyle = '#e8dfc4'; g.fillRect(0, 0, W, H); g.strokeStyle = '#8fb0c9'; g.lineWidth = 10; g.beginPath(); g.moveTo(0, H * 0.7); g.bezierCurveTo(W * 0.3, H * 0.5, W * 0.6, H * 0.9, W, H * 0.6); g.stroke(); g.strokeStyle = '#a89b7a'; g.lineWidth = 3; for (let i = 0; i < 8; i++) { g.beginPath(); g.moveTo(0, i * 40); g.lineTo(W, i * 40 + 20); g.stroke(); } g.fillStyle = '#d32f2f'; for (const [x, y] of [[0.3, 0.3], [0.62, 0.45], [0.75, 0.2]]) { g.beginPath(); g.arc(W * x, H * y, 9, 0, 7); g.fill(); } g.strokeStyle = '#d32f2f'; g.lineWidth = 4; g.beginPath(); g.arc(W * 0.62, H * 0.45, 40, 0, 7); g.stroke(); g.fillStyle = '#333'; g.font = '700 26px Inter'; g.fillText("LEO'S HOUSE", W * 0.5, H * 0.62); }); map.mesh.position.set(-0.6, 1.6, 2.98); map.mesh.rotation.y = Math.PI; scene.add(map.mesh);
   for (const z of [-2.9]) { const pipe = add(new THREE.CylinderGeometry(0.04, 0.04, 6), '#6f747a', 0, 2.5, 0, { metalness: 0.8 }); pipe.rotation.x = Math.PI / 2; pipe.position.set(-1.85, 2.48, 0); }
@@ -236,7 +236,7 @@ function drawNotebook(g, W, H, k, tight = false) {
 const boardLen = (upto) => BOARD.filter(([, c]) => c <= upto).reduce((a, [t]) => a + t.length, 0);
 
 /** Exercise poses for the person rig (pure functions of t). */
-function resetPose(p) { p.rotation.set(0, p.rotation.y, 0); const P = p.parts; for (const k of ['armL', 'armR', 'legL', 'legR']) P[k].rotation.set(0, 0, 0); P.armL.rotation.z = -0.08; P.armR.rotation.z = 0.08; P.torso.rotation.set(0, 0, 0); P.head.rotation.set(0, 0, 0); }
+function resetPose(p) { p.rotation.order = 'YXZ'; p.rotation.set(0, p.rotation.y, 0); const P = p.parts; for (const k of ['armL', 'armR', 'legL', 'legR']) P[k].rotation.set(0, 0, 0); P.armL.rotation.z = -0.08; P.armR.rotation.z = 0.08; P.torso.rotation.set(0, 0, 0); P.head.rotation.set(0, 0, 0); }
 function pushup(p, t, y0 = 0) { resetPose(p); const k = 0.5 - 0.5 * Math.cos(t * 5), th = 0.42 - k * 0.2, phi = Math.PI / 2 - th; p.rotation.x = phi; p.position.y = y0 + 0.06; p.parts.armL.rotation.x = p.parts.armR.rotation.x = -phi; p.parts.head.rotation.x = -0.5; return k; }
 function squat(p, t, y0 = 0) { resetPose(p); const k = 0.5 - 0.5 * Math.cos(t * 4.5); p.position.y = y0 - k * 0.42; p.parts.legL.rotation.x = p.parts.legR.rotation.x = -k * 1.0; p.parts.torso.rotation.x = k * 0.25; p.parts.armL.rotation.x = p.parts.armR.rotation.x = -1.5 * k - 0.2; return k; }
 function jacks(p, t, y0 = 0) { resetPose(p); const k = 0.5 - 0.5 * Math.cos(t * 7); p.position.y = y0 + Math.abs(Math.sin(t * 3.5)) * 0.12; p.parts.armL.rotation.z = -0.15 - k * 2.6; p.parts.armR.rotation.z = 0.15 + k * 2.6; p.parts.legL.rotation.z = -k * 0.3; p.parts.legR.rotation.z = k * 0.3; return k; }
@@ -275,7 +275,7 @@ export default {
         const halo = lib.glow('#5f8cff', 3.5, 0.35); halo.position.z = -0.3; scene.add(halo);
         camera.position.set(0, 0, 2.3); camera.lookAt(0, 0, 0);
         return (t, p) => {
-          ph.screen.draw((g, W, H) => drawPhone(g, W, H, 'message', t, lib.range(t, ctx.chunks[1] ?? 0.8, (ctx.chunks[3] ?? 4) + 0.8)));
+          ph.screen.draw((g, W, H) => drawPhone(g, W, H, 'message', t, chunkIndex(ctx.chunks, t)));
           ph.group.rotation.set(-0.08 + Math.sin(t * 1.3) * 0.02, 0.12 - p * 0.1, 0.02);
           camera.position.z = 2.3 - p * 0.35; fx.vignette = 0.7;
         };
@@ -437,7 +437,7 @@ export default {
         const { camera, lib, fx } = ctx; const s = shelter(ctx);
         const spots = [[-1.1, -1.3, -Math.PI / 2], [0.75, -2.0, Math.PI], [0.15, -0.6, 0.4], [-1.1, -2.3, Math.PI]];
         return (t, p) => {
-          const dayF = 1 + p * 12.99, day = Math.floor(dayF), phase = (day - 1) % 4;
+          const dayF = 1 + p * 1.99, day = Math.floor(dayF), phase = Math.floor((dayF - 1) * 4) % 4;
           s.setLight(t); s.fan.rotation.z = t * 6; s.tick(t * 40, phase === 3 ? (t * 3) % 1 : 0.4);
           s.cal.draw((g, W, H) => drawCalendar(g, W, H, day - 1));
           s.feed.draw((g, W, H) => drawFeed(g, W, H, day, t));
@@ -459,18 +459,88 @@ export default {
         return (t, p) => {
           s.setLight(t); s.fan.rotation.z = t * 6; s.tick(t * 20);
           const i = chunkIndex(C, t), local = t - (C[i] ?? 0);
-          s.you.position.set(0.15, 0, i <= 1 ? -1.4 : -0.8); s.you.rotation.y = i <= 1 ? 0 : 0.3;
+          s.you.position.set(i <= 1 ? -0.85 : 0.15, 0, i <= 1 ? -0.6 : -0.8); s.you.rotation.y = i <= 1 ? Math.PI / 2 : 0.3;
           if (i <= 1) pushup(s.you, local);
           else if (i === 2) squat(s.you, local); else jacks(s.you, local);
           const reps = Math.floor(local * (i <= 1 ? 5 : i === 2 ? 4.5 : 7) / (Math.PI * 2)) + 1;
           fx.title = `${names[i]} x${reps}`; fx.titleY = 0.13; fx.titleSize = 70; fx.titleColor = '#ffd34d';
-          if (i <= 1) { camera.position.set(-1.25, 0.85, -0.55); camera.lookAt(0.15, 0.35, -0.6); }
+          if (i <= 1) { camera.position.set(0.0, 0.75, 2.8); camera.lookAt(0.0, 0.4, -0.6); }
           else { camera.position.set(0.55, 1.35, 2.9); camera.lookAt(0.15, 0.95, -0.8); }
         };
       },
     },
+    { // day 3: camera cuts out
+      vo: 'Day three. | The camera cuts out for a second. | Probably just the ash.',
+      sfx: [{ type: 'glitch', chunk: 1, at: 0.3 }],
+      build(ctx) {
+        const { camera, lib, fx } = ctx; const s = shelter(ctx); const C = ctx.chunks;
+        s.cal.draw((g, W, H) => drawCalendar(g, W, H, 2));
+        return (t, p) => {
+          s.setLight(t); s.tick(t); const g0 = (C[1] ?? 1) + 0.3, dead = t > g0 && t < g0 + 0.9;
+          s.feed.draw((g, W, H) => { if (dead) { g.fillStyle = '#000'; g.fillRect(0, 0, W, H); g.fillStyle = '#fff'; g.font = '700 30px monospace'; g.fillText('NO SIGNAL', W / 2 - 80, H / 2); } else drawFeed(g, W, H, 3, t, t > g0 - 0.2 && t < g0 + 1.2 ? 0.7 : 0); });
+          camera.position.set(lib.lerp(0.95, 0.85, p), 1.2, lib.lerp(-1.9, -2.15, p)); camera.lookAt(0.75, 1.1, -2.8);
+          fx.title = 'DAY 3'; fx.titleY = 0.12; if (dead) fx.glitch = 0.3;
+        };
+      },
+    },
+    { // day 5: something in the vent
+      vo: "Day five. | You hear something moving in the air vent. | Slow, heavy steps. | You tell yourself it's nothing.",
+      silence: true, pause: 0.55,
+      sfx: [{ type: 'thuds', chunk: 1, at: 0.6, length: 4.2 }],
+      build(ctx) {
+        const { camera, lib, fx } = ctx; const s = shelter(ctx); const C = ctx.chunks;
+        s.cal.draw((g, W, H) => drawCalendar(g, W, H, 4));
+        const dust = lib.particles(120, { color: '#cfc6b0', size: 0.02, spread: 0.18, seed: 4, additive: false }); dust.points.position.set(-1.15, 1.95, -2.85); ctx.scene.add(dust.points);
+        return (t, p) => {
+          s.setLight(t, t > (C[1] ?? 1) ? 0.25 : 0);
+          const st = (C[1] ?? 1) + 0.6, step = t > st ? Math.floor((t - st) / 0.85) : -1, since = t > st ? (t - st) % 0.85 : 9;
+          s.fan.rotation.z = t > st ? 0.3 * Math.sin(step) : t * 6; // fan stops, twitches with each step
+          for (let i = 0; i < dust.base.length; i += 3) { const fall = t > st ? ((t - st) * 0.25 + (i % 7) * 0.05) % 0.9 : 0; dust.pos[i] = dust.base[i]; dust.pos[i + 1] = dust.base[i + 1] - fall; dust.pos[i + 2] = dust.base[i + 2] * 0.3; } dust.update(); dust.points.visible = t > st;
+          s.you.position.set(1.0, 0, -1.7); s.you.rotation.y = -Math.PI / 2 - 0.4; lib.idle(s.you, t); s.you.parts.head.rotation.x = -lib.easeRange(t, st, st + 0.6) * 0.5;
+          camera.position.set(lib.lerp(0.9, 0.5, p), 1.55, lib.lerp(1.2, 0.6, p)); camera.lookAt(-1.0, 1.9, -2.9);
+          if (since < 0.15) lib.shake(camera, 0.015, t);
+          fx.title = 'DAY 5'; fx.titleY = 0.12; fx.vignette = 0.7;
+        };
+      },
+    },
+    { // day 8: the panels go dark
+      vo: 'Day eight. | The solar battery stops charging. | Like something is standing over the panels. | An hour later, it comes back.',
+      pause: 0.5,
+      sfx: [{ type: 'hit', chunk: 1, gain: 0.4 }, { type: 'ding', chunk: 3, gain: 0.4 }],
+      build(ctx) {
+        const { camera, lib, fx } = ctx; const s = shelter(ctx); const C = ctx.chunks;
+        s.cal.draw((g, W, H) => drawCalendar(g, W, H, 7));
+        const fill = new ctx.THREE.PointLight('#ffd9a0', 1.2, 3, 1.5); fill.position.set(-0.9, 1.3, -2.0); ctx.scene.add(fill);
+        return (t, p) => {
+          s.setLight(t); const off = t > (C[1] ?? 1) && t < (C[3] ?? 4), back = t >= (C[3] ?? 4);
+          s.tick(t, off ? Math.max(0.2, 0.6 - (t - (C[1] ?? 1)) * 0.08) : back ? Math.min(1, 0.4 + (t - (C[3] ?? 4)) * 0.5) : (t * 0.8) % 1);
+          s.solarLed.material.color.set(off ? (Math.sin(t * 10) > 0 ? '#ff3b1f' : '#330a05') : '#2aff6a');
+          camera.position.set(lib.lerp(-0.45, -0.6, p), 1.05, lib.lerp(-1.0, -1.3, p)); camera.lookAt(-1.4, 0.75, -2.85); fill.intensity = 1.2;
+          fx.title = 'DAY 8'; fx.titleY = 0.08;
+        };
+      },
+    },
+    { // day 11: scratching on the hatch
+      vo: 'Day eleven. | Something scratches the hatch. | Three times. | Then, nothing.',
+      silence: true, pause: 0.6, hold: 0.8,
+      sfx: [{ type: 'scratch', chunk: 1, at: 0.2 }],
+      build(ctx) {
+        const { camera, lib, fx } = ctx; const s = shelter(ctx); const C = ctx.chunks;
+        s.cal.draw((g, W, H) => drawCalendar(g, W, H, 10));
+        const dust = lib.particles(200, { color: '#cfc6b0', size: 0.02, spread: 0.35, seed: 8, additive: false }); dust.points.position.set(-0.3, 2.45, -2.6); ctx.scene.add(dust.points);
+        return (t, p) => {
+          const st = (C[1] ?? 1) + 0.2, sc = [0.1, 0.9, 1.7].some((k) => t > st + k - 0.1 && t < st + k + 0.55);
+          s.setLight(t, sc ? 0.5 : 0); s.leak.material.opacity = sc ? 0.2 : 0.5;
+          for (let i = 0; i < dust.base.length; i += 3) { const fall = t > st ? ((t - st) * 0.5 + (i % 11) * 0.07) % 2.4 : 0; dust.pos[i] = dust.base[i]; dust.pos[i + 1] = dust.base[i + 1] - fall; dust.pos[i + 2] = dust.base[i + 2]; } dust.update(); dust.points.visible = t > st;
+          s.you.position.set(-1.0, 0, -1.5); s.you.rotation.y = Math.PI + 0.5; lib.idle(s.you, t); s.you.parts.head.rotation.x = -0.6;
+          camera.position.set(0.8, 1.0, -0.8); camera.lookAt(-0.35, 2.2, -2.6);
+          if (sc) lib.shake(camera, 0.01, t);
+          fx.title = 'DAY 11'; fx.titleY = 0.12; fx.vignette = 0.75;
+        };
+      },
+    },
     { // 11 day 14
-      vo: 'Day fourteen. | Everything seems fine. | You grab the ladder.',
+      vo: "Day fourteen. | It's finally quiet. | You grab the ladder.",
       sfx: [{ type: 'ding', at: 0.2, gain: 0.5 }],
       build(ctx) {
         const { camera, lib, fx } = ctx; const s = shelter(ctx);
@@ -520,7 +590,7 @@ export default {
       },
     },
     { // 14 the choice
-      vo: 'So what do you do? | A: stay, and trust the man on the radio. | Or B: go out and find Leo.',
+      vo: 'So, what do you do? | A. Stay, and trust the man on the radio. | Or B. Go outside, and find Leo.',
       captions: { y: 0.86, size: 54 },
       sfx: [{ type: 'hit', at: 0.1, gain: 0.6 }],
       build(ctx) {
@@ -539,7 +609,7 @@ export default {
       },
     },
     { // 15 end card
-      vo: 'Comment A or B. | Part two is coming.',
+      vo: 'Comment A, or B. | Part two is coming soon.',
       hold: 1.2,
       captions: false,
       build({ THREE, scene, camera, lib, fx }) {
