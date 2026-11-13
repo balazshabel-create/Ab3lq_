@@ -73,9 +73,13 @@ def sfx(kind, length=None):
     raise ValueError(f"unknown sfx {kind!r}; use whoosh boom hit crack glitch riser ding pop heartbeat")
 
 
-def trim(x, thr=0.01):
+def trim(x, thr=0.004):
+    """Cut leading/trailing silence but keep word endings (breaths, soft consonants) intact."""
     idx = np.where(np.abs(x) > thr)[0]
-    return x if len(idx) == 0 else x[max(0, idx[0] - 240): idx[-1] + 480]
+    if len(idx) == 0: return x
+    y = x[max(0, idx[0] - int(SR * 0.03)): idx[-1] + int(SR * 0.18)].copy()
+    f = min(len(y), int(SR * 0.06)); y[-f:] *= np.linspace(1, 0, f)
+    return y
 
 
 def word_times(text, dur, offset):
@@ -101,8 +105,10 @@ def main(proj):
         if vo:
             if kok is None:
                 from kokoro_onnx import Kokoro
-                kok = Kokoro(os.path.join(CACHE, "kokoro-v1.0.int8.onnx"), os.path.join(CACHE, "voices-v1.0.bin"))
-            audio, sr = kok.create(vo, voice=spec["voice"], speed=spec["speed"], lang="en-us")
+                model = os.path.join(CACHE, "kokoro-v1.0.onnx")
+                if not os.path.exists(model): model = os.path.join(CACHE, "kokoro-v1.0.int8.onnx")
+                kok = Kokoro(model, os.path.join(CACHE, "voices-v1.0.bin"))
+            audio, sr = kok.create(vo, voice=spec["voice"], speed=spec["speed"], lang="en-gb" if spec["voice"].startswith("b") else "en-us")
             assert sr == SR
             audio = trim(np.asarray(audio, np.float32))
         else:

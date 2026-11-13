@@ -11,5 +11,5 @@ if [ ! -f node_modules/three/build/three.module.js ]; then
 fi
 python3 -c "import kokoro_onnx, soundfile, numpy" 2>/dev/null || pip install -q kokoro-onnx soundfile numpy
 BASE=https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0
-[ -s kokoro-v1.0.int8.onnx ] || curl -fsSL -o kokoro-v1.0.int8.onnx "$BASE/kokoro-v1.0.int8.onnx"
+[ -s kokoro-v1.0.onnx ] || curl -fsSL -o kokoro-v1.0.onnx "$BASE/kokoro-v1.0.onnx"   # full-quality model (~325 MB)
 [ -s voices-v1.0.bin ] || curl -fsSL -o voices-v1.0.bin "$BASE/voices-v1.0.bin"
