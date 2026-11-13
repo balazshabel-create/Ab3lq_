@@ -21,7 +21,7 @@ Match `scripts/what-if-we-hit-another-galaxy.md`: a title, an italic format line
 
 ## 2. Scenes → `videos/<slug>/scenes.mjs`
 
-Set `music` to the style that fits the topic (space, tense, chill or epic) at volume 0.14–0.18, so it stays low under the voice. Turn each script row into one scene, following `${CLAUDE_SKILL_DIR}/video/README.md` (scene format and helper API). Use `videos/what-if-we-hit-another-galaxy/scenes.mjs` as a worked example: a reusable porch set, a night sky, a galaxy collision simulation, and labels and titles.
+Use the narrator `voice: 'am_michael:0.5,am_fenrir:0.3,am_puck:0.2', speed: 1.15` (the user's chosen voice: American male, a bit deep, calm but excited) unless they ask for another. Set `music` to the style that fits the topic (space, tense, chill or epic) at volume 0.14–0.18, so it stays low under the voice. Turn each script row into one scene, following `${CLAUDE_SKILL_DIR}/video/README.md` (scene format and helper API). Use `videos/what-if-we-hit-another-galaxy/scenes.mjs` as a worked example: a reusable porch set, a night sky, a galaxy collision simulation, and labels and titles.
 
 ## 3. Preview and fix
 
