@@ -7,6 +7,7 @@ const W = +q.get('w') || 720, H = +q.get('h') || 1280;
 try {
   await document.fonts.load('900 64px Inter');
   const spec = (await import('/project/scenes.mjs')).default;
+  lib.setStyle(spec.style);
   const timings = await (await fetch('/project/build/timings.json')).json();
 
   const gl = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -15,6 +16,12 @@ try {
   gl.toneMapping = THREE.ACESFilmicToneMapping; gl.toneMappingExposure = 1;
   gl.shadowMap.enabled = true; gl.shadowMap.type = THREE.PCFSoftShadowMap;
 
+  let effect = null;
+  if (spec.style === 'ink') {
+    const { OutlineEffect } = await import('three/addons/effects/OutlineEffect.js');
+    effect = new OutlineEffect(gl, { defaultThickness: 0.011, defaultColor: [0.02, 0.02, 0.03], defaultAlpha: 1 });
+    gl.toneMapping = THREE.NoToneMapping;
+  }
   const out = document.createElement('canvas'); out.width = W; out.height = H; document.body.appendChild(out);
   const o = out.getContext('2d', { willReadFrequently: true });
 
@@ -29,7 +36,7 @@ try {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 6000);
     camera.position.set(0, 1.6, 6); camera.lookAt(0, 1.2, 0);
-    const fx = lib.makeFx();
+    const fx = lib.makeFx(); if (spec.style === 'ink') fx.paper = 0.14;
     const s = timings.scenes[i];
     const ctx = { THREE, scene, camera, renderer: gl, lib, fx, W, H, index: i, duration: s.duration, chunks: s.chunks || [0], words: s.words || [] };
     const update = spec.scenes[i].build?.(ctx) || (() => {});
@@ -43,7 +50,7 @@ try {
     const s = timings.scenes[i], t = Math.max(0, time - s.start), p = Math.min(1, t / s.duration);
     lib.resetFx(st.fx);
     st.update(t, p);
-    gl.render(st.scene, st.camera);
+    (effect || gl).render(st.scene, st.camera);
     o.drawImage(gl.domElement, 0, 0, W, H);
     lib.drawFx(o, st.fx, W, H, time);
     lib.drawCaption(o, s.words, t, W, H, spec.scenes[i].captions ?? spec.captions);

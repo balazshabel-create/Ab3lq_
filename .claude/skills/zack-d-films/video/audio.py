@@ -105,6 +105,18 @@ def sfx(kind, length=None):
     raise ValueError(f"unknown sfx {kind!r}; use whoosh boom hit crack glitch riser ding pop heartbeat static buzz hatch footsteps thuds scratch")
 
 
+def pitch_shift(x, factor):
+    """Lower/raise pitch without changing speed (ffmpeg rubberband, formants preserved)."""
+    import subprocess, tempfile
+    if abs(factor - 1) < 1e-3 or not len(x): return x
+    with tempfile.TemporaryDirectory() as d:
+        a, b = os.path.join(d, "a.wav"), os.path.join(d, "b.wav")
+        sf.write(a, x, SR)
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", a, "-af", f"rubberband=pitch={factor}:formant=preserved", "-ar", str(SR), b], check=True)
+        y, _ = sf.read(b, dtype="float32")
+    return y[: len(x)] if len(y) >= len(x) else np.pad(y, (0, len(x) - len(y)))
+
+
 def radio_fx(x):
     """Old-radio voice: band-limited, a bit distorted, with static underneath."""
     n = len(x); f = np.fft.rfftfreq(n, 1 / SR); X = np.fft.rfft(x)
@@ -172,6 +184,8 @@ def main(proj):
             words += word_times(txt, len(a) / SR, lead + cur)
             pieces.append(a); cur += len(a) / SR
         audio = np.concatenate(pieces) if pieces else np.zeros(0, np.float32)
+        pf = s.get("pitch") or (spec.get("voicePitch") if not s.get("voice") else None) or 1.0
+        audio = pitch_shift(audio, pf)
         if s.get("radio") and len(audio): audio = radio_fx(audio)
         speech = len(audio) / SR
         dur = s["duration"] or max(s["minDuration"], (lead + speech + s["hold"]) if vo else 1.5)

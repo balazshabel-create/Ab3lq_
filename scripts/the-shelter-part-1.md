@@ -1,6 +1,6 @@
 # The Shelter: Part 1
 
-*Short-form interactive story: 3D-animated, vertical 9:16, about 85 seconds. Ends on an A/B choice for the comments.*
+*Short-form interactive story: hand-drawn style (ink outlines, stick figures, overhead shots), vertical 9:16, about 85 seconds. Ends on an A/B choice for the comments.*
 
 | # | Visual | Narration (VO) |
 |---|--------|----------------|

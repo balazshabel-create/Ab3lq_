@@ -188,7 +188,7 @@ function shelter({ THREE, scene, lib }) {
   const cord = new THREE.Group(); cord.position.set(0, 2.6, -0.6); scene.add(cord);
   const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.35), lib.mat('#111')); wire.position.y = -0.17; cord.add(wire);
   const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 12), new THREE.MeshBasicMaterial({ color: '#fff1c9' })); bulb.position.y = -0.38; cord.add(bulb);
-  const light = new THREE.PointLight('#ffd08a', 4, 0, 1.2); light.position.y = -0.4; light.castShadow = true; light.shadow.mapSize.set(512, 512); cord.add(light);
+  const light = new THREE.PointLight('#ffd08a', 4, 0, 1.2); light.position.y = -0.4; light.castShadow = true; light.shadow.mapSize.set(512, 512); light.shadow.bias = -0.003; light.shadow.normalBias = 0.04; cord.add(light);
   scene.add(new THREE.AmbientLight('#3a3530', 0.35));
   const you = lib.person({ shirt: '#5a7bbf', pants: '#2b3a55' }); scene.add(you);
   /** flicker 0..1 amount, swing radians */
@@ -240,28 +240,62 @@ function resetPose(p) { p.rotation.order = 'YXZ'; p.rotation.set(0, p.rotation.y
 function pushup(p, t, y0 = 0) { resetPose(p); const k = 0.5 - 0.5 * Math.cos(t * 5), th = 0.42 - k * 0.2, phi = Math.PI / 2 - th; p.rotation.x = phi; p.position.y = y0 + 0.06; p.parts.armL.rotation.x = p.parts.armR.rotation.x = -phi; p.parts.head.rotation.x = -0.5; return k; }
 function squat(p, t, y0 = 0) { resetPose(p); const k = 0.5 - 0.5 * Math.cos(t * 4.5); p.position.y = y0 - k * 0.42; p.parts.legL.rotation.x = p.parts.legR.rotation.x = -k * 1.0; p.parts.torso.rotation.x = k * 0.25; p.parts.armL.rotation.x = p.parts.armR.rotation.x = -1.5 * k - 0.2; return k; }
 function jacks(p, t, y0 = 0) { resetPose(p); const k = 0.5 - 0.5 * Math.cos(t * 7); p.position.y = y0 + Math.abs(Math.sin(t * 3.5)) * 0.12; p.parts.armL.rotation.z = -0.15 - k * 2.6; p.parts.armR.rotation.z = 0.15 + k * 2.6; p.parts.legL.rotation.z = -k * 0.3; p.parts.legR.rotation.z = k * 0.3; return k; }
-function lie(p) { resetPose(p); p.rotation.set(-Math.PI / 2, 0, 0); p.position.set(1.55, 0.82, 1.5); p.parts.head.rotation.y = 0.3; }
+function lie(p) { resetPose(p); p.rotation.set(-Math.PI / 2, 0, 0); p.position.set(1.55, p.isStick ? 0.62 : 0.82, 1.5); p.parts.head.rotation.y = 0.3; }
 const chunkIndex = (chunks, t) => { let i = 0; chunks.forEach((c, j) => { if (t >= c) i = j; }); return i; };
+
+/** Overhead suburb with "your house" lot. */
+function suburbAbove(ctx, { ash = false, offset = [0, 0, 0] } = {}) {
+  const { scene, lib } = ctx;
+  const town = lib.topDownTown({ kind: 'suburb', seed: 11, crowd: 0, cars: ash ? 0 : 10, ash }); town.position.set(...offset); scene.add(town);
+  const home = town.lots.reduce((a, b) => (Math.hypot(b.x - 35, b.z - 35) < Math.hypot(a.x - 35, a.z - 35) ? b : a));
+  return { town, home, hx: home.x + offset[0], hz: home.z + offset[2], dz: home.dz };
+}
+function shadowFigure(THREE) { // long, thin, long-armed shadow (never the creature itself)
+  const c = document.createElement('canvas'); c.width = 256; c.height = 1024; const g = c.getContext('2d');
+  g.fillStyle = 'rgba(0,0,0,0.75)'; g.filter = 'blur(6px)';
+  g.beginPath(); g.ellipse(128, 70, 34, 46, 0, 0, 7); g.fill(); g.fillRect(104, 110, 48, 430); g.fillRect(108, 540, 14, 450); g.fillRect(134, 540, 14, 450);
+  g.save(); g.translate(104, 130); g.rotate(0.18); g.fillRect(-12, 0, 12, 470); g.beginPath(); g.ellipse(-6, 490, 26, 40, 0, 0, 7); g.fill(); g.restore();
+  g.save(); g.translate(152, 130); g.rotate(-0.18); g.fillRect(0, 0, 12, 470); g.beginPath(); g.ellipse(6, 490, 26, 40, 0, 0, 7); g.fill(); g.restore();
+  const t = new THREE.CanvasTexture(c);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(3, 12), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.userData.outlineParameters = { visible: false }; m.material.userData.outlineParameters = { visible: false }; return m;
+}
 
 const RED = '#ff5a5a';
 
 export default {
   // voice comes from the skill default (American male blend) unless set here
-  voice: 'am_michael:0.5,am_fenrir:0.3,am_puck:0.2',
-  speed: 1.1,
+  style: 'ink',          // hand-drawn look: toon shading, ink outlines, stick figures
+  voice: 'am_onyx',      // very deep storyteller voice
+  voicePitch: 0.92,      // a touch deeper still
+  speed: 1.13,
   music: { style: 'tense', volume: 0.15 },
   scenes: [
+    { // 0 overhead: your house at midnight
+      vo: 'Imagine you wake up at midnight,',
+      hold: 0.15,
+      build(ctx) {
+        const { scene, camera, lib, THREE } = ctx; lib.topDownLights(scene); const s = suburbAbove(ctx);
+        const win = lib.glow('#9fc4ff', 6, 0); win.position.set(s.hx + 2, 4.5, s.hz - 2); scene.add(win);
+        camera.far = 3000; camera.updateProjectionMatrix();
+        return (t, p) => {
+          s.town.update(t); const k = lib.ease(p); const h = lib.lerp(190, 32, k);
+          camera.position.set(s.hx + lib.lerp(30, 0, k), h, s.hz + lib.lerp(30, 4, k)); camera.up.set(0, 0, -1); camera.lookAt(s.hx, 0, s.hz);
+          win.material.opacity = p > 0.6 ? 0.6 + Math.sin(t * 30) * 0.3 : 0;
+        };
+      },
+    },
     { // 1 hook
-      vo: 'Imagine you wake up at midnight when your phone buzzes.',
-      sfx: [{ type: 'buzz', at: 0.3 }, { type: 'buzz', at: 1.9 }],
+      vo: 'when your phone buzzes.',
+      minDuration: 2.6,
+      sfx: [{ type: 'buzz', at: 0.05 }, { type: 'buzz', at: 1.4 }],
       build(ctx) {
         const { camera, lib } = ctx; const s = bedroom(ctx);
         s.phone.screen.draw((g, W, H) => drawPhone(g, W, H, 'lock', 0));
         return (t, p) => {
-          const buzzing = (t > 0.3 && (t - 0.3) % 1.6 < 1.3) && ((t * 1000) % 800 < 450);
+          const buzzing = ((t % 1.35) < 1.1) && ((t * 1000) % 800 < 450);
           s.phone.group.position.x = 0.85 + (buzzing ? Math.sin(t * 90) * 0.01 : 0);
-          s.glowL.intensity = t > 0.3 ? 2.5 : 0; s.phone.screen.mesh.visible = t > 0.3;
-          s.you.parts.head.rotation.y = -lib.easeRange(t, 1.6, 2.4) * 0.7;
+          s.glowL.intensity = 2.5; s.phone.screen.mesh.visible = true;
+          s.you.parts.head.rotation.y = -lib.easeRange(t, 0.7, 1.4) * 0.7;
           camera.position.set(lib.lerp(2.4, 1.9, p), lib.lerp(2.3, 1.9, p), lib.lerp(-0.4, -1.0, p)); camera.lookAt(0.3, 0.6, -2.6);
         };
       },
@@ -283,7 +317,7 @@ export default {
       },
     },
     { // 3 the news lies
-      vo: "You turn on the news. | Nothing. | They're saying everything is fine.",
+      vo: 'You turn on the news. | Nothing.',
       sfx: [{ type: 'pop', at: 0.2 }],
       build(ctx) {
         const { THREE, scene, camera, lib } = ctx; const s = bedroom(ctx);
@@ -306,6 +340,15 @@ export default {
         };
       },
     },
+    { // 3b overhead: nobody knows
+      vo: "They're saying everything is fine. | Nobody else knows.",
+      build(ctx) {
+        const { scene, camera, lib } = ctx; lib.topDownLights(scene);
+        const town = lib.topDownTown({ kind: 'city', seed: 3, crowd: 320, cars: 60 }); town.rotation.y = Math.PI / 4; scene.add(town);
+        camera.far = 3000; camera.updateProjectionMatrix();
+        return (t, p) => { town.update(t); camera.position.set(0, lib.lerp(95, 70, p), 0.01); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0); };
+      },
+    },
     { // 4 Leo doesn't answer
       vo: 'You call your best friend, Leo. | It rings. | And rings. | No answer.',
       speed: 1.02, pause: 0.42, hold: 0.8,
@@ -324,15 +367,24 @@ export default {
         };
       },
     },
-    { // 5 run to the shelter
+    { // 5 run to the shelter (overhead)
       vo: 'So you grab your bag and run to the old shelter in your backyard.',
       sfx: [{ type: 'footsteps', length: 4 }],
       build(ctx) {
-        const { camera, lib } = ctx; const s = yard(ctx);
+        const { scene, camera, lib, THREE } = ctx; lib.topDownLights(scene); const s = suburbAbove(ctx);
+        const hatch = new THREE.Group(); hatch.position.set(s.hx + 3, 0, s.hz + s.dz * 5); scene.add(hatch);
+        const rim = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.3, 2.4), lib.mat('#7d8288')); rim.position.y = 0.15; hatch.add(rim);
+        const lid = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.12, 1.8), lib.mat('#5d6268')); lid.position.set(0, 0.36, -1.9); lid.rotation.x = -1.2; hatch.add(lid);
+        const hole = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.05, 1.7), new THREE.MeshBasicMaterial({ color: '#000' })); hole.position.y = 0.31; hatch.add(hole);
+        const you = lib.person(); you.scale.setScalar(1.6); scene.add(you);
+        const bag = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.2), lib.mat('#4e6b2f')); bag.position.set(0, 1.25, -0.15); you.add(bag);
+        const torch = lib.glow('#fff2c0', 7, 0.45); scene.add(torch);
+        camera.far = 3000; camera.updateProjectionMatrix();
         return (t, p) => {
-          const k = lib.range(t, 0, ctx.duration * 0.95); const x = lib.lerp(-5, 3.0, k), z = lib.lerp(1, -1.6, k);
-          s.you.position.set(x, 0, z); s.you.rotation.y = Math.atan2(8, -2.6) ; lib.walk(s.you, t, 1.9); s.you.parts.torso.rotation.x = 0.2;
-          camera.position.set(x - 1.2, 1.5, z + 3.6); camera.lookAt(x + 1.0, 1.0, z - 0.5);
+          s.town.update(t); const k = lib.range(t, 0.2, ctx.duration * 0.92);
+          const x = lib.lerp(s.hx - 2, s.hx + 3, k), z = lib.lerp(s.hz - s.dz * 1.5, s.hz + s.dz * 3.8, k);
+          you.position.set(x, 0, z); you.rotation.y = Math.atan2(5, 5.3 * s.dz); lib.walk(you, t, 2.0); torch.position.set(x + 1.2, 0.4, z + s.dz * 2);
+          camera.position.set(s.hx + 0.5, lib.lerp(30, 22, p), s.hz + s.dz * 2); camera.up.set(0, 0, -1); camera.lookAt(s.hx + 0.5, 0, s.hz + s.dz * 1.6);
         };
       },
     },
@@ -513,12 +565,20 @@ export default {
       build(ctx) {
         const { camera, lib, fx } = ctx; const s = shelter(ctx); const C = ctx.chunks;
         s.cal.draw((g, W, H) => drawCalendar(g, W, H, 7));
+        const off3 = [3000, 0, 0]; lib.topDownLights; const yard = suburbAbove(ctx, { ash: true, offset: off3 });
+        const yardLight = new ctx.THREE.HemisphereLight('#d8d6d0', '#4a4844', 0); ctx.scene.add(yardLight);
+        const panels = []; for (let i = 0; i < 3; i++) { const pnl = new ctx.THREE.Mesh(new ctx.THREE.BoxGeometry(2.2, 0.2, 1.4), lib.mat('#27406b')); pnl.position.set(yard.hx - 3 + i * 2.6, 0.5, yard.hz + yard.dz * 5); pnl.rotation.x = -0.35; ctx.scene.add(pnl); panels.push(pnl); }
+        const shadow = shadowFigure(ctx.THREE); shadow.position.set(yard.hx, 0.75, yard.hz + yard.dz * 2); shadow.rotation.z = 0.5; ctx.scene.add(shadow);
         const fill = new ctx.THREE.PointLight('#ffd9a0', 1.2, 3, 1.5); fill.position.set(-0.9, 1.3, -2.0); ctx.scene.add(fill);
         return (t, p) => {
           s.setLight(t); const off = t > (C[1] ?? 1) && t < (C[3] ?? 4), back = t >= (C[3] ?? 4);
           s.tick(t, off ? Math.max(0.2, 0.6 - (t - (C[1] ?? 1)) * 0.08) : back ? Math.min(1, 0.4 + (t - (C[3] ?? 4)) * 0.5) : (t * 0.8) % 1);
           s.solarLed.material.color.set(off ? (Math.sin(t * 10) > 0 ? '#ff3b1f' : '#330a05') : '#2aff6a');
-          camera.position.set(lib.lerp(-0.45, -0.6, p), 1.05, lib.lerp(-1.0, -1.3, p)); camera.lookAt(-1.4, 0.75, -2.85); fill.intensity = 1.2;
+          const above = t > (C[2] ?? 3) - 0.1 && t < (C[3] ?? 5);
+          yardLight.intensity = above ? 1.6 : 0;
+          if (above) { const k = lib.range(t, C[2] ?? 3, C[3] ?? 5); shadow.position.set(yard.hx + lib.lerp(-2, 1, k), 0.75, yard.hz + yard.dz * lib.lerp(1, 4.5, k)); camera.position.set(yard.hx, 20, yard.hz + yard.dz * 4.5); camera.up.set(0, 0, -1); camera.lookAt(yard.hx, 0, yard.hz + yard.dz * 4.2); ctx.scene.background = new ctx.THREE.Color('#5f5e5a'); }
+          else { camera.up.set(0, 1, 0); camera.position.set(lib.lerp(-0.45, -0.6, p), 1.05, lib.lerp(-1.0, -1.3, p)); camera.lookAt(-1.4, 0.75, -2.85); ctx.scene.background = new ctx.THREE.Color('#000'); }
+          fill.intensity = 1.2;
           fx.title = 'DAY 8'; fx.titleY = 0.08;
         };
       },
@@ -576,7 +636,7 @@ export default {
     },
     { // 13 the warning
       vo: "Don't come out. | Whatever you do... don't come out. | It wasn't just a bomb.",
-      voice: 'am_onyx', speed: 0.92, radio: true, silence: true, hold: 1.0, pause: 0.7,
+      voice: 'am_echo', speed: 0.95, radio: true, silence: true, hold: 1.0, pause: 0.7,
       captions: { highlight: RED },
       sfx: [{ type: 'static', at: 0, length: 0.5 }, { type: 'glitch', at: 3.6, gain: 0.6 }],
       build(ctx) {
