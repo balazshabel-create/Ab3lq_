@@ -190,14 +190,17 @@ def main(proj):
         speech = len(audio) / SR
         dur = s["duration"] or max(s["minDuration"], (lead + speech + s["hold"]) if vo else 1.5)
         timings.append({"start": round(t, 3), "duration": round(dur, 3), "vo": vo, "words": words, "chunks": chunk_starts})
-        voices.append((t + lead, audio))
+        voices.append((t + lead, audio, bool(s.get("keepVoice"))))
         t += dur
         print(f"scene {i + 1:2d}: {dur:5.2f}s  {vo[:60]}")
     total = t
     n = int(total * SR) + SR
     voice = np.zeros(n, np.float32); fxbus = np.zeros(n, np.float32)
-    for start, a in voices:
+    narrate = spec.get("narration", True) is not False
+    heard = np.zeros(n, np.float32)  # what ends up in the mix (narration off = only in-world voices like a radio)
+    for start, a, keep in voices:
         p = int(start * SR); voice[p:p + len(a)] += a[: n - p]
+        if narrate or keep: heard[p:p + len(a)] += a[: n - p]
     for s, tm in zip(spec["scenes"], timings):
         items = s["sfx"] if isinstance(s["sfx"], list) else [s["sfx"]]
         for it in items:
@@ -225,7 +228,7 @@ def main(proj):
         drone_gain = spec["drone"] if "drone" in spec.get("_explicit", []) else 0.0
     else:
         music_bus, drone_gain = 0.0, spec["drone"]
-    mix = voice * 1.0 + fxbus * 0.8 + music_bus + drone * drone_gain * gate * fade
+    mix = heard * 1.0 + fxbus * 0.8 + music_bus + drone * drone_gain * gate * fade
     mix = mix[: int(total * SR)]
     mix = mix / max(1e-6, np.abs(mix).max()) * 0.89
     sf.write(os.path.join(build, "audio.wav"), mix, SR)

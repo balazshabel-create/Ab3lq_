@@ -23,8 +23,8 @@ const opt = (name, def) => { const i = rest.indexOf(`--${name}`); return i >= 0 
 if (cmd === 'extract') {
   const spec = (await import(pathToFileURL(path.join(proj, 'scenes.mjs')).href + '?' + Date.now())).default;
   const out = {
-    voice: spec.voice || 'am_michael', speed: spec.speed || 1.05, drone: spec.drone ?? 0.06, music: spec.music ?? null, voicePitch: spec.voicePitch ?? 1, _explicit: 'drone' in spec && spec.music ? ['drone'] : [],
-    scenes: spec.scenes.map((s) => ({ vo: s.vo || '', sfx: s.sfx || [], hold: s.hold ?? 0.3, minDuration: s.minDuration || 0, duration: s.duration || 0, silence: !!s.silence, voice: s.voice || null, speed: s.speed || null, radio: !!s.radio, pause: s.pause || null, pitch: s.pitch || null })),
+    voice: spec.voice || 'am_michael', speed: spec.speed || 1.05, drone: spec.drone ?? 0.06, music: spec.music ?? null, voicePitch: spec.voicePitch ?? 1, narration: spec.narration ?? true, _explicit: 'drone' in spec && spec.music ? ['drone'] : [],
+    scenes: spec.scenes.map((s) => ({ vo: s.vo || '', sfx: s.sfx || [], hold: s.hold ?? 0.3, minDuration: s.minDuration || 0, duration: s.duration || 0, silence: !!s.silence, voice: s.voice || null, speed: s.speed || null, radio: !!s.radio, pause: s.pause || null, pitch: s.pitch || null, keepVoice: !!s.keepVoice })),
   };
   fs.writeFileSync(path.join(build, 'narration.json'), JSON.stringify(out, null, 2));
   console.log(`extracted ${out.scenes.length} scenes`);

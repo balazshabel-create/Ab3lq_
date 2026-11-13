@@ -53,7 +53,7 @@ try {
     (effect || gl).render(st.scene, st.camera);
     o.drawImage(gl.domElement, 0, 0, W, H);
     lib.drawFx(o, st.fx, W, H, time);
-    lib.drawCaption(o, s.words, t, W, H, spec.scenes[i].captions ?? spec.captions);
+    lib.drawCaption(o, s.words, t, W, H, spec.narration === false ? false : (spec.scenes[i].captions ?? spec.captions));
     return out.toDataURL('image/jpeg', 0.92);
   };
   window.engine = { ready: true, total: timings.total };

@@ -26,7 +26,7 @@ function drawPhone(g, W, H, mode, t, k = 1) {
     g.fillStyle = '#9aa8c8'; g.font = '500 28px Inter'; g.textAlign = 'right'; g.fillText('now', W - 64, cardY + 56); g.textAlign = 'left';
     g.fillStyle = '#ffffff'; g.font = '800 50px Inter';
     if (mode === 'lock') g.fillText('New message', 64, cardY + 120);
-    else ['They lied.', 'Missiles inbound.', 'Get underground.', 'NOW.'].forEach((ln, i) => { if (i < Math.min(k, 3) + (k >= 3 ? 1 : 0)) { g.fillStyle = i === 3 ? '#ff5a5a' : '#fff'; g.fillText(ln, 64, cardY + 125 + i * 64); } });
+    else ['They lied.', 'Missiles inbound.', 'Get underground.', 'NOW.'].forEach((ln, i) => { if (i < k) { g.fillStyle = i === 3 ? '#ff5a5a' : '#fff'; g.fillText(ln, 64, cardY + 125 + i * 64); } });
     g.globalAlpha = 1;
   } else {
     g.font = '600 40px Inter'; g.fillStyle = '#c7d2ee'; g.fillText(mode === 'calling' ? 'calling…' : 'No answer', W / 2, 200);
@@ -264,44 +264,30 @@ const RED = '#ff5a5a';
 
 export default {
   // voice comes from the skill default (American male blend) unless set here
+  narration: false,      // narrator is added in the TikTok app (TikTok text-to-speech); timing + music ducking still follow the script
   style: 'ink',          // hand-drawn look: toon shading, ink outlines, stick figures
   voice: 'am_onyx',      // very deep storyteller voice
   voicePitch: 0.92,      // a touch deeper still
   speed: 1.13,
   music: { style: 'tense', volume: 0.15 },
   scenes: [
-    { // 0 overhead: your house at midnight
-      vo: 'Imagine you wake up at midnight,',
-      hold: 0.15,
-      build(ctx) {
-        const { scene, camera, lib, THREE } = ctx; lib.topDownLights(scene); const s = suburbAbove(ctx);
-        const win = lib.glow('#9fc4ff', 6, 0); win.position.set(s.hx + 2, 4.5, s.hz - 2); scene.add(win);
-        camera.far = 3000; camera.updateProjectionMatrix();
-        return (t, p) => {
-          s.town.update(t); const k = lib.ease(p); const h = lib.lerp(190, 32, k);
-          camera.position.set(s.hx + lib.lerp(30, 0, k), h, s.hz + lib.lerp(30, 4, k)); camera.up.set(0, 0, -1); camera.lookAt(s.hx, 0, s.hz);
-          win.material.opacity = p > 0.6 ? 0.6 + Math.sin(t * 30) * 0.3 : 0;
-        };
-      },
-    },
     { // 1 hook
-      vo: 'when your phone buzzes.',
-      minDuration: 2.6,
-      sfx: [{ type: 'buzz', at: 0.05 }, { type: 'buzz', at: 1.4 }],
+      vo: 'Imagine you wake up at midnight, when your phone buzzes.',
+      sfx: [{ type: 'buzz', at: 0.3 }, { type: 'buzz', at: 1.9 }],
       build(ctx) {
         const { camera, lib } = ctx; const s = bedroom(ctx);
         s.phone.screen.draw((g, W, H) => drawPhone(g, W, H, 'lock', 0));
         return (t, p) => {
-          const buzzing = ((t % 1.35) < 1.1) && ((t * 1000) % 800 < 450);
+          const buzzing = (t > 0.3 && (t - 0.3) % 1.6 < 1.3) && ((t * 1000) % 800 < 450);
           s.phone.group.position.x = 0.85 + (buzzing ? Math.sin(t * 90) * 0.01 : 0);
-          s.glowL.intensity = 2.5; s.phone.screen.mesh.visible = true;
-          s.you.parts.head.rotation.y = -lib.easeRange(t, 0.7, 1.4) * 0.7;
+          s.glowL.intensity = t > 0.3 ? 2.5 : 0; s.phone.screen.mesh.visible = t > 0.3;
+          s.you.parts.head.rotation.y = -lib.easeRange(t, 1.6, 2.4) * 0.7;
           camera.position.set(lib.lerp(2.4, 1.9, p), lib.lerp(2.3, 1.9, p), lib.lerp(-0.4, -1.0, p)); camera.lookAt(0.3, 0.6, -2.6);
         };
       },
     },
     { // 2 the message
-      vo: "It's a message from an unknown number. | They lied. | Missiles are coming. | Get underground.",
+      vo: "It's a message from an unknown number. | They lied. | Missiles are coming. | Get underground. | Now!",
       sfx: [{ type: 'heartbeat', at: 1.5 }, { type: 'heartbeat', at: 2.6 }, { type: 'heartbeat', at: 3.6 }],
       build(ctx) {
         const { THREE, scene, camera, lib, fx } = ctx;
@@ -367,24 +353,15 @@ export default {
         };
       },
     },
-    { // 5 run to the shelter (overhead)
+    { // 5 run to the shelter
       vo: 'So you grab your bag and run to the old shelter in your backyard.',
       sfx: [{ type: 'footsteps', length: 4 }],
       build(ctx) {
-        const { scene, camera, lib, THREE } = ctx; lib.topDownLights(scene); const s = suburbAbove(ctx);
-        const hatch = new THREE.Group(); hatch.position.set(s.hx + 3, 0, s.hz + s.dz * 5); scene.add(hatch);
-        const rim = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.3, 2.4), lib.mat('#7d8288')); rim.position.y = 0.15; hatch.add(rim);
-        const lid = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.12, 1.8), lib.mat('#5d6268')); lid.position.set(0, 0.36, -1.9); lid.rotation.x = -1.2; hatch.add(lid);
-        const hole = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.05, 1.7), new THREE.MeshBasicMaterial({ color: '#000' })); hole.position.y = 0.31; hatch.add(hole);
-        const you = lib.person(); you.scale.setScalar(1.6); scene.add(you);
-        const bag = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.2), lib.mat('#4e6b2f')); bag.position.set(0, 1.25, -0.15); you.add(bag);
-        const torch = lib.glow('#fff2c0', 7, 0.45); scene.add(torch);
-        camera.far = 3000; camera.updateProjectionMatrix();
+        const { camera, lib } = ctx; const s = yard(ctx);
         return (t, p) => {
-          s.town.update(t); const k = lib.range(t, 0.2, ctx.duration * 0.92);
-          const x = lib.lerp(s.hx - 2, s.hx + 3, k), z = lib.lerp(s.hz - s.dz * 1.5, s.hz + s.dz * 3.8, k);
-          you.position.set(x, 0, z); you.rotation.y = Math.atan2(5, 5.3 * s.dz); lib.walk(you, t, 2.0); torch.position.set(x + 1.2, 0.4, z + s.dz * 2);
-          camera.position.set(s.hx + 0.5, lib.lerp(30, 22, p), s.hz + s.dz * 2); camera.up.set(0, 0, -1); camera.lookAt(s.hx + 0.5, 0, s.hz + s.dz * 1.6);
+          const k = lib.range(t, 0, ctx.duration * 0.95); const x = lib.lerp(-5, 3.0, k), z = lib.lerp(1, -1.6, k);
+          s.you.position.set(x, 0, z); s.you.rotation.y = Math.atan2(8, -2.6); lib.walk(s.you, t, 1.9); s.you.parts.torso.rotation.x = 0.2;
+          camera.position.set(x - 1.2, 1.5, z + 3.6); camera.lookAt(x + 1.0, 1.0, z - 0.5);
         };
       },
     },
@@ -636,7 +613,7 @@ export default {
     },
     { // 13 the warning
       vo: "Don't come out. | Whatever you do... don't come out. | It wasn't just a bomb.",
-      voice: 'am_echo', speed: 0.95, radio: true, silence: true, hold: 1.0, pause: 0.7,
+      voice: 'am_echo', speed: 0.95, radio: true, keepVoice: true, silence: true, hold: 1.0, pause: 0.7,
       captions: { highlight: RED },
       sfx: [{ type: 'static', at: 0, length: 0.5 }, { type: 'glitch', at: 3.6, gain: 0.6 }],
       build(ctx) {
