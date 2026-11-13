@@ -90,6 +90,14 @@ def word_times(text, dur, offset):
     return [{"w": re.sub(r"^[\"'(]+|[\"')]+$", "", w), "start": round(offset + edges[i], 3), "end": round(offset + edges[i + 1], 3)} for i, w in enumerate(words)]
 
 
+def voice_style(kok, voice):
+    """'am_michael' or a blend like 'am_michael:0.5,am_fenrir:0.3,am_puck:0.2'."""
+    if ":" not in voice and "," not in voice: return voice
+    parts = [(v.split(":")[0].strip(), float(v.split(":")[1]) if ":" in v else 1.0) for v in voice.split(",")]
+    total = sum(w for _, w in parts)
+    return sum(kok.get_voice_style(v) * (w / total) for v, w in parts)
+
+
 def timings_silence(spec, timings):
     return [{"start": tm["start"], "duration": tm["duration"], "silence": sc["silence"]} for sc, tm in zip(spec["scenes"], timings)]
 
@@ -108,7 +116,7 @@ def main(proj):
                 model = os.path.join(CACHE, "kokoro-v1.0.onnx")
                 if not os.path.exists(model): model = os.path.join(CACHE, "kokoro-v1.0.int8.onnx")
                 kok = Kokoro(model, os.path.join(CACHE, "voices-v1.0.bin"))
-            audio, sr = kok.create(vo, voice=spec["voice"], speed=spec["speed"], lang="en-gb" if spec["voice"].startswith("b") else "en-us")
+            audio, sr = kok.create(vo, voice=voice_style(kok, spec["voice"]), speed=spec["speed"], lang="en-gb" if spec["voice"].startswith("b") else "en-us")
             assert sr == SR
             audio = trim(np.asarray(audio, np.float32))
         else:

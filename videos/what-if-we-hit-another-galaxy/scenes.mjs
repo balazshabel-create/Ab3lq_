@@ -35,8 +35,8 @@ function nightSky(ctx) {
 }
 
 export default {
-  voice: 'am_michael',
-  speed: 1.08,
+  voice: 'am_michael:0.5,am_fenrir:0.3,am_puck:0.2',  // a bit deep, calm but excited
+  speed: 1.15,
   music: { style: 'space', volume: 0.16 },
   scenes: [
     { // 1 hook

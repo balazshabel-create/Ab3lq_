@@ -20,8 +20,8 @@ make.sh <dir> --audio               # rebuild voice/music/sfx only and re-mux (a
 
 ```js
 export default {
-  voice: 'am_michael',   // Kokoro voices: am_michael, am_adam, am_puck, af_heart, af_bella, bf_emma, ...
-  speed: 1.08,
+  voice: 'am_michael:0.5,am_fenrir:0.3,am_puck:0.2',  // a Kokoro voice (am_michael, am_fenrir, am_puck, af_heart, bm_george, ...) or a weighted blend
+  speed: 1.15,
   music: { style: 'space', volume: 0.16 },  // generated background music, ducked under the voice: space | tense | chill | epic (null = none)
   drone: 0.07,           // low ambient hum, used only when there's no music
   captions: { perGroup: 3, y: 0.7, size: 64 },   // or false
