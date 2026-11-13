@@ -29,4 +29,4 @@ Run `bash ${CLAUDE_SKILL_DIR}/video/make.sh videos/<slug> --stills` (about 1–2
 
 ## 4. Render and deliver
 
-Run `bash ${CLAUDE_SKILL_DIR}/video/make.sh videos/<slug>` in the background. It takes roughly 5–10 minutes for 70 seconds and writes `videos/<slug>/<slug>.mp4`. To change only the voice, music or sound effects afterwards, run `make.sh videos/<slug> --audio` (about 1 minute). When it finishes, send the MP4 with SendUserFile (`display: "render"`), plus a short list of the scene beats and one line on sources.
+Run `bash ${CLAUDE_SKILL_DIR}/video/make.sh videos/<slug>` in the background. It takes roughly 5–10 minutes for 70 seconds and writes `videos/<slug>/<slug>.mp4`. When the render finishes, send the MP4 with SendUserFile (`display: "render"`), plus a short list of the scene beats and one line on sources. To change only the voice, music or sound effects later, run `make.sh videos/<slug> --audio` (about 1 minute) instead of a full render.
