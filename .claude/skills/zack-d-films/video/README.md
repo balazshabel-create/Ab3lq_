@@ -28,7 +28,9 @@ export default {
   scenes: [
     {
       vo: 'Narration for this shot.',   // scene length = voice length + hold (default 0.3s)
-      sfx: ['whoosh', { type: 'boom', at: 2.4, gain: 0.7 }],  // whoosh boom hit crack glitch riser ding pop heartbeat
+      sfx: ['whoosh', { type: 'boom', at: 2.4, gain: 0.7 }],  // whoosh boom hit crack glitch riser ding pop heartbeat static buzz hatch footsteps
+      voice: 'am_onyx', speed: 0.95,  // optional per-scene narrator (e.g. a character speaking)
+      radio: false,       // true makes this scene's voice sound like an old radio with static
       silence: false,     // true drops the music/drone out during this scene (dramatic beat)
       duration: 0,        // fixed length in seconds (use for scenes with no VO)
       captions: undefined,// per-scene override, false hides

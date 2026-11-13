@@ -70,7 +70,36 @@ def sfx(kind, length=None):
         for s in (0.0, 0.28):
             tt = np.clip(t - s, 0, None); y += np.sin(2 * np.pi * 55 * tt) * np.exp(-tt / 0.07) * (t >= s)
         return y * 0.9
-    raise ValueError(f"unknown sfx {kind!r}; use whoosh boom hit crack glitch riser ding pop heartbeat")
+    if kind == "static":
+        d = length or 1.2; n = int(SR * d); x = rs.standard_normal(n)
+        crackle = (rs.random(n) > 0.997) * rs.standard_normal(n) * 6
+        y = (x - lowpass(x, 3)) * 0.25 + lowpass(crackle, 2)
+        return y * np.clip(np.minimum(np.arange(n) / (SR * 0.05), (n - np.arange(n)) / (SR * 0.2)), 0, 1) * 0.5
+    if kind == "buzz":
+        n = int(SR * 1.6); t = np.arange(n) / SR
+        on = ((t % 0.8) < 0.45).astype(float)
+        return np.sign(np.sin(2 * np.pi * 150 * t)) * 0.18 * lowpass(on, SR * 0.01) * (1 + 0.3 * np.sin(2 * np.pi * 9 * t))
+    if kind == "hatch":
+        n = int(SR * 0.9); t = np.arange(n) / SR
+        return (np.sin(2 * np.pi * 70 * t) * np.exp(-t / 0.15) + lowpass(rs.standard_normal(n), 8) * np.exp(-t / 0.06) * 1.5 + np.sin(2 * np.pi * 1800 * t) * np.exp(-t / 0.2) * 0.08) * 0.9
+    if kind == "footsteps":
+        d = length or 2.0; n = int(SR * d); y = np.zeros(n)
+        for k in np.arange(0, d, 0.32):
+            p = int(k * SR); m = min(n - p, int(SR * 0.08))
+            if m > 0: y[p:p + m] += lowpass(rs.standard_normal(m), 12) * np.exp(-np.arange(m) / (SR * 0.02)) * 2
+        return y * 0.5
+    raise ValueError(f"unknown sfx {kind!r}; use whoosh boom hit crack glitch riser ding pop heartbeat static buzz hatch footsteps")
+
+
+def radio_fx(x):
+    """Old-radio voice: band-limited, a bit distorted, with static underneath."""
+    n = len(x); f = np.fft.rfftfreq(n, 1 / SR); X = np.fft.rfft(x)
+    X *= (f > 350) * (f < 3200)
+    y = np.fft.irfft(X, n)
+    y = np.tanh(y / (np.abs(y).max() + 1e-9) * 2.5) * 0.8
+    noise = rs.standard_normal(n); noise = noise - lowpass(noise, 3)
+    crack = lowpass((rs.random(n) > 0.998) * rs.standard_normal(n) * 4, 2)
+    return (y + noise * 0.05 + crack * 0.3).astype(np.float32)
 
 
 def trim(x, thr=0.004):
@@ -116,9 +145,11 @@ def main(proj):
                 model = os.path.join(CACHE, "kokoro-v1.0.onnx")
                 if not os.path.exists(model): model = os.path.join(CACHE, "kokoro-v1.0.int8.onnx")
                 kok = Kokoro(model, os.path.join(CACHE, "voices-v1.0.bin"))
-            audio, sr = kok.create(vo, voice=voice_style(kok, spec["voice"]), speed=spec["speed"], lang="en-gb" if spec["voice"].startswith("b") else "en-us")
+            v = s.get("voice") or spec["voice"]
+            audio, sr = kok.create(vo, voice=voice_style(kok, v), speed=s.get("speed") or spec["speed"], lang="en-gb" if v.startswith("b") else "en-us")
             assert sr == SR
             audio = trim(np.asarray(audio, np.float32))
+            if s.get("radio"): audio = radio_fx(audio)
         else:
             audio = np.zeros(0, np.float32)
         speech = len(audio) / SR
