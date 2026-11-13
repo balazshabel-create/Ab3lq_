@@ -21,7 +21,7 @@ Match `scripts/what-if-we-hit-another-galaxy.md`: a title, an italic format line
 
 ## 2. Scenes → `videos/<slug>/scenes.mjs`
 
-Turn each script row into one scene, following `${CLAUDE_SKILL_DIR}/video/README.md` (scene format and helper API). Use `videos/what-if-we-hit-another-galaxy/scenes.mjs` as a worked example: a reusable porch set, a night sky, a galaxy collision simulation, and labels and titles.
+Set `music` to the style that fits the topic (space, tense, chill or epic) at volume 0.14–0.18, so it stays low under the voice. Turn each script row into one scene, following `${CLAUDE_SKILL_DIR}/video/README.md` (scene format and helper API). Use `videos/what-if-we-hit-another-galaxy/scenes.mjs` as a worked example: a reusable porch set, a night sky, a galaxy collision simulation, and labels and titles.
 
 ## 3. Preview and fix
 
@@ -29,4 +29,4 @@ Run `bash ${CLAUDE_SKILL_DIR}/video/make.sh videos/<slug> --stills` (about 1–2
 
 ## 4. Render and deliver
 
-Run `bash ${CLAUDE_SKILL_DIR}/video/make.sh videos/<slug>` in the background. It takes roughly 5–10 minutes for 70 seconds and writes `videos/<slug>/<slug>.mp4`. When it finishes, send the MP4 with SendUserFile (`display: "render"`), plus a short list of the scene beats and one line on sources.
+Run `bash ${CLAUDE_SKILL_DIR}/video/make.sh videos/<slug>` in the background. It takes roughly 5–10 minutes for 70 seconds and writes `videos/<slug>/<slug>.mp4`. To change only the voice, music or sound effects afterwards, run `make.sh videos/<slug> --audio` (about 1 minute). When it finishes, send the MP4 with SendUserFile (`display: "render"`), plus a short list of the scene beats and one line on sources.

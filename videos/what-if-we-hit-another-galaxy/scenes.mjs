@@ -37,7 +37,7 @@ function nightSky(ctx) {
 export default {
   voice: 'am_michael',
   speed: 1.08,
-  drone: 0.07,
+  music: { style: 'space', volume: 0.16 },
   scenes: [
     { // 1 hook
       vo: 'This is what the night sky would look like if our galaxy crashed into another one.',

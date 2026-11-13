@@ -9,6 +9,8 @@ import json, os, re, sys
 import numpy as np
 import soundfile as sf
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 SR = 24000
 CACHE = os.environ.get("ZDF_CACHE", os.path.expanduser("~/.cache/zack-d-films"))
 rs = np.random.default_rng(7)
@@ -84,6 +86,10 @@ def word_times(text, dur, offset):
     return [{"w": re.sub(r"^[\"'(]+|[\"')]+$", "", w), "start": round(offset + edges[i], 3), "end": round(offset + edges[i + 1], 3)} for i, w in enumerate(words)]
 
 
+def timings_silence(spec, timings):
+    return [{"start": tm["start"], "duration": tm["duration"], "silence": sc["silence"]} for sc, tm in zip(spec["scenes"], timings)]
+
+
 def main(proj):
     build = os.path.join(proj, "build")
     spec = json.load(open(os.path.join(build, "narration.json")))
@@ -128,7 +134,18 @@ def main(proj):
         if s["silence"]: gate[int(tm["start"] * SR): int((tm["start"] + tm["duration"]) * SR)] = 0
     gate = lowpass(gate, SR * 0.15)
     fade = np.clip(np.minimum(tt / 1.0, (total - tt) / 1.0), 0, 1)
-    mix = voice * 1.0 + fxbus * 0.8 + drone * spec["drone"] * gate * fade
+    music_cfg = spec.get("music")
+    if isinstance(music_cfg, str): music_cfg = {"style": music_cfg}
+    if music_cfg:
+        from music import compose, duck
+        mus = compose(total, SR, music_cfg.get("style", "space"), timings_silence(spec, timings), music_cfg.get("seed", 3))
+        mus = np.pad(mus, (0, n - len(mus)))
+        mus = duck(mus, voice, SR, depth=music_cfg.get("duck", 0.55))
+        music_bus = mus * float(music_cfg.get("volume", 0.16))
+        drone_gain = spec["drone"] if "drone" in spec.get("_explicit", []) else 0.0
+    else:
+        music_bus, drone_gain = 0.0, spec["drone"]
+    mix = voice * 1.0 + fxbus * 0.8 + music_bus + drone * drone_gain * gate * fade
     mix = mix[: int(total * SR)]
     mix = mix / max(1e-6, np.abs(mix).max()) * 0.89
     sf.write(os.path.join(build, "audio.wav"), mix, SR)

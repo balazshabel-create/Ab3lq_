@@ -13,6 +13,7 @@ This engine turns a `scenes.mjs` file into a vertical MP4 with these stages:
 ```
 make.sh <dir> --stills [--at 0.5]   # one frame per scene + build/contact.jpg
 make.sh <dir> [--fps 30 --w 720 --h 1280]   # full render -> <dir>/<dir-name>.mp4
+make.sh <dir> --audio               # rebuild voice/music/sfx only and re-mux (after a full render)
 ```
 
 ## scenes.mjs
@@ -21,13 +22,14 @@ make.sh <dir> [--fps 30 --w 720 --h 1280]   # full render -> <dir>/<dir-name>.mp
 export default {
   voice: 'am_michael',   // Kokoro voices: am_michael, am_adam, am_puck, af_heart, af_bella, bf_emma, ...
   speed: 1.08,
-  drone: 0.07,           // ambient bed volume (0 = off)
+  music: { style: 'space', volume: 0.16 },  // generated background music, ducked under the voice: space | tense | chill | epic (null = none)
+  drone: 0.07,           // low ambient hum, used only when there's no music
   captions: { perGroup: 3, y: 0.7, size: 64 },   // or false
   scenes: [
     {
       vo: 'Narration for this shot.',   // scene length = voice length + hold (default 0.3s)
       sfx: ['whoosh', { type: 'boom', at: 2.4, gain: 0.7 }],  // whoosh boom hit crack glitch riser ding pop heartbeat
-      silence: false,     // true mutes the drone during this scene
+      silence: false,     // true drops the music/drone out during this scene (dramatic beat)
       duration: 0,        // fixed length in seconds (use for scenes with no VO)
       captions: undefined,// per-scene override, false hides
       build(ctx) {        // runs once when the scene starts; build the 3D set here
