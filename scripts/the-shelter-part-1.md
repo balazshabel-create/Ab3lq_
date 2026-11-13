@@ -12,8 +12,10 @@
 | 6 | The hatch slams shut. The horizon flashes white and the ground shakes. | "The second the hatch slams shut, the sky turns white." |
 | 7 | Inside the shelter: one flickering bulb, concrete walls. | "When the shaking stops, you check what you have down there." |
 | 8 | Labels pop up one by one: WATER, FOOD, AIR VENT, CAMERA, SOLAR POWER. | "Water. Food. Good airflow. A camera to see outside. And solar panels that only work when the sun is up." |
+| 8b | Close-up: you write the supply math in a notebook: "WATER: 40 L, 2 L a day = 20 DAYS", "FOOD: 50 cans, 3 a day = ~16 DAYS", and circle "TIGHT!". | "You write it all down. Forty liters of water. That's about twenty days. Fifty cans of food. Just over two weeks. It's going to be tight." |
 | 9 | A calendar on the wall: DAY 1 of 14. | "You make a plan. Two weeks underground, until the radiation outside gets weak enough." |
-| 10 | Time-lapse: the day counter ticks up, the camera shows grey ash outside, the solar light turns on and off. | "Every day, the same routine. Ration the food. Check the camera. Charge the batteries while the sun is up." |
+| 10 | Time-lapse: the day counter ticks up, the camera shows grey ash outside, the solar light turns on and off. | "Every day, the same routine. Ration the food. Check the camera. Work out. Charge the batteries while the sun is up." |
+| 10b | Daily workout: push-ups, squats, jumping jacks, with a rep counter. | "And every single day, you work out. Push-ups. Squats. Jumping jacks. You have to stay strong." |
 | 11 | DAY 14. You put your hand on the ladder. | "Day fourteen. Everything seems fine. You grab the ladder." |
 | 12 | The radio's light flickers on. Static. | "Then, the radio crackles." |
 | 13 | Radio close-up. On the camera monitor, the static glitches for a split second. | *(Radio voice)* "Don't come out. Whatever you do… don't come out. It wasn't just a bomb." |

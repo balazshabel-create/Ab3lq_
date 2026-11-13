@@ -31,7 +31,7 @@ try {
     camera.position.set(0, 1.6, 6); camera.lookAt(0, 1.2, 0);
     const fx = lib.makeFx();
     const s = timings.scenes[i];
-    const ctx = { THREE, scene, camera, renderer: gl, lib, fx, W, H, index: i, duration: s.duration };
+    const ctx = { THREE, scene, camera, renderer: gl, lib, fx, W, H, index: i, duration: s.duration, chunks: s.chunks || [0], words: s.words || [] };
     const update = spec.scenes[i].build?.(ctx) || (() => {});
     st = { scene, camera, fx, update, ctx }; cur = i;
   }

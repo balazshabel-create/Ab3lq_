@@ -138,23 +138,30 @@ def main(proj):
     lead = 0.15  # seconds of air before each line
     voices, timings, t = [], [], 0.0
     for i, s in enumerate(spec["scenes"]):
-        vo = s["vo"].strip()
-        if vo:
+        raw = s["vo"].strip()
+        chunks_txt = [c.strip() for c in raw.split("|") if c.strip()]  # "|" = a deliberate pause (lists, dramatic beats)
+        vo = " ".join(chunks_txt)
+        pieces, words, chunk_starts, cur = [], [], [], 0.0
+        pause = float(s.get("pause") or 0.38)
+        for ci, txt in enumerate(chunks_txt):
             if kok is None:
                 from kokoro_onnx import Kokoro
                 model = os.path.join(CACHE, "kokoro-v1.0.onnx")
                 if not os.path.exists(model): model = os.path.join(CACHE, "kokoro-v1.0.int8.onnx")
                 kok = Kokoro(model, os.path.join(CACHE, "voices-v1.0.bin"))
             v = s.get("voice") or spec["voice"]
-            audio, sr = kok.create(vo, voice=voice_style(kok, v), speed=s.get("speed") or spec["speed"], lang="en-gb" if v.startswith("b") else "en-us")
+            a, sr = kok.create(txt, voice=voice_style(kok, v), speed=s.get("speed") or spec["speed"], lang="en-gb" if v.startswith("b") else "en-us")
             assert sr == SR
-            audio = trim(np.asarray(audio, np.float32))
-            if s.get("radio"): audio = radio_fx(audio)
-        else:
-            audio = np.zeros(0, np.float32)
+            a = trim(np.asarray(a, np.float32))
+            if ci: pieces.append(np.zeros(int(SR * pause), np.float32)); cur += pause
+            chunk_starts.append(round(lead + cur, 3))
+            words += word_times(txt, len(a) / SR, lead + cur)
+            pieces.append(a); cur += len(a) / SR
+        audio = np.concatenate(pieces) if pieces else np.zeros(0, np.float32)
+        if s.get("radio") and len(audio): audio = radio_fx(audio)
         speech = len(audio) / SR
         dur = s["duration"] or max(s["minDuration"], (lead + speech + s["hold"]) if vo else 1.5)
-        timings.append({"start": round(t, 3), "duration": round(dur, 3), "vo": vo, "words": word_times(vo, speech, lead)})
+        timings.append({"start": round(t, 3), "duration": round(dur, 3), "vo": vo, "words": words, "chunks": chunk_starts})
         voices.append((t + lead, audio))
         t += dur
         print(f"scene {i + 1:2d}: {dur:5.2f}s  {vo[:60]}")
@@ -167,7 +174,7 @@ def main(proj):
         items = s["sfx"] if isinstance(s["sfx"], list) else [s["sfx"]]
         for it in items:
             if isinstance(it, str): it = {"type": it}
-            kind = it["type"]; at = tm["start"] + float(it.get("at", 0))
+            kind = it["type"]; at = tm["start"] + (tm["chunks"][int(it["chunk"])] + float(it.get("at", 0)) if "chunk" in it and tm["chunks"] else float(it.get("at", 0)))
             y = sfx(kind, it.get("length") or (tm["duration"] if kind == "riser" else None)) * float(it.get("gain", 1))
             if kind == "riser" and "at" not in it: at = tm["start"]
             p = int(at * SR); fxbus[p:p + len(y)] += y[: max(0, n - p)]

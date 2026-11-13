@@ -133,7 +133,31 @@ function shelter({ THREE, scene, lib }) {
   for (let i = 0; i < 12; i++) add(new THREE.CylinderGeometry(0.06, 0.06, 0.13, 14), ['#c0392b', '#e1a32b', '#4e8f3a', '#9aa0a6'][i % 4], -1.7 + (i % 2) * -0.12, 0.94 + Math.floor(i / 6) * 0.6, -2.1 + (i % 6) * 0.3, { metalness: 0.5 });
   for (let i = 0; i < 4; i++) add(new THREE.BoxGeometry(0.3, 0.22, 0.25), '#b08d5a', -1.75, 1.58 + 0, -2.0 + i * 0.45);
   // cot (right wall)
-  add(new THREE.BoxGeometry(0.85, 0.35, 1.9), '#4a5a3a', 1.55, 0.3, 0.6); add(new THREE.BoxGeometry(0.8, 0.1, 1.85), '#7d8f62', 1.55, 0.52, 0.6);
+  // bunk bed (right wall)
+  for (const [x, z] of [[1.15, -0.35], [1.95, -0.35], [1.15, 1.55], [1.95, 1.55]]) add(new THREE.BoxGeometry(0.05, 1.9, 0.05), '#4a4f55', x, 0.95, z, { metalness: 0.7 });
+  for (const y of [0.4, 1.35]) { add(new THREE.BoxGeometry(0.85, 0.06, 1.95), '#4a4f55', 1.55, y, 0.6, { metalness: 0.6 }); add(new THREE.BoxGeometry(0.8, 0.12, 1.85), '#7d8f62', 1.55, y + 0.09, 0.6); add(new THREE.BoxGeometry(0.5, 0.1, 0.32), '#e8e4da', 1.55, y + 0.2, -0.1); add(new THREE.BoxGeometry(0.82, 0.08, 1.1), '#7a2f2f', 1.55, y + 0.17, 0.95); }
+  add(new THREE.BoxGeometry(0.4, 0.3, 0.35), '#b08d5a', 1.5, 1.68, 1.1); add(new THREE.BoxGeometry(0.35, 0.25, 0.3), '#9c7a48', 1.6, 1.66, 0.5);
+  // photo of you and Leo, taped above the bunk
+  const photo = screen(THREE, 0.32, 0.24, 320); photo.draw((g, W, H) => { g.fillStyle = '#f4efe2'; g.fillRect(0, 0, W, H); g.fillStyle = '#7fb3e0'; g.fillRect(14, 14, W - 28, H - 70); g.fillStyle = '#4e8f3a'; g.fillRect(14, H - 110, W - 28, 54); for (const [x, c] of [[0.36, '#5a7bbf'], [0.64, '#e9a23b']]) { g.fillStyle = '#f0c08a'; g.beginPath(); g.arc(W * x, 80, 22, 0, 7); g.fill(); g.fillStyle = c; g.fillRect(W * x - 22, 104, 44, 70); } g.fillStyle = '#333'; g.font = '700 30px Inter'; g.textAlign = 'center'; g.fillText('ME & LEO', W / 2, H - 18); }); photo.mesh.position.set(1.985, 2.1, 0.9); photo.mesh.rotation.set(0, -Math.PI / 2, 0.06); scene.add(photo.mesh);
+  // first-aid kit, gas mask, flashlight, toolbox, water crates, books, rug, clock, map, pipes, battery bank
+  const aid = screen(THREE, 0.36, 0.26, 256); aid.draw((g, W, H) => { g.fillStyle = '#f2f2f2'; g.fillRect(0, 0, W, H); g.fillStyle = '#d32f2f'; g.fillRect(W / 2 - 18, 30, 36, H - 60); g.fillRect(W / 2 - 62, H / 2 - 18, 124, 36); }); aid.mesh.position.set(0.25, 1.75, -2.945); scene.add(aid.mesh);
+  add(new THREE.BoxGeometry(0.38, 0.28, 0.1), '#e6e6e6', 0.25, 1.75, -3.0);
+  const mask = new THREE.Group(); mask.position.set(-0.85, 1.5, -2.93); scene.add(mask);
+  const face = new THREE.Mesh(new THREE.SphereGeometry(0.13, 20, 14), lib.mat('#2e3530', { roughness: 0.6 })); face.scale.set(1, 1.2, 0.6); mask.add(face);
+  for (const x of [-0.06, 0.06]) { const eye = new THREE.Mesh(new THREE.CircleGeometry(0.035, 16), lib.mat('#9fb7c4', { metalness: 0.5, roughness: 0.1 })); eye.position.set(x, 0.04, 0.08); mask.add(eye); }
+  const filt = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 16), lib.mat('#6b6f4a')); filt.rotation.x = Math.PI / 2; filt.position.set(0, -0.08, 0.09); mask.add(filt);
+  const torch = add(new THREE.CylinderGeometry(0.025, 0.03, 0.22, 12), '#f2c230', 1.35, 0.84, -2.35); torch.rotation.z = Math.PI / 2;
+  add(new THREE.BoxGeometry(0.5, 0.22, 0.25), '#b3261e', -1.3, 0.11, 0.5, { metalness: 0.3 });
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) add(new THREE.BoxGeometry(0.34, 0.3, 0.34), '#3e6fa8', -1.7 + j * 0.36, 0.15 + i * 0.3, 0.05 + (i % 2) * 0.03);
+  const crateTag = screen(THREE, 0.3, 0.1, 256); crateTag.draw((g, W, H) => { g.fillStyle = '#3e6fa8'; g.fillRect(0, 0, W, H); g.fillStyle = '#fff'; g.font = '900 56px Inter'; g.textAlign = 'center'; g.fillText('WATER', W / 2, 66); }); crateTag.mesh.position.set(-1.34, 0.75, 0.23); scene.add(crateTag.mesh);
+  for (let i = 0; i < 4; i++) add(new THREE.BoxGeometry(0.22, 0.04, 0.3), ['#7a2f2f', '#2f4f7a', '#4e6b2f', '#7a6a2f'][i], 1.75, 0.84 + i * 0.04, -2.75);
+  const rug = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2.0), lib.mat('#6a3b2a')); rug.rotation.x = -Math.PI / 2; rug.position.set(0.1, 0.012, 0.5); rug.receiveShadow = true; scene.add(rug);
+  const matE = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 1.6), lib.mat('#2f6fb0')); matE.rotation.x = -Math.PI / 2; matE.position.set(0.15, 0.02, -0.6); scene.add(matE);
+  const clock = screen(THREE, 0.26, 0.26, 256); clock.mesh.position.set(-1.985, 2.1, 0.0); clock.mesh.rotation.y = Math.PI / 2; scene.add(clock.mesh);
+  const map = screen(THREE, 0.7, 0.5, 400); map.draw((g, W, H) => { g.fillStyle = '#e8dfc4'; g.fillRect(0, 0, W, H); g.strokeStyle = '#8fb0c9'; g.lineWidth = 10; g.beginPath(); g.moveTo(0, H * 0.7); g.bezierCurveTo(W * 0.3, H * 0.5, W * 0.6, H * 0.9, W, H * 0.6); g.stroke(); g.strokeStyle = '#a89b7a'; g.lineWidth = 3; for (let i = 0; i < 8; i++) { g.beginPath(); g.moveTo(0, i * 40); g.lineTo(W, i * 40 + 20); g.stroke(); } g.fillStyle = '#d32f2f'; for (const [x, y] of [[0.3, 0.3], [0.62, 0.45], [0.75, 0.2]]) { g.beginPath(); g.arc(W * x, H * y, 9, 0, 7); g.fill(); } g.strokeStyle = '#d32f2f'; g.lineWidth = 4; g.beginPath(); g.arc(W * 0.62, H * 0.45, 40, 0, 7); g.stroke(); g.fillStyle = '#333'; g.font = '700 26px Inter'; g.fillText("LEO'S HOUSE", W * 0.5, H * 0.62); }); map.mesh.position.set(-0.6, 1.6, 2.98); map.mesh.rotation.y = Math.PI; scene.add(map.mesh);
+  for (const z of [-2.9]) { const pipe = add(new THREE.CylinderGeometry(0.04, 0.04, 6), '#6f747a', 0, 2.5, 0, { metalness: 0.8 }); pipe.rotation.x = Math.PI / 2; pipe.position.set(-1.85, 2.48, 0); }
+  add(new THREE.BoxGeometry(0.5, 0.35, 0.3), '#23282e', -1.65, 0.17, -2.7, { metalness: 0.4 });
+  const batt = screen(THREE, 0.3, 0.14, 256); batt.mesh.position.set(-1.65, 0.22, -2.545); scene.add(batt.mesh);
   // table with monitor and radio (back right)
   add(new THREE.BoxGeometry(1.3, 0.06, 0.65), '#5a412b', 1.1, 0.78, -2.6);
   for (const [x, z] of [[0.52, -2.35], [1.68, -2.35], [0.52, -2.85], [1.68, -2.85]]) add(new THREE.BoxGeometry(0.05, 0.78, 0.05), '#3d2c1d', x, 0.39, z);
@@ -159,7 +183,7 @@ function shelter({ THREE, scene, lib }) {
   add(new THREE.BoxGeometry(0.8, 0.05, 0.8), '#5d6166', -0.3, 2.58, -2.6, { metalness: 0.6 });
   const leak = lib.glow('#fff6dd', 0.9, 0.0); leak.position.set(-0.3, 2.52, -2.6); scene.add(leak);
   // calendar (right wall)
-  const cal = screen(THREE, 0.7, 0.5, 512); cal.mesh.position.set(1.98, 1.65, -1.0); cal.mesh.rotation.y = -Math.PI / 2; scene.add(cal.mesh);
+  const cal = screen(THREE, 0.7, 0.5, 512); cal.mesh.position.set(1.2, 1.95, -2.985); scene.add(cal.mesh);
   // bulb
   const cord = new THREE.Group(); cord.position.set(0, 2.6, -0.6); scene.add(cord);
   const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.35), lib.mat('#111')); wire.position.y = -0.17; cord.add(wire);
@@ -169,15 +193,61 @@ function shelter({ THREE, scene, lib }) {
   const you = lib.person({ shirt: '#5a7bbf', pants: '#2b3a55' }); scene.add(you);
   /** flicker 0..1 amount, swing radians */
   const setLight = (t, flicker = 0, swing = 0) => { const f = 1 - flicker * (Math.sin(t * 53) > 0.6 ? 0.8 : 0) * (Math.sin(t * 7.1) > 0 ? 1 : 0.3); light.intensity = 4 * f; bulb.material.color.setScalar(0.35 + 0.65 * f); cord.rotation.z = swing; cord.rotation.x = swing * 0.4; };
-  return { you, feed, cal, radio, led, radioGlow, fan, solarLed, leak, light, setLight };
+  /** per-frame props: wall clock, battery level */
+  const tick = (t, charge = 0.7) => {
+    clock.draw((g, W, H) => { g.fillStyle = '#f4f4f4'; g.beginPath(); g.arc(W / 2, H / 2, W / 2 - 4, 0, 7); g.fill(); g.strokeStyle = '#222'; g.lineWidth = 8; g.stroke(); const hh = t * 0.05, mm = t * 0.6; for (const [a, l, w] of [[hh, 0.25, 9], [mm, 0.38, 5]]) { g.lineWidth = w; g.beginPath(); g.moveTo(W / 2, H / 2); g.lineTo(W / 2 + Math.sin(a) * W * l, H / 2 - Math.cos(a) * W * l); g.stroke(); } });
+    batt.draw((g, W, H) => { g.fillStyle = '#0d1410'; g.fillRect(0, 0, W, H); for (let i = 0; i < 5; i++) { g.fillStyle = i < Math.round(charge * 5) ? '#2aff6a' : '#1e3326'; g.fillRect(14 + i * 46, 26, 36, H - 52); } });
+  };
+  tick(0);
+  return { you, feed, cal, radio, led, radioGlow, fan, solarLed, leak, light, setLight, tick };
 }
+
+const BOARD = [
+  ['SUPPLIES', 0, '#1a1a1a'], ['WATER: 40 L', 1, '#1f4fa0'], ['  2 L a day = 20 DAYS', 1, '#1f4fa0'],
+  ['FOOD: 50 cans', 2, '#1f7a2f'], ['  3 a day = ~16 DAYS', 2, '#1f7a2f'], ['AIR: filter OK', 3, '#1a1a1a'], ['POWER: solar, day only', 3, '#1a1a1a'],
+];
+/** Whiteboard with handwritten supply math. k = number of characters revealed (progress through BOARD). */
+function drawBoard(g, W, H, k, tight = false) {
+  g.fillStyle = '#f7f7f2'; g.fillRect(0, 0, W, H); let left = k;
+  BOARD.forEach(([txt, , col], i) => {
+    if (left <= 0) return; const shown = txt.slice(0, Math.max(0, Math.floor(left))); left -= txt.length;
+    g.fillStyle = col; g.font = i === 0 ? 'italic 900 60px Inter' : 'italic 700 46px Inter'; g.textAlign = 'left';
+    g.save(); g.translate(40, 78 + i * 62); g.rotate(-0.01 + (i % 2) * 0.012); g.fillText(shown, 0, 0); g.restore();
+    if (i === 0 && shown.length === txt.length) { g.strokeStyle = col; g.lineWidth = 4; g.beginPath(); g.moveTo(40, 92); g.lineTo(330, 88); g.stroke(); }
+  });
+  if (tight) { g.strokeStyle = '#d32f2f'; g.lineWidth = 7; g.beginPath(); g.ellipse(W * 0.55, 78 + 4 * 62 - 14, 300, 44, -0.02, 0, 7); g.stroke(); g.fillStyle = '#d32f2f'; g.font = 'italic 900 64px Inter'; g.fillText('TIGHT!', W - 250, H - 30); }
+}
+function drawNotebook(g, W, H, k, tight = false) {
+  g.fillStyle = '#fbf8ef'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = '#b9cfe8'; g.lineWidth = 2; for (let y = 140; y < H - 20; y += 72) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+  g.strokeStyle = '#e8a0a0'; g.beginPath(); g.moveTo(70, 0); g.lineTo(70, H); g.stroke();
+  for (let x = 40; x < W; x += 52) { g.fillStyle = '#555'; g.beginPath(); g.arc(x, 26, 10, 0, 7); g.fill(); }
+  let left = k, pen = [0.2, 0.15];
+  BOARD.forEach(([txt], i) => {
+    const y = 128 + i * 72; if (left <= 0) return;
+    const shown = txt.trim().slice(0, Math.max(0, Math.floor(left))); left -= txt.length;
+    g.fillStyle = i === 0 ? '#14213d' : '#1d3f9a'; g.font = i === 0 ? 'italic 900 52px Inter' : `italic ${txt.startsWith(' ') ? 600 : 800} 40px Inter`; g.textAlign = 'left';
+    const xi = 88 + (txt.startsWith(' ') ? 34 : 0); g.save(); g.translate(xi, y); g.rotate(-0.015); g.fillText(shown, 0, 0); g.restore();
+    pen = [Math.min(0.95, (xi + g.measureText(shown).width) / W), (y - 12) / H];
+  });
+  if (tight) { g.strokeStyle = '#c62828'; g.lineWidth = 5; g.beginPath(); g.ellipse(W * 0.5, 128 + 4 * 72 - 14, W * 0.42, 38, -0.02, 0, 7); g.stroke(); g.fillStyle = '#c62828'; g.font = 'italic 900 64px Inter'; g.fillText('TIGHT!', 150, H - 50); pen = [0.62, (H - 70) / H]; }
+  return pen;
+}
+const boardLen = (upto) => BOARD.filter(([, c]) => c <= upto).reduce((a, [t]) => a + t.length, 0);
+
+/** Exercise poses for the person rig (pure functions of t). */
+function resetPose(p) { p.rotation.set(0, p.rotation.y, 0); const P = p.parts; for (const k of ['armL', 'armR', 'legL', 'legR']) P[k].rotation.set(0, 0, 0); P.armL.rotation.z = -0.08; P.armR.rotation.z = 0.08; P.torso.rotation.set(0, 0, 0); P.head.rotation.set(0, 0, 0); }
+function pushup(p, t, y0 = 0) { resetPose(p); const k = 0.5 - 0.5 * Math.cos(t * 5), th = 0.42 - k * 0.2, phi = Math.PI / 2 - th; p.rotation.x = phi; p.position.y = y0 + 0.06; p.parts.armL.rotation.x = p.parts.armR.rotation.x = -phi; p.parts.head.rotation.x = -0.5; return k; }
+function squat(p, t, y0 = 0) { resetPose(p); const k = 0.5 - 0.5 * Math.cos(t * 4.5); p.position.y = y0 - k * 0.42; p.parts.legL.rotation.x = p.parts.legR.rotation.x = -k * 1.0; p.parts.torso.rotation.x = k * 0.25; p.parts.armL.rotation.x = p.parts.armR.rotation.x = -1.5 * k - 0.2; return k; }
+function jacks(p, t, y0 = 0) { resetPose(p); const k = 0.5 - 0.5 * Math.cos(t * 7); p.position.y = y0 + Math.abs(Math.sin(t * 3.5)) * 0.12; p.parts.armL.rotation.z = -0.15 - k * 2.6; p.parts.armR.rotation.z = 0.15 + k * 2.6; p.parts.legL.rotation.z = -k * 0.3; p.parts.legR.rotation.z = k * 0.3; return k; }
+const chunkIndex = (chunks, t) => { let i = 0; chunks.forEach((c, j) => { if (t >= c) i = j; }); return i; };
 
 const RED = '#ff5a5a';
 
 export default {
   // voice comes from the skill default (American male blend) unless set here
   voice: 'am_michael:0.5,am_fenrir:0.3,am_puck:0.2',
-  speed: 1.15,
+  speed: 1.1,
   music: { style: 'tense', volume: 0.15 },
   scenes: [
     { // 1 hook
@@ -196,22 +266,23 @@ export default {
       },
     },
     { // 2 the message
-      vo: "It's a message from an unknown number. They lied. Missiles are coming. Get underground.",
+      vo: "It's a message from an unknown number. | They lied. | Missiles are coming. | Get underground.",
       sfx: [{ type: 'heartbeat', at: 1.5 }, { type: 'heartbeat', at: 2.6 }, { type: 'heartbeat', at: 3.6 }],
-      build({ THREE, scene, camera, lib, fx }) {
+      build(ctx) {
+        const { THREE, scene, camera, lib, fx } = ctx;
         scene.background = new THREE.Color('#05070d');
         const ph = phoneModel(THREE, lib); scene.add(ph.group); scene.add(new THREE.AmbientLight('#fff', 0.5));
         const halo = lib.glow('#5f8cff', 3.5, 0.35); halo.position.z = -0.3; scene.add(halo);
         camera.position.set(0, 0, 2.3); camera.lookAt(0, 0, 0);
         return (t, p) => {
-          ph.screen.draw((g, W, H) => drawPhone(g, W, H, 'message', t, lib.range(t, 0.8, 4.2)));
+          ph.screen.draw((g, W, H) => drawPhone(g, W, H, 'message', t, lib.range(t, ctx.chunks[1] ?? 0.8, (ctx.chunks[3] ?? 4) + 0.8)));
           ph.group.rotation.set(-0.08 + Math.sin(t * 1.3) * 0.02, 0.12 - p * 0.1, 0.02);
           camera.position.z = 2.3 - p * 0.35; fx.vignette = 0.7;
         };
       },
     },
     { // 3 the news lies
-      vo: "You turn on the news. Nothing. They're saying everything is fine.",
+      vo: "You turn on the news. | Nothing. | They're saying everything is fine.",
       sfx: [{ type: 'pop', at: 0.2 }],
       build(ctx) {
         const { THREE, scene, camera, lib } = ctx; const s = bedroom(ctx);
@@ -235,19 +306,20 @@ export default {
       },
     },
     { // 4 Leo doesn't answer
-      vo: 'You call your best friend, Leo. Once. Twice. No answer.',
-      sfx: [{ type: 'ding', at: 0.5, gain: 0.4 }, { type: 'ding', at: 1.9, gain: 0.4 }, { type: 'hit', at: 2.5, gain: 0.5 }],
-      minDuration: 3.8,
-      build({ THREE, scene, camera, lib, fx }) {
+      vo: 'You call your best friend, Leo. | Once. | Twice. | No answer.',
+      speed: 1.0, pause: 0.55, hold: 0.8,
+      sfx: [{ type: 'ding', chunk: 1, gain: 0.4 }, { type: 'ding', chunk: 2, gain: 0.4 }, { type: 'hit', chunk: 3, gain: 0.5 }],
+      build(ctx) {
+        const { THREE, scene, camera, lib, fx } = ctx;
         scene.background = new THREE.Color('#05070d');
         const ph = phoneModel(THREE, lib); scene.add(ph.group); scene.add(new THREE.AmbientLight('#fff', 0.5));
         const halo = lib.glow('#5f8cff', 3.5, 0.3); halo.position.z = -0.3; scene.add(halo);
         camera.position.set(0, 0, 2.2); camera.lookAt(0, 0, 0);
         return (t, p) => {
-          const fail = t > 2.5; ph.screen.draw((g, W, H) => drawPhone(g, W, H, fail ? 'noanswer' : 'calling', t));
+          const fail = t > (ctx.chunks[3] ?? 2.5); ph.screen.draw((g, W, H) => drawPhone(g, W, H, fail ? 'noanswer' : 'calling', t));
           halo.material.color.set(fail ? '#ff4d4d' : '#5f8cff');
           ph.group.rotation.set(-0.05, -0.1 + p * 0.15, -0.03); camera.position.z = 2.2 - p * 0.25; fx.vignette = 0.7;
-          if (fail && t < 2.8) lib.shake(camera, 0.02, t);
+          if (fail && t < (ctx.chunks[3] ?? 2.5) + 0.3) lib.shake(camera, 0.02, t);
         };
       },
     },
@@ -297,18 +369,19 @@ export default {
       },
     },
     { // 8 inventory
-      vo: 'Water. Food. Good airflow. A camera to see outside. And solar panels that only work when the sun is up.',
-      sfx: [{ type: 'pop', at: 0.15 }, { type: 'pop', at: 1.0 }, { type: 'pop', at: 1.8 }, { type: 'pop', at: 3.0 }, { type: 'pop', at: 4.4 }],
+      vo: 'Water. | Food. | Good airflow. | A camera to see outside. | And solar panels that only work when the sun is up.',
+      speed: 1.02, pause: 0.45,
+      sfx: [0, 1, 2, 3, 4].map((c) => ({ type: 'pop', chunk: c })),
       build(ctx) {
         const { THREE, scene, camera, lib } = ctx; const s = shelter(ctx);
         s.cal.draw((g, W, H) => drawCalendar(g, W, H, 0)); s.you.position.set(1.5, 0, 1.6); s.you.rotation.y = Math.PI;
         const items = [
           ['WATER', [-1.75, 0.48, -1.3], 0.15], ['FOOD', [-1.75, 1.15, -1.3], 1.0], ['AIR VENT', [-1.15, 2.05, -2.9], 1.8],
           ['CAMERA', [0.75, 1.1, -2.75], 3.0], ['SOLAR POWER', [-1.15, 1.2, -2.9], 4.4],
-        ].map(([txt, pos, at]) => { const l = lib.label(txt, { height: 0.2, bg: 'rgba(20,20,20,.85)', color: '#ffd34d' }); l.position.set(pos[0] + (pos[2] < -2.5 ? 0.05 : 0.45), pos[1] + 0.22, pos[2] + 0.2); l.visible = false; scene.add(l); return { l, pos: new THREE.Vector3(...pos), at }; });
+        ].map(([txt, pos], i) => { const at = ctx.chunks[i] ?? i; const l = lib.label(txt, { height: 0.2, bg: 'rgba(20,20,20,.85)', color: '#ffd34d' }); l.position.set(pos[0] + (pos[2] < -2.5 ? 0.05 : 0.45), pos[1] + 0.22, pos[2] + 0.2); l.visible = false; scene.add(l); return { l, pos: new THREE.Vector3(...pos), at }; });
         const look = new THREE.Vector3();
         return (t) => {
-          s.setLight(t); s.fan.rotation.z = t * 6; s.feed.draw((g, W, H) => drawFeed(g, W, H, 1, t));
+          s.setLight(t); s.fan.rotation.z = t * 6; s.tick(t); s.feed.draw((g, W, H) => drawFeed(g, W, H, 1, t));
           let cur = 0; items.forEach((it, i) => { const shown = t >= it.at; it.l.visible = shown; if (shown) cur = i; const pop = lib.easeOut(lib.range(t, it.at, it.at + 0.15)); const sc = it.l.userData.base ??= it.l.scale.clone(); it.l.scale.copy(sc).multiplyScalar(0.6 + 0.4 * pop); });
           const a = items[cur].pos, b = items[Math.min(cur, items.length - 1)].pos;
           look.lerpVectors(a, b, 1);
@@ -317,40 +390,87 @@ export default {
         };
       },
     },
+    { // 8b write it down (in a notebook)
+      vo: "You write it all down. | Forty liters of water. That's about twenty days. | Fifty cans of food. Just over two weeks. | It's going to be tight.",
+      speed: 1.02, pause: 0.5,
+      sfx: [{ type: 'pop', chunk: 3, gain: 0.6 }],
+      build(ctx) {
+        const { THREE, scene, camera, lib, fx } = ctx; const s = shelter(ctx); const C = ctx.chunks;
+        const NW = 0.3, NH = 0.42;
+        const book = screen(THREE, NW, NH, 600); book.mesh.rotation.x = -Math.PI / 2; book.mesh.position.set(1.05, 0.815, -2.4); scene.add(book.mesh);
+        const pen = new THREE.Group(); scene.add(pen);
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.15, 10), lib.mat('#1f4fb0')); body.position.y = 0.075; pen.add(body);
+        const tip = new THREE.Mesh(new THREE.ConeGeometry(0.007, 0.02, 10), lib.mat('#222')); tip.rotation.x = Math.PI; tip.position.y = -0.005; pen.add(tip);
+        const hand = new THREE.Mesh(new THREE.SphereGeometry(0.028, 16, 12), lib.mat('#f0c08a')); hand.scale.set(1, 0.7, 1.3); hand.position.set(0.035, 0.07, 0.05); pen.add(hand);
+        pen.rotation.set(-0.45, 0, -0.35);
+        const lamp = new THREE.PointLight('#ffe2b0', 1.5, 2, 1.5); lamp.position.set(1.05, 1.3, -2.2); scene.add(lamp);
+        return (t, p) => {
+          s.setLight(t); s.tick(t);
+          const seg = chunkIndex(C, t), segStart = C[seg] ?? 0, segEnd = C[seg + 1] ?? ctx.duration;
+          const k = boardLen(seg - 1) + (boardLen(seg) - boardLen(seg - 1)) * lib.range(t, segStart, segStart + (segEnd - segStart) * 0.75);
+          let pp; book.draw((g, W, H) => { pp = drawNotebook(g, W, H, k, seg >= 3 && t > segStart + 0.3); });
+          const wob = Math.sin(t * 22) * 0.003;
+          pen.position.set(1.05 - NW / 2 + pp[0] * NW + wob, 0.82 + Math.abs(Math.sin(t * 11)) * 0.004, -2.4 - NH / 2 + pp[1] * NH);
+          camera.position.set(1.05, lib.lerp(1.5, 1.4, p), lib.lerp(-2.0, -2.05, p)); camera.lookAt(1.05, 0.81, -2.41);
+          fx.vignette = 0.6;
+        };
+      },
+    },
     { // 9 the plan
-      vo: 'You make a plan. Two weeks underground, until the radiation outside gets weak enough.',
+      vo: 'You make a plan. | Two weeks underground, until the radiation outside gets weak enough.',
       sfx: [{ type: 'ding', at: 1.4, gain: 0.5 }],
       build(ctx) {
         const { camera, lib, fx } = ctx; const s = shelter(ctx);
         return (t, p) => {
-          s.setLight(t); s.cal.draw((g, W, H) => drawCalendar(g, W, H, 0, t > 1.4 ? 0 : -1));
-          s.you.position.set(0.9, 0, -2.2); s.you.rotation.y = Math.PI / 2; lib.idle(s.you, t);
-          camera.position.set(lib.lerp(0.2, 0.5, p), 1.6, lib.lerp(0.6, 0.0, p)); camera.lookAt(1.98, 1.6, -1.0);
+          s.setLight(t); s.tick(t); s.cal.draw((g, W, H) => drawCalendar(g, W, H, 0, t > 1.4 ? 0 : -1));
+          s.you.position.set(0.15, 0, -1.9); s.you.rotation.y = Math.PI - 0.6; lib.idle(s.you, t);
+          camera.position.set(lib.lerp(0.7, 1.0, p), 1.8, lib.lerp(-0.4, -1.0, p)); camera.lookAt(1.2, 1.9, -2.98);
           if (t > 1.4) { fx.title = 'DAY 1 / 14'; fx.titleY = 0.15; fx.titleColor = '#ffffff'; }
         };
       },
     },
     { // 10 routine montage
-      vo: 'Every day, the same routine. Ration the food. Check the camera. Charge the batteries while the sun is up.',
+      vo: 'Every day, the same routine. | Ration the food. | Check the camera. | Work out. | Charge the batteries while the sun is up.',
+      pause: 0.42,
       sfx: [{ type: 'whoosh', at: 0.1, gain: 0.5 }],
       build(ctx) {
         const { camera, lib, fx } = ctx; const s = shelter(ctx);
-        const spots = [[-1.1, -1.3, -Math.PI / 2], [0.75, -2.0, Math.PI], [1.4, 0.6, Math.PI / 2]];
+        const spots = [[-1.1, -1.3, -Math.PI / 2], [0.75, -2.0, Math.PI], [0.15, -0.6, 0.4], [-1.1, -2.3, Math.PI]];
         return (t, p) => {
-          const dayF = 1 + p * 12.99, day = Math.floor(dayF), phase = Math.floor((dayF - day) * 3);
-          s.setLight(t); s.fan.rotation.z = t * 6;
+          const dayF = 1 + p * 12.99, day = Math.floor(dayF), phase = (day - 1) % 4;
+          s.setLight(t); s.fan.rotation.z = t * 6; s.tick(t * 40, phase === 3 ? (t * 3) % 1 : 0.4);
           s.cal.draw((g, W, H) => drawCalendar(g, W, H, day - 1));
           s.feed.draw((g, W, H) => drawFeed(g, W, H, day, t));
-          const sp = spots[phase]; s.you.position.set(sp[0], 0, sp[1]); s.you.rotation.y = sp[2]; lib.idle(s.you, t);
-          s.you.parts.armR.rotation.x = phase === 0 ? -1.2 : phase === 1 ? -0.6 : 0;
-          s.solarLed.material.color.set(phase === 2 ? '#ffd34d' : (dayF % 1) < 0.5 ? '#2aff6a' : '#103a1a');
+          const sp = spots[phase]; s.you.position.set(sp[0], 0, sp[1]); s.you.rotation.y = sp[2];
+          if (phase === 2) jacks(s.you, t); else { resetPose(s.you); s.you.position.y = 0; lib.idle(s.you, t); s.you.parts.armR.rotation.x = phase === 0 ? -1.2 : phase === 1 ? -0.6 : -0.9; }
+          s.solarLed.material.color.set(phase === 3 ? '#2aff6a' : '#103a1a');
           camera.position.set(0.3, 2.1, 2.6); camera.lookAt(0, 1.0, -1.2);
           fx.title = `DAY ${day}`; fx.titleY = 0.12; fx.titleSize = 90;
         };
       },
     },
+    { // 10b daily workout
+      vo: 'And every single day, you work out. | Push-ups. | Squats. | Jumping jacks. | You have to stay strong.',
+      pause: 0.5,
+      sfx: [1, 2, 3].map((c) => ({ type: 'hit', chunk: c, gain: 0.35 })),
+      build(ctx) {
+        const { camera, lib, fx } = ctx; const s = shelter(ctx); const C = ctx.chunks;
+        const names = ['PUSH-UPS', 'PUSH-UPS', 'SQUATS', 'JUMPING JACKS', 'JUMPING JACKS'];
+        return (t, p) => {
+          s.setLight(t); s.fan.rotation.z = t * 6; s.tick(t * 20);
+          const i = chunkIndex(C, t), local = t - (C[i] ?? 0);
+          s.you.position.set(0.15, 0, i <= 1 ? -1.4 : -0.8); s.you.rotation.y = i <= 1 ? 0 : 0.3;
+          if (i <= 1) pushup(s.you, local);
+          else if (i === 2) squat(s.you, local); else jacks(s.you, local);
+          const reps = Math.floor(local * (i <= 1 ? 5 : i === 2 ? 4.5 : 7) / (Math.PI * 2)) + 1;
+          fx.title = `${names[i]} x${reps}`; fx.titleY = 0.13; fx.titleSize = 70; fx.titleColor = '#ffd34d';
+          if (i <= 1) { camera.position.set(-1.25, 0.85, -0.55); camera.lookAt(0.15, 0.35, -0.6); }
+          else { camera.position.set(0.55, 1.35, 2.9); camera.lookAt(0.15, 0.95, -0.8); }
+        };
+      },
+    },
     { // 11 day 14
-      vo: 'Day fourteen. Everything seems fine. You grab the ladder.',
+      vo: 'Day fourteen. | Everything seems fine. | You grab the ladder.',
       sfx: [{ type: 'ding', at: 0.2, gain: 0.5 }],
       build(ctx) {
         const { camera, lib, fx } = ctx; const s = shelter(ctx);
@@ -382,14 +502,14 @@ export default {
       },
     },
     { // 13 the warning
-      vo: "Don't come out. Whatever you do, don't come out. It wasn't just a bomb.",
-      voice: 'am_onyx', speed: 0.95, radio: true, silence: true, hold: 0.9,
+      vo: "Don't come out. | Whatever you do... don't come out. | It wasn't just a bomb.",
+      voice: 'am_onyx', speed: 0.92, radio: true, silence: true, hold: 1.0, pause: 0.7,
       captions: { highlight: RED },
       sfx: [{ type: 'static', at: 0, length: 0.5 }, { type: 'glitch', at: 3.6, gain: 0.6 }],
       build(ctx) {
         const { camera, lib, fx, duration } = ctx; const s = shelter(ctx);
         s.cal.draw((g, W, H) => drawCalendar(g, W, H, 13, 13));
-        const hint = [duration * 0.62, duration * 0.62 + 0.35];
+        const hs = (ctx.chunks[2] ?? duration * 0.62) - 0.45, hint = [hs, hs + 0.35];
         return (t, p) => {
           s.setLight(t, 0.4); const fig = t > hint[0] && t < hint[1] ? 1 : 0;
           s.feed.draw((g, W, H) => drawFeed(g, W, H, 14, t, fig ? 1 : 0.3, fig));
@@ -400,7 +520,7 @@ export default {
       },
     },
     { // 14 the choice
-      vo: 'So what do you do? A: stay, and trust the man on the radio. Or B: go out and find Leo.',
+      vo: 'So what do you do? | A: stay, and trust the man on the radio. | Or B: go out and find Leo.',
       captions: { y: 0.86, size: 54 },
       sfx: [{ type: 'hit', at: 0.1, gain: 0.6 }],
       build(ctx) {
@@ -412,14 +532,14 @@ export default {
           s.setLight(t); s.leak.material.opacity = 0.8; s.radioGlow.material.opacity = 0.5; s.led.material.color.set('#ff3b1f');
           s.feed.draw((g, W, H) => drawFeed(g, W, H, 14, t, 0.2));
           s.you.position.set(-0.9, 0, -0.6); s.you.rotation.y = Math.PI * 0.85; lib.idle(s.you, t); s.you.parts.head.rotation.y = Math.sin(t * 0.8) * 0.5;
-          A.visible = t > 1.0; B.visible = t > 2.6;
+          A.visible = t > (ctx.chunks[1] ?? 1); B.visible = t > (ctx.chunks[2] ?? 2.6);
           camera.position.set(0.3, 1.45, 1.9); camera.lookAt(0.3, 1.4, -2.8);
           fx.title = 'A OR B?'; fx.titleY = 0.09; fx.titleColor = '#ffd34d';
         };
       },
     },
     { // 15 end card
-      vo: 'Comment A or B. Part two is coming.',
+      vo: 'Comment A or B. | Part two is coming.',
       hold: 1.2,
       captions: false,
       build({ THREE, scene, camera, lib, fx }) {
