@@ -99,7 +99,7 @@ Gentle rain, rain on window, soft thunder and cozy night ambience for deep sleep
 | Mid-roll ads | **Off**, or a single one at most. Ads that wake listeners up are the number-one reason people leave sleep videos. |
 | End screen | Add it in the last 20 seconds: subscribe + playlist. |
 | Language | English; Captions: none needed |
-| Upload file | `rain-on-window-1-hour.mp4` (close-up window, 1920×1080, 30 fps, H.264, AAC 384 kbps, 48 kHz). Alternative: `rain-bedroom-1-hour.mp4` (cozy bedroom) |
+| Upload file | `rain-on-window-1-hour-UPLOAD.mp4` (close-up window, 1920×1080, 30 fps, H.264, AAC 160 kbps, 379 MB; sized to fit the chat download limit). Full-quality masters (8 Mbps, 3.9 GB) can be re-rendered with the commands in `../README.md`. |
 | Thumbnail | `thumbnail-closeup-1280x720.jpg` (alternative: `thumbnail-bedroom-1280x720.jpg`). Use the other one in "Test & compare". |
 
 ## Growth notes
